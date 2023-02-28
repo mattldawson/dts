@@ -9,9 +9,33 @@ type Database struct {
 	// the name of the organization hosting the database
 	Organization string `yaml:"organization"`
 	// the base URL at which the database is accessed
-	BaseURL string `yaml:"base_url"`
-  // a template for a GET request that accepts an ElasticSearch query string
-  ESQueryTemplate string `yaml:"es_query_template"`
-  // the token in ESQueryTemplate to be replaced by an ElasticSearch query string
-  ESQueryToken string `yaml:"es_query_token"`
+	URL string `yaml:"url"`
+  // the name of an endpoint for this database
+  Endpoint string `yaml:"endpoint"`
+  // the name of a monitoring service used by this database for notifications
+  Notifications string `yaml:"notifications"`
+  // search instructions
+  Search struct {
+    // ElasticSearch parameters
+    ElasticSearch struct {
+      // the resource for ElasticSearch queries (GET)
+      Resource string `yaml:"resource"`
+      // the parameter to which an ES query string is passed
+      QueryParameter string `yaml:"query_parameter"`
+    } `yaml:"elasticsearch"`
+  } `yaml:"search"`
+  // transfer initiation instructions
+  Initiate struct {
+    // transfer initiation resource (POST)
+    Resource string `yaml:"resource"`
+    // transfer initiation request body fields
+    Request map[string]string `yaml:"request"`
+  } `yaml:"initiate"`
+  // file inspection instructions
+  Inspect struct {
+    // file inspection resource (POST)
+    Resource string `yaml:"resource"`
+    // file inspection request body fields
+    Request map[string]string `yaml:"request"`
+  } `yaml:"inspect"`
 }

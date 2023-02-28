@@ -18,14 +18,19 @@ type serviceConfig struct {
 	MaxConnections int `json:"maxConnections" yaml:"maxConnections"`
 }
 
+// Global config variables
 var Service serviceConfig
+var Endpoints map[string]core.Endpoint
 var Databases map[string]core.Database
+var MessageQueues map[string]core.MessageQueue
 
 // This struct performs the unmarshalling from the YAML config file and then
 // copies its fields to the globals above.
 type configFile struct {
 	Service serviceConfig `yaml:"service"`
+	Endpoints map[string]core.Endpoint `yaml:"endpoints"`
   Databases map[string]core.Database `yaml:"databases"`
+  MessageQueues map[string]core.MessageQueue `yaml:"message_queues"`
 }
 
 // This helper locates and reads a configuration file, returning an error

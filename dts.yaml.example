@@ -19,7 +19,7 @@ databases:
     organization: Joint Genome Institute
     url: files.jgi.doe.gov
     endpoint: globus-jdp # local file transfer endpoint
-    notify: <monitoring-service>
+    notifications: <message-queue-name>
     search: # how to search for files (GET)
       elasticsearch: # elasticsearch method
         resource: /search
@@ -34,12 +34,12 @@ databases:
     organization: KBase
     url: kbase.us/services/ws
     endpoint: globus-kbase
-    notify: <monitoring-service>
+    notifications: <message-queue-name>
     inspect: # how to validate given files on local endpoint (POST)
       resource: /validation
       request: # fields in request body
         param1: etc
         param2: etc
 
-monitoring: # monitoring services (all names unique)
+message_queues: # message queues for notifications
   # types? what do we want to support?

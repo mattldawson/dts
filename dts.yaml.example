@@ -1,0 +1,45 @@
+# dts.yaml - A configuration file for the data transfer service. See README.md
+# for details.
+
+# service parameters
+service:
+  port: 8080              # port on which the service listenѕ
+  maxConnections: 100     # maximum incoming HTTP connections
+
+endpoints: # file transfer endpoints (all names unique)
+  globus: # named globus endpoints
+    globus-jdp: dtn1.nersc.gov # or wherever it is
+    globus-kbase: dtn2.nersc.gov # etc
+  # other types of endpoints supported?
+
+# databases between which files can be transferred
+databases:
+  jdp:
+    name: JGI Data Portal
+    organization: Joint Genome Institute
+    url: files.jgi.doe.gov
+    endpoint: globus-jdp # local file transfer endpoint
+    notify: <monitoring-service>
+    search: # how to search for files (GET)
+      elasticsearch: # elasticsearch method
+        resource: /search
+        query_parameter: q # any other interesting ES-related parameters?
+      # other kinds of search supported?
+    initiate: # how to initiate a transfer (POST)
+      resource: /download_files
+      request: # fields in request body
+        endpoint_user_id: globus_user_name
+  kbase: # no search or initiate indicates receive-only
+    name: KBase Workspace Service (KSS)
+    organization: KBase
+    url: kbase.us/services/ws
+    endpoint: globus-kbase
+    notify: <monitoring-service>
+    inspect: # how to validate given files on local endpoint (POST)
+      resource: /validation
+      request: # fields in request body
+        param1: etc
+        param2: etc
+
+monitoring: # monitoring services (all names unique)
+  # types? what do we want to support?

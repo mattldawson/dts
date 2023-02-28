@@ -1,0 +1,338 @@
+openapi: "3.0.0"
+info:
+  title: dts
+  description: |
+    dts is a web service that orchestrates the transfer of genomics data
+    between related repositories.
+  termsOfService: "TBD"
+  contact:
+    name: Jeffrey N. Johnson
+    email: jeff@cohere-llc.com
+  license:
+    name: BSD 3-clause
+    url: https://opensource.org/licenses/BSD-3-Clause
+  version: 1.0.0
+servers:
+  - url: http://dts.kbase.us
+paths:
+  /:
+    get:
+      summary: Retrieve API/service information
+      description: Retrieve API/service information
+      operationId: getRoot
+      responses:
+        200:
+          description: Service API metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceInfo"
+              examples:
+                get-root:
+                  $ref: "#/components/examples/get-root"
+        5XX:
+          description: An unexpected error occurred
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                internal-server-error:
+                  $ref: "#/components/examples/internal-server-error"
+  /api/v1/files:
+    get:
+      summary: Queries available files in an ElasticSearch endpoint
+      description: |
+        Returns a set of results for an ElasticSearch-backed query
+      operationId: getQuery
+      responses:
+        200:
+          description: An array of ElasticSearch results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ESResults"
+              examples:
+                databases:
+                  $ref: "#/components/examples/files"
+        5XX:
+          description: An unexpected error occurred
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                internal-server-error:
+                  $ref: "#/components/examples/internal-server-error"
+  /api/v1/transfers:
+    post:
+      summary: Initiates a file transfer
+      description: |
+        Initiates a file transfer, returning a unique identifier that can be
+        used to retrieve status information
+      operationId: transfer
+      requestBody:
+        description: |
+          A request body containing information identifying a set of files to
+          be transferred, and their destination
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TransferRequest"
+            examples:
+              id-request:
+                $ref: "#/components/examples/transfer-request"
+      responses:
+        200:
+          description: |
+            A unique ID that can be used to fetch status information for
+            the file transfer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransferId"
+              examples:
+                sequence-ids:
+                  $ref: "#/components/examples/transfer-id"
+        400:
+          description: Improperly-formed request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        404:
+          description: Source file(s) or destination not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        5XX:
+          description: An unexpected error occurred
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                internal-server-error:
+                  $ref: "#/components/examples/internal-server-error"
+  /api/v1/transfers/{Id}:
+    get:
+      summary: Queries the status of a file transfer with the given ID
+      description: |
+        Queries the status of a file transfer with the given ID
+      operationId: getQuery
+      responses:
+        200:
+          description: An array of ElasticSearch results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransferStatus"
+              examples:
+                databases:
+                  $ref: "#/components/examples/transfer-status"
+        400:
+          description: Invalid transfer ID (poorly-formed UUID) or bad parameter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        404:
+          description: Transfer ID not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        5XX:
+          description: An unexpected error occurred
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                internal-server-error:
+                  $ref: "#/components/examples/internal-server-error"
+    delete:
+      summary: Cancels the file transfer with the given ID
+      description: |
+        Cancels the previously initiated file transfer with the given ID
+      operationId: deleteTransfer
+      responses:
+        204:
+          description: |
+            A response indicating that the file transfer has been canceled
+        400:
+          description: Invalid Transfer ID (poorly-formed UUID) or bad parameter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        404:
+          description: Transfer ID not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        5XX:
+          description: An unexpected error occurred
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                internal-server-error:
+                  $ref: "#/components/examples/internal-server-error"
+
+components:
+  schemas:
+    ServiceInfo:
+      type: object
+      description: Service/API metadata
+      required:
+        - name
+        - version
+        - uptime
+      properties:
+        name:
+          type: string
+          description: The name of the Service API
+        version:
+          type: string
+          description: The version string (MAJOR.MINOR.PATCH)
+        uptime:
+          type: integer
+          description: The uptime of the service (seconds)
+        documentation:
+          type: string
+          description: |
+            A URI to live OpenAPI documentation for the service. This is
+            available only if the service's documentation endpoints were
+            generated.
+    ESResult:
+      type: object
+      description: An ElasticSearch result
+      required:
+        - id
+      properties:
+        id:
+          type: string
+          description: A unique identifier for a sequence database
+        institution:
+          type: string
+          description: The name of the institution maintaining the database
+        description:
+          type: string
+          description: An optional text description of the database
+        lastUpdated:
+          type: integer
+          description: |
+            The time at which the data was last updated, expressed in the number
+            of seconds since 1/1/1970 UTC
+    ESResults:
+      type: array
+      description: An array of ESResult objects
+      items:
+        $ref: "#/components/schemas/ESResult"
+    Error:
+      type: object
+      description: An object containing information about an error
+      required:
+        - code
+        - error
+      properties:
+        code:
+          type: integer
+          description: The HTTP status code associated with the error
+        error:
+          type: string
+          description: A description of the error
+    IdRequest:
+      description: The body of a request for an ID mapping
+      type: object
+      required:
+        - sourceDb
+        - targetDb
+        - ids
+      properties:
+        sourceDb:
+          type: string
+          description: |
+            The identifier for the sequence database from which the sequence IDs
+            are mapped
+        targetDb:
+          type: string
+          description: |
+            The identifier for the sequence database to which the sequence IDs
+            are mapped
+        ids:
+          description: |
+            An array of sequence IDs to be mapped from the source database to
+            the target database
+          $ref: "#/components/schemas/SequenceIds"
+    SequenceId:
+      type: string
+      description: |
+        A string that uniquely identifies a sequence within a database
+    SequenceIds:
+      type: array
+      description: An array of sequence identifier strings
+      items:
+        $ref: "#/components/schemas/SequenceId"
+    SequenceIdSets:
+      type: array
+      description: An array of arrays of sequence identifier strings
+      items:
+        $ref: "#/components/schemas/SequenceIds"
+  examples:
+    get-root:
+      description: A response to a successful root query
+      value: |
+        name: "Sequence ID Mapping"
+        version: "1.0.0"
+        uptime: 345600
+    database:
+      description: A database
+      value: |
+        id: uniref100
+        inѕtitution: UniProt
+        description: The Uniprot Uniref100 clusters
+        lastUpdated: 2021-Jan-01
+    databases:
+      description: Information about available sequence databases
+      value:
+        - id: uniref100
+          description: The Uniref 100% identity clusters
+          institution: UniProt
+          lastUpdated: 2021-Jan-1
+        - id: ncbi_nr
+          institution: NCBI
+          description: The NCBI Non-redundant database
+          lastUpdated: 2021-Jan-1
+    id-request:
+      description: A request to map IDs from a source to a target database
+      value:
+        sourceDb: ncbi_nr
+        targetDb: uniref100
+        ids:
+        - "XP_002281555.2"
+        - "XP_023920825.1"
+        - "YOU WON'T FIND ME"
+    internal-server-error:
+      description: An internal server error
+      value:
+        code: 500
+        message: Internal server error
+    sequence-id:
+      description: A unique identifier for a sequence
+      value: VIOA_CHRV4
+    sequence-ids:
+      description: An array of unique sequence identifiers
+      value:
+        - "AA_S_1_contig_1_1"
+        - "AA_S_1_contig_1_2"
+    sequence-id-sets:
+      description: An array of arrays of unique sequence identifiers
+      value:
+        - ["UniRef100_D7SMN4"]
+        - ["UniRef100_UPI000CE18A79"]
+        - []

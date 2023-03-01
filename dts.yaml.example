@@ -8,9 +8,21 @@ service:
 
 endpoints: # file transfer endpoints (all names unique)
   globus: # named globus endpoints
-    globus-jdp: dtn1.nersc.gov # or wherever it is
-    globus-kbase: dtn2.nersc.gov # etc
+    globus-jdp:
+      user: dts@example.com
+      url: dtn1.nersc.gov # or wherever it is
+    globus-kbase:
+      user: dts@example.com
+      url: dtn2.nersc.gov # etc
   # other types of endpoints supported?
+
+message_queues: # message queues for notifications
+  kafka:
+    kbase-mq:
+      ...
+  rabbitmq:
+    jdp-mq:
+      ...
 
 # databases between which files can be transferred
 databases:
@@ -19,27 +31,25 @@ databases:
     organization: Joint Genome Institute
     url: files.jgi.doe.gov
     endpoint: globus-jdp # local file transfer endpoint
-    notifications: <message-queue-name>
+    notifications: jgi-mq
     search: # how to search for files (GET)
       elasticsearch: # elasticsearch method
         resource: /search
         query_parameter: q # any other interesting ES-related parameters?
       # other kinds of search supported?
-    initiate: # how to initiate a transfer (POST)
+    transfer: # how to initiate a transfer (POST)
       resource: /download_files
       request: # fields in request body
-        endpoint_user_id: globus_user_name
+        globus_user_name: endpoints.globus.globus-jdp.user
   kbase: # no search or initiate indicates receive-only
     name: KBase Workspace Service (KSS)
     organization: KBase
     url: kbase.us/services/ws
     endpoint: globus-kbase
-    notifications: <message-queue-name>
+    notifications: kbase-mq
     inspect: # how to validate given files on local endpoint (POST)
       resource: /validation
       request: # fields in request body
         param1: etc
         param2: etc
 
-message_queues: # message queues for notifications
-  # types? what do we want to support?

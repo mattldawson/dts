@@ -1,15 +1,15 @@
-package core
+package config
 
 // A Database represents an endpoint (source or destination) in a file transfer
 // operation database. A database can be queried for available files that can be
 // transferred to another database.
-type Database struct {
+type databaseConfig struct {
   // the full name of the database
   Name string `yaml:"name"`
-	// the name of the organization hosting the database
-	Organization string `yaml:"organization"`
-	// the base URL at which the database is accessed
-	URL string `yaml:"url"`
+  // the name of the organization hosting the database
+  Organization string `yaml:"organization"`
+  // the base URL at which the database is accessed
+  URL string `yaml:"url"`
   // the name of an endpoint for this database
   Endpoint string `yaml:"endpoint"`
   // the name of a monitoring service used by this database for notifications

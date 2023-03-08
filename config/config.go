@@ -5,12 +5,13 @@ import (
 	"log"
 	"os"
 
+  "github.com/confluentinc/confluent-kafka-go/kafka"
+  "github.com/rabbitmq/amqp091-go"
 	"gopkg.in/yaml.v3"
 
-	"dts/core"
 )
 
-// A type with service configuration parameters.
+// a type with service configuration parameters
 type serviceConfig struct {
 	// Port on which the service listens‥
 	Port int `json:"port" yaml:"port"`
@@ -18,19 +19,34 @@ type serviceConfig struct {
 	MaxConnections int `json:"maxConnections" yaml:"maxConnections"`
 }
 
-// Global config variables
+// endpoint configuration type
+type struct endpointConfig {
+  // Globus endpoint URLs (if any)
+  Globus map[string]struct {
+    User string `yaml:"user"`
+    URL string `yaml:"url"`
+  } `yaml:"globus"`
+}
+
+// message queue configuration type
+type messageQueueConfig struct {
+  Kafka map[string]kafka.ConfigMap `yaml:"kafka"`
+  RabbitMQ map[string]rabbitmqConfig `yaml:"rabbitmq"`
+}
+
+// global config variables
 var Service serviceConfig
-var Endpoints map[string]core.Endpoint
-var Databases map[string]core.Database
-var MessageQueues map[string]core.MessageQueue
+var Endpoints map[string]endpointConfig
+var Databases map[string]databaseConfig
+var MessageQueues map[string]messageQueueConfig
 
 // This struct performs the unmarshalling from the YAML config file and then
 // copies its fields to the globals above.
 type configFile struct {
 	Service serviceConfig `yaml:"service"`
-	Endpoints map[string]core.Endpoint `yaml:"endpoints"`
-  Databases map[string]core.Database `yaml:"databases"`
-  MessageQueues map[string]core.MessageQueue `yaml:"message_queues"`
+	Endpoints map[string]Endpoint `yaml:"endpoints"`
+  Databases map[string]Database `yaml:"databases"`
+  MessageQueues map[string]MessageQueue `yaml:"message_queues"`
 }
 
 // This helper locates and reads a configuration file, returning an error

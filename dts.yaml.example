@@ -18,10 +18,15 @@ endpoints: # file transfer endpoints (all names unique)
 
 message_queues: # message queues for notifications
   kafka:
-    kbase-mq:
-      ...
+    # https://docs.confluent.io/kafka-clients/go/current/overview.html#ak-consumer
+    kbase-mq: # kafka.ConfigMap
+      bootstrap.servers: host1:9092,host2:909
+      group.id: foo
+      auto.offset.reset: smallest
   rabbitmq:
     jdp-mq:
+      url: <AMQ URI>
+      queue: <queue name>
       ...
 
 # databases between which files can be transferred

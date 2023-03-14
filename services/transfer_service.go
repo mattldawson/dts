@@ -55,16 +55,16 @@ type TransferRequest struct {
 
 // a response for a file transfer request (POST)
 type TransferResponse struct {
-  // transfer job ID
-  Id string uuid.UUID `json:"id"`
+	// transfer job ID
+	Id uuid.UUID `json:"id"`
 }
 
 // a response for a file transfer status request (GET)
 type TransferStatusResponse struct {
-  // transfer job ID
-  Id string `json:"id"`
-  // transfer job status
-  Status string `json:"status"`
+	// transfer job ID
+	Id string `json:"id"`
+	// transfer job status
+	Status string `json:"status"`
 }
 
 // TransferService defines the interface for our data transfer service.

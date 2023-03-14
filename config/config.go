@@ -5,10 +5,11 @@ import (
 	"log"
 	"os"
 
-  "github.com/confluentinc/confluent-kafka-go/kafka"
-  "github.com/rabbitmq/amqp091-go"
+	//	"github.com/confluentinc/confluent-kafka-go/kafka"
+	//	"github.com/rabbitmq/amqp091-go"
 	"gopkg.in/yaml.v3"
 
+	"dts/core"
 )
 
 // a type with service configuration parameters
@@ -17,21 +18,6 @@ type serviceConfig struct {
 	Port int `json:"port" yaml:"port"`
 	// Maximum number of allowed incoming connections.
 	MaxConnections int `json:"maxConnections" yaml:"maxConnections"`
-}
-
-// endpoint configuration type
-type struct endpointConfig {
-  // Globus endpoint URLs (if any)
-  Globus map[string]struct {
-    User string `yaml:"user"`
-    URL string `yaml:"url"`
-  } `yaml:"globus"`
-}
-
-// message queue configuration type
-type messageQueueConfig struct {
-  Kafka map[string]kafka.ConfigMap `yaml:"kafka"`
-  RabbitMQ map[string]rabbitmqConfig `yaml:"rabbitmq"`
 }
 
 // global config variables
@@ -43,10 +29,10 @@ var MessageQueues map[string]messageQueueConfig
 // This struct performs the unmarshalling from the YAML config file and then
 // copies its fields to the globals above.
 type configFile struct {
-	Service serviceConfig `yaml:"service"`
-	Endpoints map[string]Endpoint `yaml:"endpoints"`
-  Databases map[string]Database `yaml:"databases"`
-  MessageQueues map[string]MessageQueue `yaml:"message_queues"`
+	Service       serviceConfig                 `yaml:"service"`
+	Endpoints     map[string]endpointConfig     `yaml:"endpoints"`
+	Databases     map[string]databaseConfig     `yaml:"databases"`
+	MessageQueues map[string]messageQueueConfig `yaml:"message_queues"`
 }
 
 // This helper locates and reads a configuration file, returning an error
@@ -67,8 +53,9 @@ func readConfig(bytes []byte) error {
 
 	// Copy the config data into place.
 	Service = conf.Service
-	Stores = make([]string, len(conf.Stores))
-	copy(Stores, conf.Stores)
+	Endpoints = conf.Endpoints
+	Databases = conf.Databases
+	MessageQueues = conf.MessageQueues
 
 	return err
 }
@@ -93,24 +80,15 @@ func validateConfig() error {
 	if err != nil {
 		return err
 	}
-	// Were we given any data stores?
-	if len(Stores) == 0 {
-		return fmt.Errorf("No data stores were provided!")
+	// Were we given any endpoints?
+	if len(Endpoints) == 0 {
+		return fmt.Errorf("No endpoints were provided!")
 	}
-	// Make sure each data store exists and that there are no duplicates.
-	storesFound := make(map[string]bool)
-	for _, store := range Stores {
-		_, found := storesFound[store]
-		if found {
-			return fmt.Errorf("Duplicate store found: %s", store)
-		} else {
-			_, err := os.Stat(store)
-			if err != nil {
-				return err
-			}
-			storesFound[store] = true
-		}
+	// Were we given any databases?
+	if len(Databases) == 0 {
+		return fmt.Errorf("No databases were provided!")
 	}
+	// TODO: validate each database?
 	return nil
 }
 

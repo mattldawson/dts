@@ -37,6 +37,10 @@ func writeError(w http.ResponseWriter, message string, code int) {
 
 // a response for an ElasticSearch query (GET)
 type ElasticSearchResponse struct {
+	// name of organization database
+	Database string `json:"database"`
+	// ElasticSearch query string
+	Query string `json:"query"`
 	// organization-specific identifiers for files matching the query
 	FileIds []string `json:"fileIds"`
 }

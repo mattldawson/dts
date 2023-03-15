@@ -5,5 +5,5 @@ package core
 // FIXME: as we expand our scope this will likely change to a more generic
 // FIXME: ElasticSearch setup (e.g. https://github.com/elastic/go-elasticsearch)
 type SearchResults struct {
-	Files []File
+	Files []File `json:"files"`
 }

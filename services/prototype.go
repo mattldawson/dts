@@ -137,15 +137,18 @@ func (service *prototype) searchDatabase(w http.ResponseWriter,
 	}
 
 	// are we asked to return a subset of our results?
-	offset, N, err := extractPaginationParams(r)
+	pagination, err := extractPaginationParams(r)
 	if err != nil {
 		writeError(w, err.Error(), 400)
 		return
 	}
 
 	log.Printf("Searching database %s for files...", dbName)
-	db := core.NewDatabase(dbName)
-	results, err := db.Search(query, offset, N)
+	db, err := core.NewDatabase(dbName)
+	if err != nil {
+		writeError(w, err.Error(), 404)
+	}
+	results, err := db.Search(query, pagination)
 	if err != nil {
 		writeError(w, err.Error(), 400)
 	} else {
@@ -167,35 +170,34 @@ func (service *prototype) createTransfer(w http.ResponseWriter,
 }
 
 // Helper for extracting pagination parameters.
-func extractPaginationParams(r *http.Request) (int, int, error) {
+func extractPaginationParams(r *http.Request) (core.Pagination, error) {
 	v := r.URL.Query()
-	offset := 0
+	p := core.Pagination{Offset: 0, MaxNum: -1}
 	offsetVal := v.Get("offset")
 	if offsetVal != "" {
 		var err error
-		offset, err = strconv.Atoi(offsetVal)
+		p.Offset, err = strconv.Atoi(offsetVal)
 		if err != nil {
 			err = fmt.Errorf("Error: Invalid results offset: %s", offsetVal)
-			return -1, -1, err
-		} else if offset < 0 {
-			err = fmt.Errorf("Error: Invalid results offset: %d", offset)
-			return -1, -1, err
+			return p, err
+		} else if p.Offset < 0 {
+			err = fmt.Errorf("Error: Invalid results offset: %d", p.Offset)
+			return p, err
 		}
 	}
-	N := -1
 	NVal := v.Get("limit")
 	if NVal != "" {
 		var err error
-		N, err = strconv.Atoi(NVal)
+		p.MaxNum, err = strconv.Atoi(NVal)
 		if err != nil {
 			err = fmt.Errorf("Invalid results limit: %s", NVal)
-			return -1, -1, err
-		} else if N < 0 {
-			err = fmt.Errorf("Invalid results limit: %d", N)
-			return -1, -1, err
+			return p, err
+		} else if p.MaxNum < 0 {
+			err = fmt.Errorf("Invalid results limit: %d", p.MaxNum)
+			return p, err
 		}
 	}
-	return offset, N, nil
+	return p, nil
 }
 
 // handler method for getting the status of a transfer

@@ -112,9 +112,8 @@ func (service *prototype) jsonFromSearchResults(dbName string,
 	data := ElasticSearchResponse{
 		Database: dbName,
 		Query:    query,
-		FileIds:  make([]string, len(results.Files)),
+		Files:    results.Files,
 	}
-	// TODO: extract file IDs
 
 	return json.Marshal(data)
 }
@@ -247,6 +246,7 @@ func NewDTSPrototype() (TransferService, error) {
 	})
 	api_v1.HandleFunc("/databases", service.getDatabases).Methods("GET")
 	api_v1.HandleFunc("/databases/{db}", service.getDatabase).Methods("GET")
+	api_v1.HandleFunc("/files", service.searchDatabase).Methods("GET")
 	api_v1.HandleFunc("/transfers", service.createTransfer).Methods("POST")
 	api_v1.HandleFunc("/transfers/{id}", service.getTransferStatus).Methods("GET")
 	// TODO: add DELETE mechanism for /transfers/{id}

@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 
 	"dts/config"
 )
@@ -24,7 +25,7 @@ func PageNumberAndSize(p Pagination) (int, int) {
 	pageNumber := 1
 	pageSize := 100
 	if p.Offset > 0 {
-		if p.MaxNum != -1 {
+		if p.MaxNum == -1 {
 			pageSize = p.Offset
 			pageNumber = 2
 		} else {
@@ -32,7 +33,9 @@ func PageNumberAndSize(p Pagination) (int, int) {
 			pageNumber = p.Offset/pageSize + 1
 		}
 	} else {
-		pageSize = p.MaxNum
+		if p.MaxNum > 0 {
+			pageSize = p.MaxNum
+		}
 	}
 	return pageNumber, pageSize
 }
@@ -64,25 +67,39 @@ func NewDatabase(dbName string) (*Database, error) {
 func (db *Database) Search(query string, pagination Pagination) (SearchResults, error) {
 	// for now we assume the JDP interface for ElasticSearch queries
 	// (see https://files.jgi.doe.gov/apidoc/)
+	var results SearchResults
 
 	pageNumber, pageSize := PageNumberAndSize(pagination)
 
 	params := url.Values{}
 	params.Add("q", query)
-	params.Add("p", string(pageNumber))
-	params.Add("x", string(pageSize))
+	params.Add("p", strconv.Itoa(pageNumber))
+	params.Add("x", strconv.Itoa(pageSize))
 
-	u, _ := url.ParseRequestURI(db.BaseURL)
-	u.Path = "search"
-	u.RawQuery = params.Encode()
+	type JDPResult struct {
+		Organisms []struct {
+			Files []File `json:"files"`
+		} `json:"organisms"`
+	}
 
-	var results SearchResults
-	resp, err := http.Get(fmt.Sprintf("%v", u))
-	defer resp.Body.Close()
+	u, err := url.ParseRequestURI(db.BaseURL)
 	if err == nil {
-		body, err := io.ReadAll(resp.Body)
+		u.Path = "search"
+		u.RawQuery = params.Encode()
+
+		request := fmt.Sprintf("%v", u)
+		resp, err := http.Get(request)
+		defer resp.Body.Close()
 		if err == nil {
-			json.Unmarshal(body, &results)
+			body, err := io.ReadAll(resp.Body)
+			if err == nil {
+				var jdpResults JDPResult
+				results.Files = make([]File, 0)
+				json.Unmarshal(body, &jdpResults)
+				for _, org := range jdpResults.Organisms {
+					results.Files = append(results.Files, org.Files...)
+				}
+			}
 		}
 	}
 

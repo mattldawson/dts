@@ -6,6 +6,8 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
+
+	"dts/core"
 )
 
 // This package-specific helper function writes a JSON payload to an
@@ -41,8 +43,8 @@ type ElasticSearchResponse struct {
 	Database string `json:"database"`
 	// ElasticSearch query string
 	Query string `json:"query"`
-	// organization-specific identifiers for files matching the query
-	FileIds []string `json:"fileIds"`
+	// Files matching the query
+	Files []core.File `json:"files"`
 }
 
 // a request for a file transfer (POST)

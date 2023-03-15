@@ -1,8 +1,6 @@
 package config
 
-// A Database represents an endpoint (source or destination) in a file transfer
-// operation database. A database can be queried for available files that can be
-// transferred to another database.
+// A database provides files for a file transfer (at its source or destination).
 type databaseConfig struct {
 	// the full name of the database
 	Name string `yaml:"name"`

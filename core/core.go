@@ -3,6 +3,8 @@ package core
 import (
 	"fmt"
 	"time"
+
+	"dts/config"
 )
 
 // Version numbers
@@ -20,12 +22,13 @@ var initialized = false
 var startTime time.Time
 
 // Initializes application utilities.
-func Init() error {
+func Init(yamlConfig []byte) error {
+
 	if !initialized {
 		startTime = time.Now()
 		initialized = true
 	}
-	return nil
+	return config.Init(yamlConfig)
 }
 
 // Returns the application's uptime in seconds.

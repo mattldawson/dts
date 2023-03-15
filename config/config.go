@@ -8,8 +8,6 @@ import (
 	//	"github.com/confluentinc/confluent-kafka-go/kafka"
 	//	"github.com/rabbitmq/amqp091-go"
 	"gopkg.in/yaml.v3"
-
-	"dts/core"
 )
 
 // a type with service configuration parameters
@@ -95,14 +93,9 @@ func validateConfig() error {
 // Initializes the ID mapping service configuration using the given YAML byte
 // data.
 func Init(yamlData []byte) error {
-	// Perform core initialization.
-	err := core.Init()
-	if err != nil {
-		return err
-	}
 
 	// Read the configuration from our YAML file.
-	err = readConfig(yamlData)
+	err := readConfig(yamlData)
 	if err != nil {
 		return err
 	}

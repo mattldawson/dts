@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"dts/config"
+	"dts/core"
 	"dts/services"
 )
 
@@ -53,11 +54,11 @@ func main() {
 	}
 
 	// Initialize our configuration and create the service.
-	initErr := config.Init(b)
+	initErr := core.Init(b)
 	if initErr != nil {
 		log.Panicf("Couldn't initialize the configuration: %s\n", initErr.Error())
 	}
-	service, err := services.NewDTS()
+	service, err := services.NewDTSPrototype()
 	if err != nil {
 		log.Panicf("Couldn't create the service: %s\n", err.Error())
 	}

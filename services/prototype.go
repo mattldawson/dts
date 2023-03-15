@@ -55,13 +55,21 @@ func (service *prototype) getRoot(w http.ResponseWriter,
 	writeJson(w, jsonData)
 }
 
+// type holding database metadata
+type dbMetadata struct {
+	Id           string `json:"id"`
+	Name         string `json:"name"`
+	Organization string `json:"organization"`
+	URL          string `json:"url"`
+}
+
 // handler method for querying all databases
 func (service *prototype) getDatabases(w http.ResponseWriter,
 	r *http.Request) {
 	log.Printf("Querying organizational databases...")
-	dbs := make([]core.Database, 0)
+	dbs := make([]dbMetadata, 0)
 	for dbName, db := range config.Databases {
-		dbs = append(dbs, core.Database{
+		dbs = append(dbs, dbMetadata{
 			Id:           dbName,
 			Name:         db.Name,
 			Organization: db.Organization,
@@ -86,7 +94,12 @@ func (service *prototype) getDatabase(w http.ResponseWriter,
 		log.Print(errStr)
 		writeError(w, errStr, 404)
 	} else {
-		data, _ := json.Marshal(db)
+		data, _ := json.Marshal(dbMetadata{
+			Id:           dbName,
+			Name:         db.Name,
+			Organization: db.Organization,
+			URL:          db.URL,
+		})
 		writeJson(w, data)
 	}
 }
@@ -94,12 +107,12 @@ func (service *prototype) getDatabase(w http.ResponseWriter,
 // This helper translates an array of engines.SearchResults to a JSON object
 // containing search results for the query (including the database name).
 func (service *prototype) jsonFromSearchResults(dbName string,
-	query string, results []core.ElasticSearchResult) ([]byte, error) {
+	query string, results core.SearchResults) ([]byte, error) {
 
 	data := ElasticSearchResponse{
 		Database: dbName,
 		Query:    query,
-		FileIds:  make([]string, len(results)),
+		FileIds:  make([]string, len(results.Files)),
 	}
 	// TODO: extract file IDs
 
@@ -132,11 +145,14 @@ func (service *prototype) searchDatabase(w http.ResponseWriter,
 
 	log.Printf("Searching database %s for files...", dbName)
 	db := core.NewDatabase(dbName)
-	files := db.Search(query, offset, N)
-
-	// Return our results to the caller.
-	jsonData, _ := service.jsonFromSearchResults(dbName, query, files)
-	writeJson(w, jsonData)
+	results, err := db.Search(query, offset, N)
+	if err != nil {
+		writeError(w, err.Error(), 400)
+	} else {
+		// Return our results to the caller.
+		jsonData, _ := service.jsonFromSearchResults(dbName, query, results)
+		writeJson(w, jsonData)
+	}
 }
 
 // Handler method for queueing a batch gene homology search.

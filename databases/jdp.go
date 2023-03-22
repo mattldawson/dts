@@ -106,8 +106,11 @@ func (db *JdpDatabase) Search(params SearchParameters) (SearchResults, error) {
 	return results, err
 }
 
-func (db *JdpDatabase) FilesStaged(fileIds []string) bool {
-	return false
+func (db *JdpDatabase) FilesStaged(fileIds []string) (bool, error) {
+	// fetch the paths for the files with the given IDs
+	// FIXME: can we match file IDs using an ElasticSearch query??
+	var filePaths []string
+	return db.Endpoint.FilesStaged(filePaths)
 }
 
 func (db *JdpDatabase) StageFiles(fileIds []string) (Transfer, error) {

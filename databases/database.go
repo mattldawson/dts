@@ -42,7 +42,7 @@ type Database interface {
 	Search(params SearchParameters) (SearchResults, error)
 	// returns true if the files identified by IDs are present in the database's
 	// staging area AND are valid, false if not
-	FilesStaged(fileIds []string) bool
+	FilesStaged(fileIds []string) (bool, error)
 	// begins staging the files for a transfer, returning a new Transfer
 	StageFiles(fileIds []string) (Transfer, error)
 }

@@ -21,23 +21,24 @@ const (
 type Endpoint interface {
 	// returns true if the files with the given absolute paths are staged at this
 	// endpoint AND are valid, false otherwise
-	FilesStaged(filePaths []string) bool
+	FilesStaged(filePaths []string) (bool, error)
+	// returns a list of UUIDs for all transfers associated with this endpoint
+	Transfers() ([]uuid.UUID, error)
 	// begins a transfer task that moves the files with the given absolute "src"
 	// paths to their respective "dst" paths on the destination endpoint,
 	// returning a UUID that can be used to refer to this task.
 	Transfer(dst Endpoint, srcPaths, dstPaths []string) (uuid.UUID, error)
 	// retrieves the status for a transfer task identified by its UUID
-	Status(id uuid.UUID) TransferStatus
+	Status(id uuid.UUID) (TransferStatus, error)
+	// cancels the transfer task with the given UUID
+	Cancel(uuid.UUID) error
 }
 
 // creates an endpoint based on the configured type
 func NewEndpoint(endpointName string) (Endpoint, error) {
 	epConfig := config.Endpoints[endpointName]
 	if len(epConfig.Globus.URL) > 0 {
-		return &GlobusEndpoint{
-			User: epConfig.Globus.User,
-			URL:  epConfig.Globus.URL,
-		}, nil
+		return NewGlobusEndpoint(endpointName)
 	}
 	return nil, nil
 }

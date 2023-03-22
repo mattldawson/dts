@@ -15,6 +15,7 @@ import (
 
 	"dts/config"
 	"dts/core"
+	"dts/databases"
 )
 
 // This type implements the TransferService interface, allowing file transfers
@@ -107,7 +108,7 @@ func (service *prototype) getDatabase(w http.ResponseWriter,
 // This helper translates an array of engines.SearchResults to a JSON object
 // containing search results for the query (including the database name).
 func (service *prototype) jsonFromSearchResults(dbName string,
-	query string, results core.SearchResults) ([]byte, error) {
+	query string, results databases.SearchResults) ([]byte, error) {
 
 	data := ElasticSearchResponse{
 		Database: dbName,
@@ -118,13 +119,43 @@ func (service *prototype) jsonFromSearchResults(dbName string,
 	return json.Marshal(data)
 }
 
+// helper for extracting search parameters
+func extractSearchParams(r *http.Request) (databases.SearchParameters, error) {
+	var params databases.SearchParameters
+	params.Query = r.FormValue("query")
+	if params.Query == "" {
+		return params, fmt.Errorf("Query string not given!")
+	}
+	v := r.URL.Query()
+	offsetVal := v.Get("offset")
+	if offsetVal != "" {
+		var err error
+		params.Pagination.Offset, err = strconv.Atoi(offsetVal)
+		if err != nil {
+			return params, fmt.Errorf("Error: Invalid results offset: %s", offsetVal)
+		} else if params.Pagination.Offset < 0 {
+			return params, fmt.Errorf("Error: Invalid results offset: %d", params.Pagination.Offset)
+		}
+	}
+	NVal := v.Get("limit")
+	if NVal != "" {
+		var err error
+		params.Pagination.MaxNum, err = strconv.Atoi(NVal)
+		if err != nil {
+			return params, fmt.Errorf("Invalid results limit: %s", NVal)
+		} else if params.Pagination.MaxNum <= 0 {
+			return params, fmt.Errorf("Invalid results limit: %d", params.Pagination.MaxNum)
+		}
+	}
+	return params, nil
+}
+
 // handle ElasticSearch queries
 func (service *prototype) searchDatabase(w http.ResponseWriter,
 	r *http.Request) {
 
 	// fetch search parameters
 	dbName := r.FormValue("database")
-	query := r.FormValue("query")
 
 	// is the database valid?
 	_, ok := config.Databases[dbName]
@@ -136,28 +167,28 @@ func (service *prototype) searchDatabase(w http.ResponseWriter,
 	}
 
 	// are we asked to return a subset of our results?
-	pagination, err := extractPaginationParams(r)
+	params, err := extractSearchParams(r)
 	if err != nil {
 		writeError(w, err.Error(), 400)
 		return
 	}
 
 	log.Printf("Searching database %s for files...", dbName)
-	db, err := core.NewDatabase(dbName)
+	db, err := databases.NewDatabase(dbName)
 	if err != nil {
 		writeError(w, err.Error(), 404)
 	}
-	results, err := db.Search(query, pagination)
+	results, err := db.Search(params)
 	if err != nil {
 		writeError(w, err.Error(), 400)
 	} else {
 		// Return our results to the caller.
-		jsonData, _ := service.jsonFromSearchResults(dbName, query, results)
+		jsonData, _ := service.jsonFromSearchResults(dbName, params.Query, results)
 		writeJson(w, jsonData)
 	}
 }
 
-// Handler method for queueing a batch gene homology search.
+// Handler method for initiating a file transfer operation
 func (service *prototype) createTransfer(w http.ResponseWriter,
 	r *http.Request) {
 	// TODO: implement!
@@ -166,37 +197,6 @@ func (service *prototype) createTransfer(w http.ResponseWriter,
 	}
 	jsonData, _ := json.Marshal(response)
 	writeJson(w, jsonData)
-}
-
-// Helper for extracting pagination parameters.
-func extractPaginationParams(r *http.Request) (core.Pagination, error) {
-	v := r.URL.Query()
-	p := core.Pagination{Offset: 0, MaxNum: -1}
-	offsetVal := v.Get("offset")
-	if offsetVal != "" {
-		var err error
-		p.Offset, err = strconv.Atoi(offsetVal)
-		if err != nil {
-			err = fmt.Errorf("Error: Invalid results offset: %s", offsetVal)
-			return p, err
-		} else if p.Offset < 0 {
-			err = fmt.Errorf("Error: Invalid results offset: %d", p.Offset)
-			return p, err
-		}
-	}
-	NVal := v.Get("limit")
-	if NVal != "" {
-		var err error
-		p.MaxNum, err = strconv.Atoi(NVal)
-		if err != nil {
-			err = fmt.Errorf("Invalid results limit: %s", NVal)
-			return p, err
-		} else if p.MaxNum < 0 {
-			err = fmt.Errorf("Invalid results limit: %d", p.MaxNum)
-			return p, err
-		}
-	}
-	return p, nil
 }
 
 // handler method for getting the status of a transfer

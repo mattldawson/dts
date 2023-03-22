@@ -1,4 +1,4 @@
-package core
+package databases
 
 import (
 	"encoding/json"
@@ -8,84 +8,84 @@ import (
 	"net/url"
 	"strconv"
 
-	"dts/config"
-)
+	"github.com/google/uuid"
 
-// pagination-related parameters
-type Pagination struct {
-	// number of search results to skip
-	Offset int
-	// maximum number of search results to include (-1 indicates no max)
-	MaxNum int
-}
+	"dts/config"
+	"dts/core"
+	"dts/endpoints"
+)
 
 // returns the page number and page size corresponding to the given Pagination
 // parameters
-func PageNumberAndSize(p Pagination) (int, int) {
+func pageNumberAndSize(offset, maxNum int) (int, int) {
 	pageNumber := 1
 	pageSize := 100
-	if p.Offset > 0 {
-		if p.MaxNum == -1 {
-			pageSize = p.Offset
+	if offset > 0 {
+		if maxNum == -1 {
+			pageSize = offset
 			pageNumber = 2
 		} else {
-			pageSize = p.MaxNum
-			pageNumber = p.Offset/pageSize + 1
+			pageSize = maxNum
+			pageNumber = offset/pageSize + 1
 		}
 	} else {
-		if p.MaxNum > 0 {
-			pageSize = p.MaxNum
+		if maxNum > 0 {
+			pageSize = maxNum
 		}
 	}
 	return pageNumber, pageSize
 }
 
 // file database appropriate for conducting searches
-type Database struct {
+type JdpDatabase struct {
 	Id       string
 	BaseURL  string
-	Endpoint Endpoint
+	Endpoint endpoints.Endpoint
+	ApiToken string
 }
 
-func NewDatabase(dbName string) (*Database, error) {
+func NewJdpDatabase(dbName string) (Database, error) {
 	dbConfig, ok := config.Databases[dbName]
 	if !ok {
 		return nil, fmt.Errorf("Database %s not found", dbName)
 	}
-	endpoint, err := NewEndpoint(dbConfig.Endpoint)
+	endpoint, err := endpoints.NewEndpoint(dbConfig.Endpoint)
 	if err != nil {
 		return nil, err
 	}
 
-	return &Database{
+	// read our API access token from a file
+	// FIXME
+
+	return &JdpDatabase{
 		Id:       dbName,
 		BaseURL:  dbConfig.URL,
 		Endpoint: endpoint,
 	}, nil
 }
 
-func (db *Database) Search(query string, pagination Pagination) (SearchResults, error) {
-	// for now we assume the JDP interface for ElasticSearch queries
+func (db *JdpDatabase) Search(params SearchParameters) (SearchResults, error) {
+	// we assume the JDP interface for ElasticSearch queries
 	// (see https://files.jgi.doe.gov/apidoc/)
 	var results SearchResults
 
-	pageNumber, pageSize := PageNumberAndSize(pagination)
+	pageNumber, pageSize := pageNumberAndSize(params.Pagination.Offset, params.Pagination.MaxNum)
 
-	params := url.Values{}
-	params.Add("q", query)
-	params.Add("p", strconv.Itoa(pageNumber))
-	params.Add("x", strconv.Itoa(pageSize))
+	p := url.Values{}
+	p.Add("q", params.Query)
+	p.Add("p", strconv.Itoa(pageNumber))
+	p.Add("x", strconv.Itoa(pageSize))
 
 	type JDPResult struct {
 		Organisms []struct {
-			Files []File `json:"files"`
+			Files []core.File `json:"files"`
 		} `json:"organisms"`
 	}
 
 	u, err := url.ParseRequestURI(db.BaseURL)
 	if err == nil {
 		u.Path = "search"
-		u.RawQuery = params.Encode()
+		u.RawQuery = p.Encode()
 
 		request := fmt.Sprintf("%v", u)
 		resp, err := http.Get(request)
@@ -94,7 +94,7 @@ func (db *Database) Search(query string, pagination Pagination) (SearchResults, 
 			body, err := io.ReadAll(resp.Body)
 			if err == nil {
 				var jdpResults JDPResult
-				results.Files = make([]File, 0)
+				results.Files = make([]core.File, 0)
 				json.Unmarshal(body, &jdpResults)
 				for _, org := range jdpResults.Organisms {
 					results.Files = append(results.Files, org.Files...)
@@ -104,4 +104,12 @@ func (db *Database) Search(query string, pagination Pagination) (SearchResults, 
 	}
 
 	return results, err
+}
+
+func (db *JdpDatabase) FilesStaged(fileIds []string) bool {
+	return false
+}
+
+func (db *JdpDatabase) StageFiles(fileIds []string) (Transfer, error) {
+	return Transfer{Id: uuid.New()}, nil
 }

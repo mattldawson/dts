@@ -2,8 +2,9 @@ package core
 
 // This type represents a single file entry in an ElasticSearch result.
 type File struct {
-	// integer ID assigned to the file
-	Id int `json:"file_id"`
+	// unique ID used by the DTS to manipulate the file
+	Id string `json:"_id"`
+	// FIXME: do we need to keep track of file_id?
 	// name of the file (excluding Path)
 	Name string `json:"file_name"`
 	// directory in which the file sits

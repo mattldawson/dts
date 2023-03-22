@@ -28,7 +28,7 @@ import (
 func usage() {
 	fmt.Fprintf(os.Stderr, "%s: usage:\n", os.Args[0])
 	fmt.Fprintf(os.Stderr, "%s <config_file>\n", os.Args[0])
-	fmt.Fprintf(os.Stderr, "See README.md for details on config files.")
+	fmt.Fprintf(os.Stderr, "See README.md for details on config files.\n")
 	os.Exit(1)
 }
 

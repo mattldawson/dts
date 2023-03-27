@@ -1,6 +1,7 @@
 package databases
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,7 +13,6 @@ import (
 
 	"dts/config"
 	"dts/core"
-	"dts/endpoints"
 )
 
 // returns the page number and page size corresponding to the given Pagination
@@ -36,12 +36,16 @@ func pageNumberAndSize(offset, maxNum int) (int, int) {
 	return pageNumber, pageSize
 }
 
-// file database appropriate for conducting searches
+// file database appropriate for handling JDP searches and transfers
 type JdpDatabase struct {
-	Id       string
-	BaseURL  string
-	Endpoint endpoints.Endpoint
+	// database identifier
+	Id string
+	// JDP base URL
+	BaseURL string
+	// API token used for authentication
 	ApiToken string
+	// mapping from JDP restoration request IDs to DTS transfer UUIDs
+	TransferUUIDs map[int]uuid.UUID
 }
 
 func NewJdpDatabase(dbName string) (Database, error) {
@@ -49,43 +53,25 @@ func NewJdpDatabase(dbName string) (Database, error) {
 	if !ok {
 		return nil, fmt.Errorf("Database %s not found", dbName)
 	}
-	endpoint, err := endpoints.NewEndpoint(dbConfig.Endpoint)
-	if err != nil {
-		return nil, err
-	}
 
 	// read our API access token from a file
 	// FIXME
 
 	return &JdpDatabase{
-		Id:       dbName,
-		BaseURL:  dbConfig.URL,
-		Endpoint: endpoint,
+		Id:            dbName,
+		BaseURL:       dbConfig.URL,
+		TransferUUIDs: make(map[int]uuid.UUID),
 	}, nil
 }
 
-func (db *JdpDatabase) Search(params SearchParameters) (SearchResults, error) {
-	// we assume the JDP interface for ElasticSearch queries
-	// (see https://files.jgi.doe.gov/apidoc/)
+// this helper extracts files for the JDP /search GET query with given parameters
+func (db *JdpDatabase) filesForSearch(params url.Values) (SearchResults, error) {
 	var results SearchResults
-
-	pageNumber, pageSize := pageNumberAndSize(params.Pagination.Offset, params.Pagination.MaxNum)
-
-	p := url.Values{}
-	p.Add("q", params.Query)
-	p.Add("p", strconv.Itoa(pageNumber))
-	p.Add("x", strconv.Itoa(pageSize))
-
-	type JDPResult struct {
-		Organisms []struct {
-			Files []core.File `json:"files"`
-		} `json:"organisms"`
-	}
 
 	u, err := url.ParseRequestURI(db.BaseURL)
 	if err == nil {
 		u.Path = "search"
-		u.RawQuery = p.Encode()
+		u.RawQuery = params.Encode()
 
 		request := fmt.Sprintf("%v", u)
 		resp, err := http.Get(request)
@@ -93,26 +79,94 @@ func (db *JdpDatabase) Search(params SearchParameters) (SearchResults, error) {
 		if err == nil {
 			body, err := io.ReadAll(resp.Body)
 			if err == nil {
+				type JDPResult struct {
+					Organisms []struct {
+						Files []core.File `json:"files"`
+					} `json:"organisms"`
+				}
 				var jdpResults JDPResult
 				results.Files = make([]core.File, 0)
-				json.Unmarshal(body, &jdpResults)
-				for _, org := range jdpResults.Organisms {
-					results.Files = append(results.Files, org.Files...)
+				err = json.Unmarshal(body, &jdpResults)
+				if err == nil {
+					for _, org := range jdpResults.Organisms {
+						results.Files = append(results.Files, org.Files...)
+					}
+				}
+			}
+		}
+	}
+	return results, err
+}
+
+func (db *JdpDatabase) Search(params SearchParameters) (SearchResults, error) {
+	// we assume the JDP interface for ElasticSearch queries
+	// (see https://files.jgi.doe.gov/apidoc/)
+	pageNumber, pageSize := pageNumberAndSize(params.Pagination.Offset, params.Pagination.MaxNum)
+
+	p := url.Values{}
+	p.Add("q", params.Query)
+	p.Add("p", strconv.Itoa(pageNumber))
+	p.Add("x", strconv.Itoa(pageSize))
+
+	return db.filesForSearch(p)
+}
+
+func (db *JdpDatabase) FilesStaged(fileIds []string) (bool, error) {
+	// fetch the paths for the files with the given IDs that are RESTORED
+	type FileFilter struct {
+		Ids      []string `json:"_id"`
+		Statuses []string `json:"file_status"`
+	}
+	ff, err := json.Marshal(FileFilter{Ids: fileIds, Statuses: []string{"RESTORED"}})
+	if err != nil {
+		return false, err
+	}
+	p := url.Values{}
+	p.Add("ff=", string(ff))
+	results, err := db.filesForSearch(p)
+	if err != nil {
+		return false, err
+	}
+
+	// Did we get back all files we requested? If so, all files are staged.
+	return len(results.Files) == len(fileIds), nil
+}
+
+func (db *JdpDatabase) StageFiles(fileIds []string) (uuid.UUID, error) {
+	var xferId uuid.UUID
+
+	// construct a POST request to restore archived files with the given IDs
+	type RestoreRequest struct {
+		Ids []string `json:"ids"`
+	}
+	data, err := json.Marshal(RestoreRequest{Ids: fileIds})
+	if err != nil {
+		return xferId, err
+	}
+
+	u, err := url.ParseRequestURI(db.BaseURL)
+	if err == nil {
+		u.Path = "request_archive_files"
+
+		request := fmt.Sprintf("%v", u)
+		resp, err := http.Post(request, "application/json", bytes.NewReader(data))
+		defer resp.Body.Close()
+		if err == nil {
+			body, err := io.ReadAll(resp.Body)
+			if err == nil {
+				type RestoreResponse struct {
+					RequestId int `json:"request_id"`
+				}
+
+				var jdpResp RestoreResponse
+				err = json.Unmarshal(body, &jdpResp)
+				if err == nil {
+					xferId = uuid.New()
+					db.TransferUUIDs[jdpResp.RequestId] = xferId
 				}
 			}
 		}
 	}
 
-	return results, err
-}
-
-func (db *JdpDatabase) FilesStaged(fileIds []string) (bool, error) {
-	// fetch the paths for the files with the given IDs
-	// FIXME: can we match file IDs using an ElasticSearch query??
-	var filePaths []string
-	return db.Endpoint.FilesStaged(filePaths)
-}
-
-func (db *JdpDatabase) StageFiles(fileIds []string) (Transfer, error) {
-	return Transfer{Id: uuid.New()}, nil
+	return xferId, err
 }

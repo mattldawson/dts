@@ -29,12 +29,6 @@ type SearchResults struct {
 	Files []core.File `json:"files"`
 }
 
-// a file transfer, identified by a UUID
-type Transfer struct {
-	// unique identifier for transfer operation
-	Id uuid.UUID `json:"id"`
-}
-
 // Database defines the interface for a database that is used to search for
 // files and initiate file transfers
 type Database interface {
@@ -43,8 +37,9 @@ type Database interface {
 	// returns true if the files identified by IDs are present in the database's
 	// staging area AND are valid, false if not
 	FilesStaged(fileIds []string) (bool, error)
-	// begins staging the files for a transfer, returning a new Transfer
-	StageFiles(fileIds []string) (Transfer, error)
+	// begins staging the files for a transfer, returning a UUID representing the
+	// staging operation
+	StageFiles(fileIds []string) (uuid.UUID, error)
 }
 
 // creates a database based on the configured type

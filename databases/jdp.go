@@ -44,8 +44,8 @@ type JdpDatabase struct {
 	BaseURL string
 	// API token used for authentication
 	ApiToken string
-	// mapping from JDP restoration request IDs to staging UUIDs
-	StagingUUIDs map[int]uuid.UUID
+	// mapping from staging UUIDs to JDP restoration request ID
+	StagingIds map[uuid.UUID]int
 }
 
 func NewJdpDatabase(dbName string) (Database, error) {
@@ -58,9 +58,9 @@ func NewJdpDatabase(dbName string) (Database, error) {
 	// FIXME
 
 	return &JdpDatabase{
-		Id:           dbName,
-		BaseURL:      dbConfig.URL,
-		StagingUUIDs: make(map[int]uuid.UUID),
+		Id:         dbName,
+		BaseURL:    dbConfig.URL,
+		StagingIds: make(map[uuid.UUID]int),
 	}, nil
 }
 
@@ -151,7 +151,7 @@ func (db *JdpDatabase) StageFiles(fileIds []string) (uuid.UUID, error) {
 
 	u, err := url.ParseRequestURI(db.BaseURL)
 	if err == nil {
-		u.Path = "request_archive_files"
+		u.Path = "request_archived_files"
 
 		request := fmt.Sprintf("%v", u)
 		resp, err := http.Post(request, "application/json", bytes.NewReader(data))
@@ -167,11 +167,47 @@ func (db *JdpDatabase) StageFiles(fileIds []string) (uuid.UUID, error) {
 				err = json.Unmarshal(body, &jdpResp)
 				if err == nil {
 					xferId = uuid.New()
-					db.StagingUUIDs[jdpResp.RequestId] = xferId
+					db.StagingIds[xferId] = jdpResp.RequestId
 				}
 			}
 		}
 	}
 
 	return xferId, err
+}
+
+func (db *JdpDatabase) StagingStatus(id uuid.UUID) (StagingStatus, error) {
+	if restoreId, found := db.StagingIds[id]; found {
+		u, err := url.ParseRequestURI(db.BaseURL)
+		if err == nil {
+			u.Path = fmt.Sprintf("request_archived_files/requests/%d", restoreId)
+
+			request := fmt.Sprintf("%v", u)
+			resp, err := http.Get(request)
+			defer resp.Body.Close()
+			if err == nil {
+				body, err := io.ReadAll(resp.Body)
+				if err == nil {
+					type JDPResult struct {
+						Status string `json:"status"` // "ready" or not
+					}
+					var jdpResult JDPResult
+					err = json.Unmarshal(body, &jdpResult)
+					if err == nil {
+						statusForString := map[string]StagingStatus{
+							"ready": Succeeded,
+						}
+						if status, ok := statusForString[jdpResult.Status]; ok {
+							return status, nil
+						} else {
+							return status, fmt.Errorf("Unrecognized staging status string: %s", jdpResult.Status)
+						}
+					}
+				}
+			}
+		}
+		return Unknown, err
+	} else {
+		return Unknown, nil
+	}
 }

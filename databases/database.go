@@ -26,6 +26,17 @@ type SearchResults struct {
 	Files []core.File `json:"files"`
 }
 
+// This "enum" type identifies the status of a staging operation that moves
+// files into place on a Database's endpoint.
+type StagingStatus int
+
+const (
+	Unknown   StagingStatus = iota // unknown staging operation or status not available
+	Active                         // staging in progress
+	Succeeded                      // staging completed successfully
+	Failed                         // staging failed
+)
+
 // Database defines the interface for a database that is used to search for
 // files and initiate file transfers
 type Database interface {
@@ -37,6 +48,8 @@ type Database interface {
 	// begins staging the files for a transfer, returning a UUID representing the
 	// staging operation
 	StageFiles(fileIds []string) (uuid.UUID, error)
+	// returns the status of a given staging operation
+	StagingStatus(id uuid.UUID) (StagingStatus, error)
 }
 
 // creates a database based on the configured type

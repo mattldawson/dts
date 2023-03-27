@@ -37,6 +37,23 @@ func writeError(w http.ResponseWriter, message string, code int) {
 	w.Write(data)
 }
 
+// This "enum" type identifies the status of a file transfer operation,
+// including both staging and endpoint-to-endpoint transfer stages. Contrast
+// this with the endpoints.TransferStatus type, which describes the status only
+// for endpoint-to-endpoint transfer stages.
+type TransferStatus int
+
+// possible statuses of file transfers
+const (
+	Unknown           TransferStatus = iota // unknown transfer or status not available
+	Staging                                 // requested files are being staged at source
+	StagingSucceeded                        // requested files have been staged
+	StagingFailed                           // requested files could not be staged
+	Transferring                            // files are being transfered between source/destination endpoints
+	TransferSucceeded                       // files have been successfully transfered
+	TransferFailed                          // files could not be transferred
+)
+
 // a response for an ElasticSearch query (GET)
 type ElasticSearchResponse struct {
 	// name of organization database

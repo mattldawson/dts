@@ -6,7 +6,7 @@ import (
 	"dts/config"
 )
 
-// This "enum" type identifies the status of a file transfer operation.
+// This "enum" type identifies the status of a file transfer between endpoints.
 type TransferStatus int
 
 const (
@@ -31,7 +31,7 @@ type Endpoint interface {
 	// retrieves the status for a transfer task identified by its UUID
 	Status(id uuid.UUID) (TransferStatus, error)
 	// cancels the transfer task with the given UUID
-	Cancel(uuid.UUID) error
+	Cancel(id uuid.UUID) error
 }
 
 // creates an endpoint based on the configured type

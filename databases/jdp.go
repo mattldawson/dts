@@ -44,8 +44,8 @@ type JdpDatabase struct {
 	BaseURL string
 	// API token used for authentication
 	ApiToken string
-	// mapping from JDP restoration request IDs to DTS transfer UUIDs
-	TransferUUIDs map[int]uuid.UUID
+	// mapping from JDP restoration request IDs to staging UUIDs
+	StagingUUIDs map[int]uuid.UUID
 }
 
 func NewJdpDatabase(dbName string) (Database, error) {
@@ -58,13 +58,18 @@ func NewJdpDatabase(dbName string) (Database, error) {
 	// FIXME
 
 	return &JdpDatabase{
-		Id:            dbName,
-		BaseURL:       dbConfig.URL,
-		TransferUUIDs: make(map[int]uuid.UUID),
+		Id:           dbName,
+		BaseURL:      dbConfig.URL,
+		StagingUUIDs: make(map[int]uuid.UUID),
 	}, nil
 }
 
 // this helper extracts files for the JDP /search GET query with given parameters
+// FIXME: Currently, this returns SearchResults directly, since the core.File
+// FIXME: type has fields corresponding to those in the JGI Data Portal's
+// FIXME: interface. When we prune/canonicalize the core.File type, we should
+// FIXME: move the old type to this file and use an array of that type for this
+// FIXME: function's return value.
 func (db *JdpDatabase) filesForSearch(params url.Values) (SearchResults, error) {
 	var results SearchResults
 
@@ -162,7 +167,7 @@ func (db *JdpDatabase) StageFiles(fileIds []string) (uuid.UUID, error) {
 				err = json.Unmarshal(body, &jdpResp)
 				if err == nil {
 					xferId = uuid.New()
-					db.TransferUUIDs[jdpResp.RequestId] = xferId
+					db.StagingUUIDs[jdpResp.RequestId] = xferId
 				}
 			}
 		}

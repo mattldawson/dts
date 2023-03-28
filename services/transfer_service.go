@@ -49,8 +49,8 @@ const (
 	Staging                                 // requested files are being staged at source
 	StagingSucceeded                        // requested files have been staged
 	StagingFailed                           // requested files could not be staged
-	Transferring                            // files are being transfered between source/destination endpoints
-	TransferSucceeded                       // files have been successfully transfered
+	Transferring                            // files are being transferred between source/destination endpoints
+	TransferSucceeded                       // files have been successfully transferred
 	TransferFailed                          // files could not be transferred
 )
 

@@ -79,10 +79,12 @@ func (db *JdpDatabase) filesForSearch(params url.Values) (SearchResults, error) 
 		u.RawQuery = params.Encode()
 
 		request := fmt.Sprintf("%v", u)
-		resp, err := http.Get(request)
+		var resp *http.Response
+		resp, err = http.Get(request)
 		defer resp.Body.Close()
 		if err == nil {
-			body, err := io.ReadAll(resp.Body)
+			var body []byte
+			body, err = io.ReadAll(resp.Body)
 			if err == nil {
 				type JDPResult struct {
 					Organisms []struct {
@@ -154,10 +156,12 @@ func (db *JdpDatabase) StageFiles(fileIds []string) (uuid.UUID, error) {
 		u.Path = "request_archived_files"
 
 		request := fmt.Sprintf("%v", u)
-		resp, err := http.Post(request, "application/json", bytes.NewReader(data))
+		var resp *http.Response
+		resp, err = http.Post(request, "application/json", bytes.NewReader(data))
 		defer resp.Body.Close()
 		if err == nil {
-			body, err := io.ReadAll(resp.Body)
+			var body []byte
+			body, err = io.ReadAll(resp.Body)
 			if err == nil {
 				type RestoreResponse struct {
 					RequestId int `json:"request_id"`
@@ -183,10 +187,12 @@ func (db *JdpDatabase) StagingStatus(id uuid.UUID) (StagingStatus, error) {
 			u.Path = fmt.Sprintf("request_archived_files/requests/%d", restoreId)
 
 			request := fmt.Sprintf("%v", u)
-			resp, err := http.Get(request)
+			var resp *http.Response
+			resp, err = http.Get(request)
 			defer resp.Body.Close()
 			if err == nil {
-				body, err := io.ReadAll(resp.Body)
+				var body []byte
+				body, err = io.ReadAll(resp.Body)
 				if err == nil {
 					type JDPResult struct {
 						Status string `json:"status"` // "ready" or not

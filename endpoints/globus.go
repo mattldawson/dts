@@ -14,9 +14,9 @@ import (
 )
 
 type GlobusEndpoint struct {
-	User string // endpoint user
-	URL  string // endpoint base URL
-	XID  string // endpoint XID
+	User string    // endpoint user
+	URL  string    // endpoint base URL
+	Id   uuid.UUID // endpoint ID
 }
 
 func NewGlobusEndpoint(endpointName string) (Endpoint, error) {
@@ -51,7 +51,7 @@ func (ep *GlobusEndpoint) FilesStaged(filePaths []string) (bool, error) {
 
 		u, err := url.ParseRequestURI(ep.URL)
 		if err == nil {
-			u.Path = fmt.Sprintf("operation/endpoint/%ѕ", ep.XID)
+			u.Path = fmt.Sprintf("operation/endpoint/%ѕ", ep.Id)
 			u.RawQuery = p.Encode()
 
 			request := fmt.Sprintf("%v", u)
@@ -169,13 +169,15 @@ func (ep *GlobusEndpoint) Transfer(dst Endpoint, files []FileTransfer) (uuid.UUI
 				ExternalChecksum string `json:"external_checksum"` // md5 checksum
 			}
 			type SubmissionRequest struct {
-				DataType          string         `json":DATA_TYPE"` // "transfer"
-				Id                string         `json:"submission_id"`
-				Label             string         `json:"label"` // "DTS"
-				Data              []TransferItem `json:"DATA"`
-				SyncLevel         int            `json:"sync_level"`
-				VerifyChecksum    bool           `json:"verify_checksum"`
-				FailOnQuotaErrors bool           `json:"fail_on_quota_errors"`
+				DataType            string         `json":DATA_TYPE"` // "transfer"
+				Id                  string         `json:"submission_id"`
+				Label               string         `json:"label"` // "DTS"
+				Data                []TransferItem `json:"DATA"`
+				DestinationEndpoint string         `json:"destination_endpoint"`
+				SourceEndpoint      string         `json:"source_endpoint"`
+				SyncLevel           int            `json:"sync_level"`
+				VerifyChecksum      bool           `json:"verify_checksum"`
+				FailOnQuotaErrors   bool           `json:"fail_on_quota_errors"`
 			}
 			xferItems := make([]TransferItem, len(files))
 			for i, file := range files {
@@ -189,13 +191,15 @@ func (ep *GlobusEndpoint) Transfer(dst Endpoint, files []FileTransfer) (uuid.UUI
 			}
 			var data []byte
 			data, err = json.Marshal(SubmissionRequest{
-				DataType:          "transfer",
-				Id:                string(xferId),
-				Label:             "DTS",
-				Data:              xferItems,
-				SyncLevel:         3, // transfer only if checksums don't match
-				VerifyChecksum:    true,
-				FailOnQuotaErrors: true,
+				DataType:            "transfer",
+				Id:                  xferId.String(),
+				Label:               "DTS",
+				Data:                xferItems,
+				DestinationEndpoint: dst.Id.String(),
+				SourceEndpoint:      ep.Id.String(),
+				SyncLevel:           3, // transfer only if checksums don't match
+				VerifyChecksum:      true,
+				FailOnQuotaErrors:   true,
 			})
 			if err == nil {
 				u.Path = "/transfer"
@@ -224,7 +228,7 @@ func (ep *GlobusEndpoint) Transfer(dst Endpoint, files []FileTransfer) (uuid.UUI
 func (ep *GlobusEndpoint) Status(id uuid.UUID) (TransferStatus, error) {
 	u, err := url.ParseRequestURI(ep.URL)
 	if err == nil {
-		u.Path = fmt.Sprintf("/task/%s", string(id))
+		u.Path = fmt.Sprintf("/task/%s", id.String())
 
 		request := fmt.Sprintf("%v", u)
 		var resp *http.Response
@@ -269,7 +273,7 @@ func (ep *GlobusEndpoint) Cancel(id uuid.UUID) error {
 	// https://docs.globus.org/api/transfer/task/#cancel_task_by_id
 	u, err := url.ParseRequestURI(ep.URL)
 	if err == nil {
-		u.Path = fmt.Sprintf("/task/%s/cancel", string(id))
+		u.Path = fmt.Sprintf("/task/%s/cancel", id.String())
 
 		request := fmt.Sprintf("%v", u)
 		var resp *http.Response

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -14,21 +15,72 @@ import (
 )
 
 type GlobusEndpoint struct {
-	User string    // endpoint user
-	URL  string    // endpoint base URL
-	Id   uuid.UUID // endpoint ID
+	// descriptive endpoint name (obtained from config)
+	Name string
+	// endpoint UUID (obtained from config)
+	Id uuid.UUID
+	// access token used for accessing Globus Transfer API
+	TransferAccessToken string
 }
 
 func NewGlobusEndpoint(endpointName string) (Endpoint, error) {
-	epConfig := config.Endpoints[endpointName]
-	if len(epConfig.Globus.URL) > 0 {
-		return &GlobusEndpoint{
-			User: epConfig.Globus.User,
-			URL:  epConfig.Globus.URL,
-		}, nil
-	} else {
-		return nil, fmt.Errorf("Endpoint '%s' is not a Globus endpoint", endpointName)
+	epConfig, found := config.Globus.Endpoints[endpointName]
+	if !found {
+		return nil, fmt.Errorf("'%s' is not a Globus endpoint", endpointName)
 	}
+
+	ep := &GlobusEndpoint{
+		Name: epConfig.Name,
+		Id:   epConfig.Id,
+	}
+
+	ep.authenticate(config.Globus.Auth.ClientId,
+		config.Globus.Auth.ClientSecret)
+
+	return ep, err
+}
+
+// Authenticates with Globus using a client ID and secret to obtain access tokens.
+func (ep *GlobusEndpoint) authenticate(clientId uuid.UUID, clientSecret string) error {
+	// for details on Globus authentication/authorization, see
+	// https://docs.globus.org/api/auth/reference/#client_credentials_grant
+	authUrl := "https://auth.globus.org/v2/oauth2/token"
+	data := url.Values{}
+	data.Set("scope", "urn:globus:auth:scope:transfer.api.globus.org:all")
+	data.Set("grant_type", "client_credentials")
+	req, err := http.NewRequest(http.MethodPost, authUrl, strings.NewReader(data.Encode()))
+	var resp *http.Response
+	if err != nil {
+		// set up request headers
+		req.SetBasicAuth(confіg.Globus.Auth.ClientId,
+			config.Globus.Auth.ClientSecret)
+		req.Header.Add("Content-Type", "application-x-www-form-urlencoded")
+
+		// send the request
+		client := &http.Client{}
+		resp, err = client.Do(req)
+		if err != nil {
+			// read and unmarshal the response
+			buffer := make([]byte, resp.ContentLength)
+			_, err := resp.Body.Read(buffer)
+			if err != nil {
+				type AuthResponse struct {
+					AccessToken    string `json:"access_token"`
+					Scope          string `json:"scope"`
+					ResourceServer string `json:"resource_server"`
+					ExpiresIn      int    `json:"expires_in"`
+					TokenType      string `json:"token_type"`
+				}
+
+				var authResponse AuthResponse
+				err = json.Unmarshal(buffer, &authResponse)
+				if err != nil {
+					ep.TransferAccessToken = authResponse.AccessToken
+				}
+			}
+		}
+	}
+	return err
 }
 
 func (ep *GlobusEndpoint) FilesStaged(filePaths []string) (bool, error) {

@@ -20,7 +20,7 @@ type serviceConfig struct {
 
 // global config variables
 var Service serviceConfig
-var Endpoints map[string]endpointConfig
+var Globus globusConfig
 var Databases map[string]databaseConfig
 var MessageQueues map[string]messageQueueConfig
 
@@ -28,7 +28,7 @@ var MessageQueues map[string]messageQueueConfig
 // copies its fields to the globals above.
 type configFile struct {
 	Service       serviceConfig                 `yaml:"service"`
-	Endpoints     map[string]endpointConfig     `yaml:"endpoints"`
+	Globus        globusConfig                  `yaml:"globus"`
 	Databases     map[string]databaseConfig     `yaml:"databases"`
 	MessageQueues map[string]messageQueueConfig `yaml:"message_queues"`
 }
@@ -51,7 +51,7 @@ func readConfig(bytes []byte) error {
 
 	// Copy the config data into place.
 	Service = conf.Service
-	Endpoints = conf.Endpoints
+	Globus = conf.Globus
 	Databases = conf.Databases
 	MessageQueues = conf.MessageQueues
 
@@ -77,10 +77,6 @@ func validateConfig() error {
 	err := validateServiceParameters(Service)
 	if err != nil {
 		return err
-	}
-	// Were we given any endpoints?
-	if len(Endpoints) == 0 {
-		return fmt.Errorf("No endpoints were provided!")
 	}
 	// Were we given any databases?
 	if len(Databases) == 0 {

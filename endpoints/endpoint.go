@@ -1,6 +1,8 @@
 package endpoints
 
 import (
+	"fmt"
+
 	"github.com/google/uuid"
 
 	"dts/config"
@@ -56,9 +58,9 @@ type Endpoint interface {
 
 // creates an endpoint based on the configured type
 func NewEndpoint(endpointName string) (Endpoint, error) {
-	epConfig := config.Endpoints[endpointName]
-	if len(epConfig.Globus.URL) > 0 {
+	_, found := config.Globus.Endpoints[endpointName]
+	if found {
 		return NewGlobusEndpoint(endpointName)
 	}
-	return nil, nil
+	return nil, fmt.Errorf("Invalid endpoint: %s", endpointName)
 }

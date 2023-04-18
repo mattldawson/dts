@@ -49,7 +49,7 @@ func readConfig(bytes []byte) error {
 		return err
 	}
 
-	// Copy the config data into place.
+	// copy the config data into place
 	Service = conf.Service
 	Globus = conf.Globus
 	Databases = conf.Databases
@@ -78,6 +78,13 @@ func validateConfig() error {
 	if err != nil {
 		return err
 	}
+
+	// Are there any endpoints?
+	numEndpoints := len(Globus.Endpoints)
+	if numEndpoints == 0 {
+		return fmt.Errorf("No endpoints were provided!")
+	}
+
 	// Were we given any databases?
 	if len(Databases) == 0 {
 		return fmt.Errorf("No databases were provided!")

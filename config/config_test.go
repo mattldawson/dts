@@ -3,39 +3,30 @@ package config
 // These tests verify that we can properly configure the search service with
 // YAML input.
 import (
-	"log"
+	"fmt"
 	"os"
 
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
 
-// the working directory from which the tests were invoked.
-var CWD string
-
-// the temporary testing directory
-var TESTING_DIR string
-
 // a valid service config entry
 const VALID_SERVICE string = `
 service:
   port: 8080
   maxConnections: 100
-
 `
 
 // a valid endpoints config entry
 const VALID_ENDPOINTS string = `
-endpoints:
-  globus:
-    globus-jdp:
-      user: dts@example.com
-      url: dtn1.nersc.gov
-
-`
-
-// a valid single database config entry
-const VALID_DATABASE string = `
+globus:
+  auth:
+    client_id: aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
+    client_secret: MY_SECRET
+  endpoints:
+    my-endpoint:
+      name: fake endpoint for testing
+      id: bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb
 `
 
 // a valid databases config entry
@@ -46,23 +37,11 @@ databases:
     organization: Joint Genome Institute
     url: files.jgi.doe.gov
     endpoint: globus-jdp # local file transfer endpoint
-    notifications: jgi-mq
-    search: # how to search for files (GET)
-      elasticsearch: # elasticsearch method
-        resource: /search
-        query_parameter: q # any other interesting ES-related parameters?
-      # other kinds of search supported?
-    transfer: # how to initiate a transfer (POST)
-      resource: /download_files
-      request: # fields in request body
-        globus_user_name: endpoints.globus.globus-jdp.user
-
 `
 
 // tests whether config.Init reports an error for blank input
 func TestInitRejectsBlankInput(t *testing.T) {
-	yaml := ""
-	b := []byte(yaml)
+	b := []byte("")
 	err := Init(b)
 	assert.NotNil(t, err, "Blank config didn't trigger an error.")
 }
@@ -97,10 +76,10 @@ func TestInitRejectsNoEndpointsDefined(t *testing.T) {
 	assert.NotNil(t, err, "Config with no endpoints didn't trigger an error.")
 }
 
-// tests whether config.Init rejects a configuration with no endpoints
+// tests whether config.Init rejects a configuration with invalid endpoints
 func TestInitRejectsInvalidEndpointType(t *testing.T) {
 	yaml := VALID_SERVICE + VALID_DATABASES +
-		"endpoints:\n  eeeevil_endpoint_type:\n    eeeevil_field: eeeevil_value\n\n"
+		"globus:\n  eeeevil_globus_entry:\n    eeeevil_field: eeeevil_value\n\n"
 	b := []byte(yaml)
 	err := Init(b)
 	assert.NotNil(t, err, "Config with invalid endpoint didn't trigger an error.")
@@ -116,23 +95,10 @@ func TestInitRejectsNoDatabasesDefined(t *testing.T) {
 
 // Tests whether config.Init rejects a database with a bad base URL.
 func TestInitRejectsBadDatabaseBaseURL(t *testing.T) {
-	yaml := fmt.Sprintf("engines:\n  last:\n    executable: \"%s\"\n\n",
-		LAST_SURROGATE) +
-		"databases:\n  FakeDB:\n    engine: last\n" +
-		"    dir: /bad/database/dir\n\n"
+	yaml := fmt.Sprintf("databases:\n  ohaicorp:\n    url: hahahahahahaha\n\n")
 	b := []byte(yaml)
 	err := Init(b)
-	assert.NotNil(t, err, "Config with bad database dir didn't trigger an error.")
-}
-
-// Tests whether config.Init rejects a database with a query template without
-// a token for inserting ElasticSearch queries
-func TestInitRejectsBadDatabaseESQueryTemplateAndToken(t *testing.T) {
-	yaml := VALID_SERVICE + VALID_ENDPOINTS
-	b := []byte(yaml)
-	err := Init(b)
-	assert.NotNil(t, err, "Config with duplicate data store didn't trigger "+
-		"an error.")
+	assert.NotNil(t, err, "Config with bad database URL didn't trigger an error.")
 }
 
 // Tests whether config.Init returns no error for a configuration that is
@@ -142,59 +108,36 @@ func TestInitAcceptsValidInput(t *testing.T) {
 	yaml := VALID_SERVICE + VALID_ENDPOINTS + VALID_DATABASES
 	b := []byte(yaml)
 	err := Init(b)
-	assert.Nil(t, err, "Valid YAML input produced an error: %s", err)
+	assert.Nil(t, err, fmt.Sprintf("Valid YAML input produced an error: %s", err))
 }
 
 // Tests whether config.Init properly initializes its globals for valid input.
 func TestInitProperlySetsGlobals(t *testing.T) {
-	assert := assert.New(t) // binds assert to t
-
 	yaml := VALID_SERVICE + VALID_ENDPOINTS + VALID_DATABASES
 	b := []byte(yaml)
 	err := Init(b)
-	assert.Nil(err, "Valid YAML input produced an error: %s", err)
+	assert.Nil(t, err, fmt.Sprintf("Valid YAML input produced an error: %s", err))
 
 	// Check data
-	assert.Equal(8080, Service.Port)
-	assert.Equal(100, Service.MaxConnections)
-	assert.Equal(1, len(Endpoints))
-	assert.Equal(1, len(Databases))
+	assert.Equal(t, 8080, Service.Port)
+	assert.Equal(t, 100, Service.MaxConnections)
+	assert.Equal(t, 1, len(Globus.Endpoints))
+	assert.Equal(t, 1, len(Databases))
 }
 
-// Performs testing setup.
+// this function gets called at the begіnning of a test session
 func setup() {
-	// Jot down our CWD, create a temporary directory, and change to it.
-	var err error
-	CWD, err = os.Getwd()
-	if err != nil {
-		log.Panicf("Couldn't get current working directory: %s", err)
-	}
-	log.Print("Creating testing directory...\n")
-	TESTING_DIR, err = os.MkdirTemp(os.TempDir(), "dts-config-tests-")
-	if err != nil {
-		log.Panicf("Couldn't create testing directory: %s", err)
-	}
 }
 
-// Performs testing breakdown.
+// this function gets called after all tests have been run
 func breakdown() {
-	// Change back to our original CWD.
-	os.Chdir(CWD)
-
-	if TESTING_DIR != "" {
-		// Remove the testing directory and its contents.
-		log.Printf("Deleting testing directory %s...\n", TESTING_DIR)
-		os.RemoveAll(TESTING_DIR)
-	}
 }
 
 // This runs setup, runs all tests, and does breakdown.
 func TestMain(m *testing.M) {
 	var status int
 	setup()
-	if TESTING_DIR != "" {
-		status = m.Run()
-	}
+	status = m.Run()
 	breakdown()
 	os.Exit(status)
 }

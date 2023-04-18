@@ -1,6 +1,7 @@
 package endpoints
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,13 +15,30 @@ import (
 	"dts/config"
 )
 
+// This file implements a Globus endpoint. It uses the Globus Transfer API
+// described at https://docs.globus.org/api/transfer/.
+
+const (
+	globusTransferBaseURL = "https://transfer.api.globusonline.org/v0.10"
+)
+
+// this type captures results from Globus Transfer API responses, including
+// any errors encountered (https://docs.globus.org/api/transfer/overview/#errors)
+type globusResult struct {
+	// string indicating the Globus error condition (e.g. "EndpointNotFound")
+	Code string `json:"code"`
+	// error message
+	Message string `json:"message"`
+}
+
+// this type satisfies the Endpoint interface for Globus endpoints
 type GlobusEndpoint struct {
 	// descriptive endpoint name (obtained from config)
 	Name string
 	// endpoint UUID (obtained from config)
 	Id uuid.UUID
-	// access token used for accessing Globus Transfer API
-	TransferAccessToken string
+	// HTTPS header containing basic authentication info
+	Header http.Header
 }
 
 func NewGlobusEndpoint(endpointName string) (Endpoint, error) {
@@ -30,40 +48,46 @@ func NewGlobusEndpoint(endpointName string) (Endpoint, error) {
 	}
 
 	ep := &GlobusEndpoint{
-		Name: epConfig.Name,
-		Id:   epConfig.Id,
+		Name:   epConfig.Name,
+		Id:     epConfig.Id,
+		Header: make(http.Header),
 	}
 
-	ep.authenticate(config.Globus.Auth.ClientId,
+	// authenticate to obtain a Globus Transfer API access token
+	err := ep.authenticate(config.Globus.Auth.ClientId,
 		config.Globus.Auth.ClientSecret)
+
+	if err == nil {
+		// auto-activate the endpoint so we can use it
+		err = ep.autoActivate()
+	}
 
 	return ep, err
 }
 
-// Authenticates with Globus using a client ID and secret to obtain access tokens.
+// authenticates with Globus using a client ID and secret to obtain an access
+// token (https://docs.globus.org/api/auth/reference/#client_credentials_grant)
 func (ep *GlobusEndpoint) authenticate(clientId uuid.UUID, clientSecret string) error {
-	// for details on Globus authentication/authorization, see
-	// https://docs.globus.org/api/auth/reference/#client_credentials_grant
 	authUrl := "https://auth.globus.org/v2/oauth2/token"
 	data := url.Values{}
 	data.Set("scope", "urn:globus:auth:scope:transfer.api.globus.org:all")
 	data.Set("grant_type", "client_credentials")
 	req, err := http.NewRequest(http.MethodPost, authUrl, strings.NewReader(data.Encode()))
-	var resp *http.Response
-	if err != nil {
+	if err == nil {
 		// set up request headers
-		req.SetBasicAuth(confіg.Globus.Auth.ClientId,
+		req.SetBasicAuth(config.Globus.Auth.ClientId.String(),
 			config.Globus.Auth.ClientSecret)
 		req.Header.Add("Content-Type", "application-x-www-form-urlencoded")
 
 		// send the request
 		client := &http.Client{}
+		var resp *http.Response
 		resp, err = client.Do(req)
-		if err != nil {
+		if err == nil {
 			// read and unmarshal the response
 			buffer := make([]byte, resp.ContentLength)
-			_, err := resp.Body.Read(buffer)
-			if err != nil {
+			_, err = resp.Body.Read(buffer)
+			if err == nil {
 				type AuthResponse struct {
 					AccessToken    string `json:"access_token"`
 					Scope          string `json:"scope"`
@@ -74,10 +98,39 @@ func (ep *GlobusEndpoint) authenticate(clientId uuid.UUID, clientSecret string) 
 
 				var authResponse AuthResponse
 				err = json.Unmarshal(buffer, &authResponse)
-				if err != nil {
-					ep.TransferAccessToken = authResponse.AccessToken
+				if err == nil {
+					// stash the access token in our HTTPS header
+					ep.Header.Add("Authorization", fmt.Sprintf("Bearer %s", authResponse.AccessToken))
 				}
 			}
+		}
+	}
+	return err
+}
+
+// auto-activates a Globus endpoint so we can access Transfer API resources
+// (https://docs.globus.org/api/transfer/endpoint_activation/#autoactivate_endpoint)
+func (ep *GlobusEndpoint) autoActivate() error {
+	activateUrl := fmt.Sprintf("%s/endpoint/%s/autoactivate",
+		globusTransferBaseURL, ep.Id)
+	req, err := http.NewRequest(http.MethodPost, activateUrl, nil)
+	if err == nil {
+		req.Header = ep.Header
+
+		// send the request
+		client := &http.Client{}
+		var resp *http.Response
+		resp, err = client.Do(req)
+
+		// inspect the result
+		if err == nil && resp.StatusCode != 200 {
+			// read and unmarshal the response
+			buffer := make([]byte, resp.ContentLength)
+			_, err = resp.Body.Read(buffer)
+			var result globusResult
+			json.Unmarshal(buffer, &result)
+			err = fmt.Errorf("Error in Globus endpoint auto-activation (%s): %s",
+				result.Code, result.Message)
 		}
 	}
 	return err
@@ -101,9 +154,9 @@ func (ep *GlobusEndpoint) FilesStaged(filePaths []string) (bool, error) {
 		p.Add("path", dir)
 		p.Add("orderby", "name ASC")
 
-		u, err := url.ParseRequestURI(ep.URL)
+		u, err := url.ParseRequestURI(globusTransferBaseURL)
 		if err == nil {
-			u.Path = fmt.Sprintf("operation/endpoint/%ѕ", ep.Id)
+			u.Path = fmt.Sprintf("operation/endpoint/%s", ep.Id)
 			u.RawQuery = p.Encode()
 
 			request := fmt.Sprintf("%v", u)
@@ -136,8 +189,11 @@ func (ep *GlobusEndpoint) FilesStaged(filePaths []string) (bool, error) {
 				}
 			}
 		}
+		if err != nil {
+			return false, err
+		}
 	}
-	return err == nil, err
+	return true, nil
 }
 
 func (ep *GlobusEndpoint) Transfers() ([]uuid.UUID, error) {
@@ -148,7 +204,7 @@ func (ep *GlobusEndpoint) Transfers() ([]uuid.UUID, error) {
 	p.Add("limit", "1000")
 	p.Add("orderby", "name ASC")
 
-	u, err := url.ParseRequestURI(ep.URL)
+	u, err := url.ParseRequestURI(globusTransferBaseURL)
 	if err == nil {
 		u.Path = "/task_list"
 		u.RawQuery = p.Encode()
@@ -172,8 +228,8 @@ func (ep *GlobusEndpoint) Transfers() ([]uuid.UUID, error) {
 				err = json.Unmarshal(body, &response)
 				if err == nil {
 					taskIds := make([]uuid.UUID, len(response.Data))
-					for i, task := range response.Data {
-						taskIds[i] = responѕe.Data[i].TaskId
+					for i, data := range response.Data {
+						taskIds[i] = data.TaskId
 					}
 					return taskIds, nil
 				}
@@ -184,8 +240,9 @@ func (ep *GlobusEndpoint) Transfers() ([]uuid.UUID, error) {
 }
 
 func (ep *GlobusEndpoint) Transfer(dst Endpoint, files []FileTransfer) (uuid.UUID, error) {
+	gDst := dst.(*GlobusEndpoint)
 	var xferId uuid.UUID
-	u, err := url.ParseRequestURI(ep.URL)
+	u, err := url.ParseRequestURI(globusTransferBaseURL)
 	if err == nil {
 		// first, get a submission ID
 		// https://docs.globus.org/api/transfer/task_submit/#get_submission_id
@@ -247,7 +304,7 @@ func (ep *GlobusEndpoint) Transfer(dst Endpoint, files []FileTransfer) (uuid.UUI
 				Id:                  xferId.String(),
 				Label:               "DTS",
 				Data:                xferItems,
-				DestinationEndpoint: dst.Id.String(),
+				DestinationEndpoint: gDst.Id.String(),
 				SourceEndpoint:      ep.Id.String(),
 				SyncLevel:           3, // transfer only if checksums don't match
 				VerifyChecksum:      true,
@@ -260,14 +317,18 @@ func (ep *GlobusEndpoint) Transfer(dst Endpoint, files []FileTransfer) (uuid.UUI
 				resp, err = http.Post(request, "application/json", bytes.NewReader(data))
 				defer resp.Body.Close()
 				if err == nil {
-					type SubmissionResponse struct {
-						TaskId int `json:"task_id"`
-					}
-
-					var gResp SubmissionResponse
-					err = json.Unmarshal(body, &gResp)
+					var body []byte
+					body, err = io.ReadAll(resp.Body)
 					if err == nil {
-						xferId = gResp.TaskId
+						type SubmissionResponse struct {
+							TaskId uuid.UUID `json:"task_id"`
+						}
+
+						var gResp SubmissionResponse
+						err = json.Unmarshal(body, &gResp)
+						if err == nil {
+							xferId = gResp.TaskId
+						}
 					}
 				}
 			}
@@ -278,7 +339,7 @@ func (ep *GlobusEndpoint) Transfer(dst Endpoint, files []FileTransfer) (uuid.UUI
 }
 
 func (ep *GlobusEndpoint) Status(id uuid.UUID) (TransferStatus, error) {
-	u, err := url.ParseRequestURI(ep.URL)
+	u, err := url.ParseRequestURI(globusTransferBaseURL)
 	if err == nil {
 		u.Path = fmt.Sprintf("/task/%s", id.String())
 
@@ -305,11 +366,8 @@ func (ep *GlobusEndpoint) Status(id uuid.UUID) (TransferStatus, error) {
 						"Succeeded": Succeeded,
 						"Failed":    Failed,
 					}
-					if code, valid := codes[responѕe.Status]; !valid {
-						code = Unknown
-					}
 					return TransferStatus{
-						StatusCode:          code,
+						StatusCode:          codes[response.Status],
 						NumFiles:            response.Files,
 						NumFilesTransferred: response.FilesTransferred,
 						Paused:              response.IsPaused,
@@ -318,12 +376,12 @@ func (ep *GlobusEndpoint) Status(id uuid.UUID) (TransferStatus, error) {
 			}
 		}
 	}
-	return nil, err
+	return TransferStatus{}, err
 }
 
 func (ep *GlobusEndpoint) Cancel(id uuid.UUID) error {
 	// https://docs.globus.org/api/transfer/task/#cancel_task_by_id
-	u, err := url.ParseRequestURI(ep.URL)
+	u, err := url.ParseRequestURI(globusTransferBaseURL)
 	if err == nil {
 		u.Path = fmt.Sprintf("/task/%s/cancel", id.String())
 
@@ -332,8 +390,9 @@ func (ep *GlobusEndpoint) Cancel(id uuid.UUID) error {
 		resp, err = http.Get(request)
 		defer resp.Body.Close()
 		if err == nil {
-			var body []byte
-			body, err = io.ReadAll(resp.Body)
+			// FIXME
+			//var body []byte
+			//body, err = io.ReadAll(resp.Body)
 		}
 	}
 	return err

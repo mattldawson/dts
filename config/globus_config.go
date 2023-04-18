@@ -12,12 +12,12 @@ type globusConfig struct {
 		// the client secret used to obtain API access tokens
 		// DO NOT STORE THIS IN A CONFIG FILE! Use an environment variable instead
 		ClientSecret string `yaml:"client_secret"`
-	}
+	} `yaml:"auth"`
 	// endpoints
 	Endpoints map[string]struct {
 		// descriptive name of the Globus endpoint
-		Name string `yaml:"user"`
+		Name string `yaml:"name"`
 		// the Globus endpoint ID (uuid)
 		Id uuid.UUID `yaml:"id"`
-	} `yaml:"globus"`
+	} `yaml:"endpoints"`
 }

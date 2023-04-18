@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
@@ -25,6 +26,8 @@ type prototype struct {
 	Name string
 	// Service version identifier.
 	Version string
+	// Time which the service was started
+	StartTime time.Time
 	// Port on which the service currently runs.
 	Port int
 	// Router for REST endpoints.
@@ -48,7 +51,7 @@ func (service *prototype) getRoot(w http.ResponseWriter,
 	data := RootResponse{
 		Name:    service.Name,
 		Version: service.Version,
-		Uptime:  int(core.Uptime())}
+		Uptime:  int(service.uptime())}
 	if HaveDocEndpoints {
 		data.Documentation = "/docs"
 	}
@@ -219,6 +222,11 @@ func (service *prototype) getTransferStatus(w http.ResponseWriter,
 	writeJson(w, jsonData)
 }
 
+// returns the uptime for the service in seconds
+func (service *prototype) uptime() float64 {
+	return time.Since(service.StartTime).Seconds()
+}
+
 // Constructs a prototype file transfer service given our configuration
 func NewDTSPrototype() (TransferService, error) {
 	service := new(prototype)
@@ -259,6 +267,8 @@ func NewDTSPrototype() (TransferService, error) {
 func (service *prototype) Start(port int) error {
 	log.Printf("Starting %s service on port %d...", service.Name, port)
 	log.Printf("(Accepting up to %d connections)", config.Service.MaxConnections)
+
+	service.StartTime = time.Now()
 
 	// Set the port.
 	service.Port = port

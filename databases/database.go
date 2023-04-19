@@ -4,8 +4,6 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-
-	"dts/core"
 )
 
 // parameters that define a search for files
@@ -23,7 +21,7 @@ type SearchParameters struct {
 
 // results from an ElasticSearch query
 type SearchResults struct {
-	Files []core.File `json:"files"`
+	Resources []DataResource `json:"resources"`
 }
 
 // This "enum" type identifies the status of a staging operation that moves

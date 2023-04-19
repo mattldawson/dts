@@ -114,9 +114,9 @@ func (service *prototype) jsonFromSearchResults(dbName string,
 	query string, results databases.SearchResults) ([]byte, error) {
 
 	data := ElasticSearchResponse{
-		Database: dbName,
-		Query:    query,
-		Files:    results.Files,
+		Database:  dbName,
+		Query:     query,
+		Resources: results.Resources,
 	}
 
 	return json.Marshal(data)

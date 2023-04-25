@@ -1,7 +1,7 @@
 package databases
 
 import (
-	"dts/databases/credit_metadata"
+	"dts/databases/credit"
 )
 
 // a Frictionless data resource describing a file in a search
@@ -47,5 +47,5 @@ type DataResource struct {
 		Title string `json:"title,omitempty"`
 	} `json:"licenses,omitempty"`
 	// credit metadata associated with the resource (optional for now)
-	Credit credit_metadata.CreditMetadata `json:"credit,omitempty"`
+	Credit credit.CreditMetadata `json:"credit,omitempty"`
 }

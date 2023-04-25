@@ -14,7 +14,7 @@ import (
 	"github.com/google/uuid"
 
 	"dts/config"
-	"dts/databases/credit_metadata"
+	"dts/databases/credit"
 )
 
 // This type represents a single file entry in a JDP ElasticSearch result.
@@ -134,7 +134,7 @@ func dataResourceFromJdpFile(file jdpFile) DataResource {
 		Format: format,
 		Bytes:  file.Size,
 		Hash:   file.MD5Sum,
-		Credit: credit_metadata.CreditMetadata{
+		Credit: credit.CreditMetadata{
 			Identifier: fmt.Sprintf("JDP:%s", file.Metadata.SequencingProjectId),
 		},
 	}

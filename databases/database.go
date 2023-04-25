@@ -29,10 +29,10 @@ type SearchResults struct {
 type StagingStatus int
 
 const (
-	Unknown   StagingStatus = iota // unknown staging operation or status not available
-	Active                         // staging in progress
-	Succeeded                      // staging completed successfully
-	Failed                         // staging failed
+	StagingStatusUnknown   StagingStatus = iota // unknown staging operation or status not available
+	StagingStatusActive                         // staging in progress
+	StagingStatusSucceeded                      // staging completed successfully
+	StagingStatusFailed                         // staging failed
 )
 
 // Database defines the interface for a database that is used to search for
@@ -40,12 +40,12 @@ const (
 type Database interface {
 	// search for files using the given parameters
 	Search(params SearchParameters) (SearchResults, error)
-	// returns true if the files identified by IDs are present in the database's
-	// staging area AND are valid, false if not
-	FilesStaged(fileIds []string) (bool, error)
 	// begins staging the files for a transfer, returning a UUID representing the
 	// staging operation
 	StageFiles(fileIds []string) (uuid.UUID, error)
+	// returns true if the files identified by IDs are present in the database's
+	// staging area AND are valid, false if not
+	FilesStaged(fileIds []string) (bool, error)
 	// returns the status of a given staging operation
 	StagingStatus(id uuid.UUID) (StagingStatus, error)
 }

@@ -14,13 +14,13 @@ import (
 	"github.com/google/uuid"
 
 	"dts/config"
+	"dts/databases/credit_metadata"
 )
 
 // This type represents a single file entry in a JDP ElasticSearch result.
 type jdpFile struct {
 	// unique ID used by the DTS to manipulate the file
 	Id string `json:"_id"`
-	// FIXME: do we need to keep track of file_id?
 	// name of the file (excluding Path)
 	Name string `json:"file_name"`
 	// directory in which the file sits
@@ -134,7 +134,7 @@ func dataResourceFromJdpFile(file jdpFile) DataResource {
 		Format: format,
 		Bytes:  file.Size,
 		Hash:   file.MD5Sum,
-		Credit: CreditMetadata{
+		Credit: credit_metadata.CreditMetadata{
 			Identifier: fmt.Sprintf("JDP:%s", file.Metadata.SequencingProjectId),
 		},
 	}
@@ -325,7 +325,7 @@ func (db *JdpDatabase) StagingStatus(id uuid.UUID) (StagingStatus, error) {
 					err = json.Unmarshal(body, &jdpResult)
 					if err == nil {
 						statusForString := map[string]StagingStatus{
-							"ready": Succeeded,
+							"ready": StagingStatusSucceeded,
 						}
 						if status, ok := statusForString[jdpResult.Status]; ok {
 							return status, nil
@@ -336,8 +336,8 @@ func (db *JdpDatabase) StagingStatus(id uuid.UUID) (StagingStatus, error) {
 				}
 			}
 		}
-		return Unknown, err
+		return StagingStatusUnknown, err
 	} else {
-		return Unknown, nil
+		return StagingStatusUnknown, nil
 	}
 }

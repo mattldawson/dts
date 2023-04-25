@@ -37,7 +37,7 @@ type jdpFile struct {
 	ModifiedDate string `json:"modified_date"`
 	// date file will be purged
 	PurgeDate string `json:"dt_to_purge"`
-	// file origination date? (FIXME: is this ever different from AddedDate??)
+	// file origination date
 	Date string `json:"file_date"`
 	// integer ID representing the status of the file
 	StatusId int `json:"file_status_id"`
@@ -47,7 +47,7 @@ type jdpFile struct {
 	Types []string `json:"file_type"`
 	// MD5 checksum
 	MD5Sum string `json:"md5sum"`
-	// user with access to the file (FIXME: not the owner??)
+	// user with access to the file
 	User string `json:"user"`
 	// name of UNIX group with access to the file
 	Group string `json:"file_group"`
@@ -59,7 +59,7 @@ type jdpFile struct {
 	PortalDetailId string `json:"portal_detail_id"`
 }
 
-// this type represents metadata associated with a JDPFile
+// this type represents metadata associated with a jdpFile
 type jdpMetadata struct {
 	// proposal info
 	Proposal struct {
@@ -82,7 +82,7 @@ type jdpMetadata struct {
 		} `json:"pi"`
 		// date of proposal approval
 		DateApproved string `json:"date_approved"`
-		// proposal DOI (how is this different from AwardDOI?)
+		// proposal DOI
 		DOI string `json:"doi"`
 	} `json:"proposal"`
 	// status indicating whether data is "Restricted" or "Unrestricted"
@@ -185,12 +185,12 @@ func (db *JdpDatabase) filesForSearch(params url.Values) (SearchResults, error) 
 			var body []byte
 			body, err = io.ReadAll(resp.Body)
 			if err == nil {
-				type JDPResult struct {
+				type JDPResults struct {
 					Organisms []struct {
 						Files []jdpFile `json:"files"`
 					} `json:"organisms"`
 				}
-				var jdpResults JDPResult
+				var jdpResults JDPResults
 				results.Resources = make([]DataResource, 0)
 				err = json.Unmarshal(body, &jdpResults)
 				if err == nil {

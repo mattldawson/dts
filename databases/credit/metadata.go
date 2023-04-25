@@ -7,19 +7,19 @@ type CreditMetadataEntry struct {
 	/*
 	 * the credit metadata itself
 	 */
-	CreditMetadata CreditMetadata `json:"CreditMetadata"`
+	CreditMetadata CreditMetadata `json:"credit_metadata"`
 	/*
 	 * the version of the credit metadata schema used
 	 */
-	CreditMetadataSchemaVersion string `json:"CreditMetadataSchemaVersion"`
+	CreditMetadataSchemaVersion string `json:"credit_metadata_schema_version"`
 	/*
 	 * KBase workspace ID of the user who added this entry
 	 */
-	SavedBy string `json:"SavedBy"`
+	SavedBy string `json:"saved_by"`
 	/*
 	 * unix timestamp for the addition of this set of credit metadata
 	 */
-	Timestamp int `json:"Timestamp"`
+	Timestamp int `json:"timestamp"`
 }
 
 /*
@@ -55,54 +55,54 @@ type CreditMetadata struct {
 	/*
 	 * list of strings of freeform text providing extra information about this credit metadata.
 	 */
-	Comment string `json:"Comment"`
+	Comment string `json:"comment"`
 	/*
 	 * A brief description or abstract for the resource being represented.
 	 */
-	Description string `json:"Description"`
+	Description string `json:"description"`
 	/*
 	 * resolvable persistent unique identifier for the resource. Should be in the format <database name>:<identifier within database>.
 	 */
-	Identifier string `json:"Identifier"`
+	Identifier string `json:"identifier"`
 	/*
 			 * usage license for the resource. May be a text string or an URL. Abbreviations should be spelled out where possible (e.g. 'Creative Commons 4.0' instead of 'CC-BY-4.0'). The license is interpreted as an URL and checked for well-formedness if it starts with a series of letters, a colon, and slashes, e.g. "http://"; "https://"; "ftp://".
 
 		All data published at KBase is done so under a Creative Commons 0 or Creative Commons 4.0 license.
 
 	*/
-	License string `json:"License"`
+	License string `json:"license"`
 	/*
 	 * the broad type of the source data for this workspace object. 'dataset' is the only valid value currently.
 	 */
-	ResourceType string `json:"ResourceType"`
+	ResourceType string `json:"resource_type"`
 	/*
 	 * the version of the resource. This must be an absolute version, not a relative version like 'latest'.
 	 */
-	Version string `json:"Version"`
+	Version string `json:"version"`
 	/*
 	 * a list of people and/or organizations who contributed to the resource.
 	 */
-	Contributors []Contributor `json:"Contributors"`
+	Contributors []Contributor `json:"contributors"`
 	/*
 	 * a list of relevant lifecycle events for the resource.
 	 */
-	Dates []EventDate `json:"Dates"`
+	Dates []EventDate `json:"dates"`
 	/*
 	 * funding sources for the resource.
 	 */
-	Funding []FundingReference `json:"Funding"`
+	Funding []FundingReference `json:"funding"`
 	/*
 	 * other resolvable persistent unique IDs related to the resource.
 	 */
-	RelatedIdentifiers []PermanentID `json:"RelatedIdentifiers"`
+	RelatedIdentifiers []PermanentID `json:"related_identifiers"`
 	/*
 	 * online repository for a dataset.
 	 */
-	Repository Organization `json:"Repository"`
+	Repository Organization `json:"repository"`
 	/*
 	 * one or more titles for the resource. At least one title of title_type "title" must be provided.
 	 */
-	Titles []Title `json:"Titles"`
+	Titles []Title `json:"titles"`
 }
 
 /*
@@ -137,27 +137,27 @@ type Contributor struct {
 	/*
 	 * must be either 'Person' or 'Organization'
 	 */
-	ContributorType string `json:"ContributorType"`
+	ContributorType string `json:"contributor_type"`
 	/*
 	 * persistent unique identifier for the contributor; this might be an ORCID for an individual, or a ROR ID for an organization.
 	 */
-	ContributorId string `json:"ContributorId"`
+	ContributorId string `json:"contributor_id"`
 	/*
 	 * contributor name. For organizations, this should be the full (unabbreviated) name; for a person, the full name should be entered.
 	 */
-	Name string `json:"Name"`
+	Name string `json:"name"`
 	/*
 	 * for a person, how the name should appear in a citation.
 	 */
-	CreditName string `json:"CreditName"`
+	CreditName string `json:"credit_name"`
 	/*
 	 * list of organizations with which the contributor is affiliated. For contributors that represent an organization, this may be a parent organization (e.g. KBase, US DOE; Arkin lab, LBNL).
 	 */
-	Affiliations []Organization `json:"Affiliations"`
+	Affiliations []Organization `json:"affiliations"`
 	/*
 	 * list of roles played by the contributor when working on the resource.
 	 */
-	ContributorRoles string `json:"ContributorRoles"`
+	ContributorRoles string `json:"contributor_roles"`
 }
 
 /*
@@ -169,11 +169,11 @@ type EventDate struct {
 	/*
 	 * the date associated with the event. The date may be in the format YYYY, YYYY-MM, or YYYY-MM-DD.
 	 */
-	Date string `json:"Date"`
+	Date string `json:"date"`
 	/*
 	 * the nature of the resource-related event that occurred on that date
 	 */
-	Event string `json:"Event"`
+	Event string `json:"event"`
 }
 
 /*
@@ -192,19 +192,19 @@ type FundingReference struct {
 	/*
 	 * code for the grant, assigned by the funder
 	 */
-	GrantId string `json:"GrantId"`
+	GrantId string `json:"grant_id"`
 	/*
 	 * title for the grant
 	 */
-	GrantTitle string `json:"GrantTitle"`
+	GrantTitle string `json:"grant_title"`
 	/*
 	 * URL for the grant
 	 */
-	GrantUrl string `json:"GrantUrl"`
+	GrantUrl string `json:"grant_url"`
 	/*
 	 * the funder for the grant or award
 	 */
-	Funder Organization `json:"Funder"`
+	Funder Organization `json:"funder"`
 }
 
 /*
@@ -224,11 +224,11 @@ type Organization struct {
 	/*
 	 * persistent unique identifier for the organization in the format <database name>:<identifier within database>
 	 */
-	OrganizationId string `json:"OrganizationId"`
+	OrganizationId string `json:"organization_id"`
 	/*
 	 * common name of the organization; use the name recommended by ROR if possible.
 	 */
-	OrganizationName string `json:"OrganizationName"`
+	OrganizationName string `json:"organization_name"`
 }
 
 /*
@@ -246,17 +246,17 @@ type PermanentID struct {
 	/*
 	 * persistent unique ID for an entity. Should be in the format <database name>:<identifier within database>.
 	 */
-	Id string `json:"Id"`
+	Id string `json:"id"`
 	/*
 	 * description of that entity
 	 */
-	Description string `json:"Description"`
+	Description string `json:"description"`
 	/*
 			 * The relationship between the ID and some other entity.
 		For example, when a PermanentID class is used to represent objects in the CreditMetadata field 'related_identifiers', the 'relationship_type' field captures the relationship between the CreditMetadata and this ID.
 
 	*/
-	RelationshipType string `json:"RelationshipType"`
+	RelationshipType string `json:"relationship_type"`
 }
 
 /*
@@ -276,13 +276,13 @@ type Title struct {
 	/*
 	 * a string used as a title for a resource
 	 */
-	Title string `json:"Title"`
+	Title string `json:"title"`
 	/*
 	 * a descriptor for the title. The default value is 'title'.
 	 */
-	TitleType string `json:"TitleType"`
+	TitleType string `json:"title_type"`
 	/*
 	 * language that the title is in, as a IETF BCP-47 tag.
 	 */
-	TitleLanguage string `json:"TitleLanguage"`
+	TitleLanguage string `json:"title_language"`
 }

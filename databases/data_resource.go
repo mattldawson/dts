@@ -18,34 +18,40 @@ type DataResource struct {
 	Description string `json:"description,omitempty"`
 	// indicates the format of the resource's file, often used as an extension
 	Format string `json:"format"`
-	// the mediatype/mimetype of the resource (e.g. "test/csv")
+	// the mediatype/mimetype of the resource (optional, e.g. "test/csv")
 	MediaType string `json:"media_type,omitempty"`
-	// the character encoding for the resource's file (default: UTF-8)
+	// the character encoding for the resource's file (optional, default: UTF-8)
 	Encoding string `json:"encoding,omitempty"`
 	// the size of the resource's file in bytes
 	Bytes int `json:"bytes"`
 	// the MD5 hash for the resource's file (other algorithms are indicated with
 	// a prefix to the hash delimited by a colon)
 	Hash string `json:"hash"`
-	// a list identifying the sources for this resource
-	Sources []struct {
-		// a descriptive title for the source
-		Title string `json:"title"`
-		// a URI or relative path pointing to the source (optional)
-		Path string `json:"path,omitempty"`
-		// an email address identifying a contact associated with the source (optional)
-		Email string `json:"email,omitempty"`
-	} `json:"sources,omitempty"`
+	// a list identifying the sources for this resource (optional)
+	Sources []DataSource `json:"sources,omitempty"`
 	// a list identifying the license or licenses under which this resource is
-	// managed
-	Licenses []struct {
-		// the abbreviated name of the license
-		Name string `json:"name"`
-		// a URI or relative path at which the license text may be retrieved
-		Path string `json:"path"`
-		// the descriptive title of the license (optional)
-		Title string `json:"title,omitempty"`
-	} `json:"licenses,omitempty"`
+	// managed (optional)
+	Licenses []DataLicense `json:"licenses,omitempty"`
 	// credit metadata associated with the resource (optional for now)
 	Credit credit.CreditMetadata `json:"credit,omitempty"`
+}
+
+// information about the source of a DataResource
+type DataSource struct {
+	// a descriptive title for the source
+	Title string `json:"title"`
+	// a URI or relative path pointing to the source (optional)
+	Path string `json:"path,omitempty"`
+	// an email address identifying a contact associated with the source (optional)
+	Email string `json:"email,omitempty"`
+}
+
+// information about a license associated with a DataResource
+type DataLicense struct {
+	// the abbreviated name of the license
+	Name string `json:"name"`
+	// a URI or relative path at which the license text may be retrieved
+	Path string `json:"path"`
+	// the descriptive title of the license (optional)
+	Title string `json:"title,omitempty"`
 }

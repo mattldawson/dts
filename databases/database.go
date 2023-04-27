@@ -4,6 +4,8 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+
+	"dts/databases/jdp"
 )
 
 // parameters that define a search for files
@@ -53,7 +55,7 @@ type Database interface {
 // creates a database based on the configured type
 func NewDatabase(dbName string) (Database, error) {
 	if dbName == "jdp" {
-		return NewJdpDatabase(dbName)
+		return jdp.NewJdpDatabase(dbName)
 	} else {
 		return nil, fmt.Errorf("Unknown database type for '%s'", dbName)
 	}

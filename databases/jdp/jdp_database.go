@@ -17,126 +17,129 @@ import (
 	"dts/databases/credit"
 )
 
-// This type represents a single file entry in a JDP ElasticSearch result.
-type jdpFile struct {
-	// unique ID used by the DTS to manipulate the file
-	Id string `json:"_id"`
-	// name of the file (excluding Path)
-	Name string `json:"file_name"`
-	// directory in which the file sits
-	Path string `json:"file_path"`
-	// file size (bytes)
-	Size int `json:"file_size"`
-	// file metadata
-	Metadata jdpMetadata `json:"metadata"`
-	// name of the user that owns the file
-	Owner string `json:"file_owner"`
-	// date that the file was added
-	AddedDate string `json:"added_date"`
-	// date of last modification to the file
-	ModifiedDate string `json:"modified_date"`
-	// date file will be purged
-	PurgeDate string `json:"dt_to_purge"`
-	// file origination date
-	Date string `json:"file_date"`
-	// integer ID representing the status of the file
-	StatusId int `json:"file_status_id"`
-	// string describing the status of the file
-	Status string `json:"file_status"`
-	// list of types corresponding to this file
-	Types []string `json:"file_type"`
-	// MD5 checksum
-	MD5Sum string `json:"md5sum"`
-	// user with access to the file
-	User string `json:"user"`
-	// name of UNIX group with access to the file
-	Group string `json:"file_group"`
-	// UNIX file permissions (a string containing the octal representation)
-	Permissions string `json:"file_permissions"`
-	// name of the group that produced the file's data
-	DataGroup string `json:"data_group"`
-	// portal detail ID (type??)
-	PortalDetailId string `json:"portal_detail_id"`
+const suffixToFormat = map[string]string{
+	"csv":   "csv",
+	"faa":   "fasta",
+	"fasta": "fasta",
+	"fastq": "fastq",
+	"gff":   "gff",
+	"gff3":  "gff",
+	"gz":    "gz",
+	"txt":   "text",
 }
 
-// this type represents metadata associated with a jdpFile
-type jdpMetadata struct {
-	// proposal info
-	Proposal struct {
-		// DOI of the awarded proposal
-		AwardDOI string `json:"award_doi"`
-		// info about the Principal Investigator
-		PI struct {
-			// PI's last name
-			LastName string `json:"last_name"`
-			// PI's first name
-			FirstName string `json:"first_name"`
-			// PI's middle name (if any)
-			MiddleName string `json:"middle_name"`
-			// PI's email address
-			EmailAddress string `json:"email_address"`
-			// name of academic or industrial institution
-			Institution string `json:"institution"`
-			// country of institution/PI
-			Country string `json:"country"`
-		} `json:"pi"`
-		// date of proposal approval
-		DateApproved string `json:"date_approved"`
-		// proposal DOI
-		DOI string `json:"doi"`
-	} `json:"proposal"`
-	// status indicating whether data is "Restricted" or "Unrestricted"
-	DataUtilizationЅtatus string `json:"data_utilization_status"`
-	// GOLD-related metadata
-	GoldData struct {
-		// stamp ID
-		StampId string `json:"gold_stamp_id"`
-		// project URL
-		ProjectURL string `json:"gold_project_url"`
-		// display name
-		DisplayName string `json:"display_name"`
-	} `json:"gold_data"`
-	// sequencing project metadata
-	SequencingProject struct {
-		// name of scientific program to which project belongs
-		ScientificProgramName string `json:"scientific_program_name"`
-	} `json:"sequencing_project"`
-	// sequencing project identifier
-	SequencingProjectId int `json:"sequencing_project_id"`
-	// NCBI taxon metadata
-	NCBITaxon struct {
-		Order   string `json:"ncbi_taxon_order"`
-		Family  string `json:"ncbi_taxon_family"`
-		Genus   string `json:"ncbi_taxon_genus"`
-		Species string `json:"ncbi_taxon_species"`
-	} `json:"ncbi_taxon"`
-	// NCBI taxon identifier
-	NCBITaxonId int `json:"ncbi_taxon_id"`
-	// portal metadata
-	Portal struct {
-		DisplayLocation []string `json:"display_location"`
-	} `json:"portal"`
-	// final project delivery metadata
-	FinalDeliveryProject struct {
-		ProductSearchCategory string `json:"product_search_category"`
-	} `json:"final_deliv_project"`
+const suffixToMimeType = map[string]string{
+	"csv":   "text/csv",
+	"faa":   "text/plain",
+	"fasta": "text/plain",
+	"fastq": "text/plain",
+	"gff":   "text/plain",
+	"gff3":  "text/plain",
+	"gz":    "application/gzip",
+	"txt":   "text/plain",
+}
+
+const fileTypeToMimeType = map[string]string{
+	"text":     "text/plain",
+	"fasta":    "text/plain",
+	"fastq":    "text/plain",
+	"fastq.gz": "application/gzip",
+	"tab":      "text/plain",
+	"tar.gz":   "application/gzip",
+}
+
+// extracts the file format from the name and type of the file
+func formatFromFileName(fileName string) string {
+	suffix := filepath.Ext(fileName)
+	if format, ok := suffixToFormat[suffix]; ok {
+		return format
+	} else {
+		return ""
+	}
+}
+
+// extracts the file format from the name and type of the file
+func mimeTypeFromFileNameAndTypes(fileName string, fileTypes []string) string {
+	suffix := filepath.Ext(fileName)
+	// check the file suffix to see whether it matches a mime type
+	if mimeType, ok := suffixToMimeType[suffix]; ok {
+		return mimeType
+	} else {
+		// try to match the file type to a mime type
+		for _, fileType := range fileTypes {
+			if mimeType, ok := fileTypeToMimeType[fileType]; ok {
+				return mimeType
+			}
+		}
+	}
+	return ""
+}
+
+// extracts file type information from the given jdpFile
+func fileTypesFromFile(file jdpFile) []string {
+	// TODO: See https://pkg.go.dev/encoding/json?utm_source=godoc#example-RawMessage-Unmarshal
+	// TODO: for an example of how to unmarshal a variant type.
+	return []string{}
+}
+
+// extracts source information from the given jdpFile
+func sourcesFromFile(file jdpFile) []DataSource {
+	sources := make([]DataSource, 0)
+	piInfo := file.Metadata.Proposal
+	if len(piInfo.LastName) > 0 {
+		var title string
+		if len(piInfo.FirstName) > 0 {
+			title = fmt.Sprintf("%s, %s", piInfo.LastName, piInfo.FirstName)
+			if len(piInfo.MiddleName) > 0 {
+				title += fmt.Sprintf(" %s", piInfo.MiddleName)
+			}
+			if len(piInfo.Institution) > 0 {
+				if len(piInfo.Country) > 0 {
+					title += fmt.Sprintf(" (%s, %s)", piInfo.Institution, piInfo.Country)
+				} else {
+					title += fmt.Sprintf(" (%s)", piInfo.Institution)
+				}
+			} else if len(piInfo.Country) > 0 {
+				title += fmt.Sprintf(" (%s)", piInfo.Country)
+			}
+		}
+		var doiURL string
+		if len(file.Metadata.Proposal.AwardDOI) > 0 {
+			doiURL = fmt.Sprintf("https://doi.org/%s", file.Metadata.Proposal.AwardDOI)
+		}
+		source := DataSource{
+			Title: title,
+			Path:  doiURL,
+			Email: piInfo.EmailAddress,
+		}
+		sources = append(sources, source)
+	}
+	return sources
+}
+
+// extracts KBase credit engine information from the given jdpFile
+func creditFromFile(file jdpFile) credit.CreditMetadata {
+	var itsProjectId int
+
+	creditData := credit.CreditMetadata{
+		Identifier:   fmt.Sprintf("JDP:%s", itsProjectId),
+		ResourceType: "dataset",
+	}
+	return creditData
 }
 
 // creates a DataResource from a jdpFile (including metadata)
-func dataResourceFromJdpFile(file jdpFile) DataResource {
-	var format string
-	if strings.Contains(file.Name, ".") {
-		format = file.Name[:strings.Index(file.Name, ".")]
-	}
+func dataResourceFromFile(file jdpFile) DataResource {
+	fileTypes := fileTypesFromFile(file)
 	return DataResource{
-		Name:   fmt.Sprintf("JDP:%s", file.Metadata.SequencingProjectId),
-		Path:   filepath.Join(file.Path, file.Name),
-		Format: format,
-		Bytes:  file.Size,
-		Hash:   file.MD5Sum,
-		Credit: credit.CreditMetadata{
-			Identifier: fmt.Sprintf("JDP:%s", file.Metadata.SequencingProjectId),
-		},
+		Name:      fmt.Sprintf("JDP:%s", file.Metadata.SequencingProjectId),
+		Path:      filepath.Join(file.Path, file.Name),
+		Format:    formatFromFileName(file.Name),
+		MediaType: mimeTypeFromFileNameAndTypes(file.Name, fileTypes),
+		Bytes:     file.Size,
+		Hash:      file.MD5Sum,
+		Sources:   sourcesFromFile(file),
+		Credit:    creditFromFile(file),
 	}
 }
 
@@ -161,7 +164,7 @@ func NewJdpDatabase(dbName string) (Database, error) {
 	// read our API access token from a file
 	// FIXME
 
-	return &JdpDatabase{
+	return &Database{
 		Id:         dbName,
 		BaseURL:    dbConfig.URL,
 		StagingIds: make(map[uuid.UUID]int),
@@ -169,7 +172,7 @@ func NewJdpDatabase(dbName string) (Database, error) {
 }
 
 // this helper extracts files for the JDP /search GET query with given parameters
-func (db *JdpDatabase) filesForSearch(params url.Values) (SearchResults, error) {
+func (db *Database) filesForSearch(params url.Values) (SearchResults, error) {
 	var results SearchResults
 
 	u, err := url.ParseRequestURI(db.BaseURL)
@@ -197,7 +200,7 @@ func (db *JdpDatabase) filesForSearch(params url.Values) (SearchResults, error) 
 					for _, org := range jdpResults.Organisms {
 						resources := make([]DataResource, len(org.Files))
 						for i, file := range org.Files {
-							resources[i] = dataResourceFromJdpFile(file)
+							resources[i] = dataResourceFromFile(file)
 						}
 						results.Resources = append(results.Resources, resources...)
 					}

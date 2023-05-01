@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -18,24 +19,38 @@ import (
 )
 
 var suffixToFormat = map[string]string{
-	"csv":   "csv",
-	"faa":   "fasta",
-	"fasta": "fasta",
-	"fastq": "fastq",
-	"gff":   "gff",
-	"gff3":  "gff",
-	"gz":    "gz",
-	"txt":   "text",
+	"bam":     "bam",
+	"bam.bai": "bai",
+	"csv":     "csv",
+	"faa":     "fasta",
+	"fasta":   "fasta",
+	"fastq":   "fastq",
+	"gff":     "gff",
+	"gff3":    "gff3",
+	"gz":      "gz",
+	"bz":      "bzip",
+	"bz2":     "bzip2",
+	"tar":     "tar",
+	"tar.gz":  "tar",
+	"tar.bz":  "tar",
+	"tar.bz2": "tar",
+	"txt":     "text",
 }
 
-var suffixToMimeType = map[string]string{
+var supportedSuffixes []string
+
+var formatToMimeType = map[string]string{
+	"bam":   "application/octet-stream",
+	"bai":   "application/octet-stream",
 	"csv":   "text/csv",
-	"faa":   "text/plain",
 	"fasta": "text/plain",
 	"fastq": "text/plain",
 	"gff":   "text/plain",
 	"gff3":  "text/plain",
 	"gz":    "application/gzip",
+	"bz":    "application/x-bzip",
+	"bz2":   "application/x-bzip2",
+	"tar":   "application/x-tar",
 	"txt":   "text/plain",
 }
 
@@ -45,24 +60,34 @@ var fileTypeToMimeType = map[string]string{
 	"fastq":    "text/plain",
 	"fastq.gz": "application/gzip",
 	"tab":      "text/plain",
-	"tar.gz":   "application/gzip",
+	"tar.gz":   "application/x-tar",
+	"tar.bz":   "application/x-tar",
+	"tar.bz2":  "application/x-tar",
 }
 
 // extracts the file format from the name and type of the file
 func formatFromFileName(fileName string) string {
-	suffix := filepath.Ext(fileName)
-	if format, ok := suffixToFormat[suffix]; ok {
-		return format
-	} else {
-		return ""
+	// make a list of the supported suffixes if we haven't yet
+	if supportedSuffixes == nil {
+		supportedSuffixes = make([]string, 0)
+		for suffix, _ := range suffixToFormat {
+			supportedSuffixes = append(supportedSuffixes, suffix)
+		}
 	}
+
+	// determine whether the file matches any of the supported suffixes
+	for _, suffix := range supportedSuffixes {
+		if strings.HasSuffix(fileName, suffix) {
+			return suffixToFormat[suffix]
+		}
+	}
+	return ""
 }
 
 // extracts the file format from the name and type of the file
-func mimeTypeFromFileNameAndTypes(fileName string, fileTypes []string) string {
-	suffix := filepath.Ext(fileName)
-	// check the file suffix to see whether it matches a mime type
-	if mimeType, ok := suffixToMimeType[suffix]; ok {
+func mimeTypeFromFormatAndTypes(format string, fileTypes []string) string {
+	// check the file format to see whether it matches a mime type
+	if mimeType, ok := formatToMimeType[format]; ok {
 		return mimeType
 	} else {
 		// try to match the file type to a mime type
@@ -75,17 +100,37 @@ func mimeTypeFromFileNameAndTypes(fileName string, fileTypes []string) string {
 	return ""
 }
 
-// extracts file type information from the given jdpFile
+// extracts the analysis project ID from the given File, or -1 if no
+// such ID can be extracted
+func curieFromMetadata(md Metadata) string {
+	id := "JDP:unknown"
+	// is it an integer?
+	var intId int
+	err := json.Unmarshal(md.AnalysisProjectId, &intId)
+	if err == nil {
+		id = fmt.Sprintf("JDP:%d", intId)
+	} else { // nope!
+		// how about an integer list?
+		var listId []int
+		err = json.Unmarshal(md.AnalysisProjectId, &listId)
+		if err == nil {
+			id = fmt.Sprintf("JDP:%d", listId[0]) // use the first ID
+		}
+	}
+	return id
+}
+
+// extracts file type information from the given File
 func fileTypesFromFile(file File) []string {
 	// TODO: See https://pkg.go.dev/encoding/json?utm_source=godoc#example-RawMessage-Unmarshal
 	// TODO: for an example of how to unmarshal a variant type.
 	return []string{}
 }
 
-// extracts source information from the given jdpFile
-func sourcesFromFile(file File) []core.DataSource {
+// extracts source information from the given metadata
+func sourcesFromMetadata(md Metadata) []core.DataSource {
 	sources := make([]core.DataSource, 0)
-	piInfo := file.Metadata.Proposal.PI
+	piInfo := md.Proposal.PI
 	if len(piInfo.LastName) > 0 {
 		var title string
 		if len(piInfo.FirstName) > 0 {
@@ -104,8 +149,8 @@ func sourcesFromFile(file File) []core.DataSource {
 			}
 		}
 		var doiURL string
-		if len(file.Metadata.Proposal.AwardDOI) > 0 {
-			doiURL = fmt.Sprintf("https://doi.org/%s", file.Metadata.Proposal.AwardDOI)
+		if len(md.Proposal.AwardDOI) > 0 {
+			doiURL = fmt.Sprintf("https://doi.org/%s", md.Proposal.AwardDOI)
 		}
 		source := core.DataSource{
 			Title: title,
@@ -117,29 +162,53 @@ func sourcesFromFile(file File) []core.DataSource {
 	return sources
 }
 
-// extracts KBase credit engine information from the given jdpFile
-func creditFromFile(file File) credit.CreditMetadata {
-	var itsProjectId int
-
-	creditData := credit.CreditMetadata{
-		Identifier:   fmt.Sprintf("JDP:%s", itsProjectId),
+// creates a credit metadata item from other metadata
+func creditFromMetadata(md Metadata) credit.CreditMetadata {
+	curieId := curieFromMetadata(md)
+	crd := credit.CreditMetadata{
+		Identifier:   curieId,
 		ResourceType: "dataset",
 	}
-	return creditData
+
+	crd.Dates = []credit.EventDate{
+		credit.EventDate{
+			Date:  md.Proposal.DateApproved,
+			Event: "approval",
+		},
+	}
+	pi := md.Proposal.PI
+	crd.Contributors = []credit.Contributor{
+		credit.Contributor{
+			ContributorType: "Person",
+			// ContributorId: nothing yet
+			Name:       strings.TrimSpace(fmt.Sprintf("%s, %s %s", pi.LastName, pi.FirstName, pi.MiddleName)),
+			CreditName: strings.TrimSpace(fmt.Sprintf("%s, %s %s", pi.LastName, pi.FirstName, pi.MiddleName)),
+			Affiliations: []credit.Organization{
+				credit.Organization{
+					OrganizationName: pi.Institution,
+				},
+			},
+			ContributorRoles: "PI",
+		},
+	}
+	return crd
 }
 
 // creates a DataResource from a File (including metadata)
 func dataResourceFromFile(file File) core.DataResource {
+	format := formatFromFileName(file.Name)
 	fileTypes := fileTypesFromFile(file)
+	curieId := curieFromMetadata(file.Metadata)
+	sources := sourcesFromMetadata(file.Metadata)
 	return core.DataResource{
-		Name:      fmt.Sprintf("JDP:%s", file.Metadata.SequencingProjectId),
+		Name:      curieId,
 		Path:      filepath.Join(file.Path, file.Name),
-		Format:    formatFromFileName(file.Name),
-		MediaType: mimeTypeFromFileNameAndTypes(file.Name, fileTypes),
+		Format:    format,
+		MediaType: mimeTypeFromFormatAndTypes(format, fileTypes),
 		Bytes:     file.Size,
 		Hash:      file.MD5Sum,
-		Sources:   sourcesFromFile(file),
-		Credit:    creditFromFile(file),
+		Sources:   sources,
+		Credit:    creditFromMetadata(file.Metadata),
 	}
 }
 
@@ -199,9 +268,12 @@ func (db *Database) filesForSearch(params url.Values) (core.SearchResults, error
 				err = json.Unmarshal(body, &jdpResults)
 				if err == nil {
 					for _, org := range jdpResults.Organisms {
-						resources := make([]core.DataResource, len(org.Files))
-						for i, file := range org.Files {
-							resources[i] = dataResourceFromFile(file)
+						resources := make([]core.DataResource, 0)
+						for _, file := range org.Files {
+							res := dataResourceFromFile(file)
+							if res.Format != "" {
+								resources = append(resources, res)
+							}
 						}
 						results.Resources = append(results.Resources, resources...)
 					}

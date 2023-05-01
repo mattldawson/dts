@@ -1,7 +1,7 @@
-package databases
+package core
 
 import (
-	"dts/databases/credit"
+	"dts/credit"
 )
 
 // a Frictionless data resource describing a file in a search

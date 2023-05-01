@@ -1,11 +1,7 @@
-package endpoints
+package core
 
 import (
-	"fmt"
-
 	"github.com/google/uuid"
-
-	"dts/config"
 )
 
 // this type holds all relevant information for the transfer of an individual
@@ -54,13 +50,4 @@ type Endpoint interface {
 	Status(id uuid.UUID) (TransferStatus, error)
 	// cancels the transfer task with the given UUID
 	Cancel(id uuid.UUID) error
-}
-
-// creates an endpoint based on the configured type
-func NewEndpoint(endpointName string) (Endpoint, error) {
-	_, found := config.Globus.Endpoints[endpointName]
-	if found {
-		return NewGlobusEndpoint(endpointName)
-	}
-	return nil, fmt.Errorf("Invalid endpoint: %s", endpointName)
 }

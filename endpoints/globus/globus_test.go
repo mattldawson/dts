@@ -1,4 +1,4 @@
-package endpoints
+package globus
 
 import (
 	"os"

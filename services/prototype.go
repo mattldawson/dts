@@ -111,7 +111,7 @@ func (service *prototype) getDatabase(w http.ResponseWriter,
 // This helper translates an array of engines.SearchResults to a JSON object
 // containing search results for the query (including the database name).
 func (service *prototype) jsonFromSearchResults(dbName string,
-	query string, results databases.SearchResults) ([]byte, error) {
+	query string, results core.SearchResults) ([]byte, error) {
 
 	data := ElasticSearchResponse{
 		Database:  dbName,
@@ -123,8 +123,8 @@ func (service *prototype) jsonFromSearchResults(dbName string,
 }
 
 // helper for extracting search parameters
-func extractSearchParams(r *http.Request) (databases.SearchParameters, error) {
-	var params databases.SearchParameters
+func extractSearchParams(r *http.Request) (core.SearchParameters, error) {
+	var params core.SearchParameters
 	params.Query = r.FormValue("query")
 	if params.Query == "" {
 		return params, fmt.Errorf("Query string not given!")

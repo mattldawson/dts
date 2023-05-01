@@ -1,4 +1,4 @@
-package endpoints
+package globus
 
 import (
 	"bytes"
@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	"dts/config"
+	"dts/core"
 )
 
 // This file implements a Globus endpoint. It uses the Globus Transfer API
@@ -31,8 +32,8 @@ type globusResult struct {
 	Message string `json:"message"`
 }
 
-// this type satisfies the Endpoint interface for Globus endpoints
-type GlobusEndpoint struct {
+// this type satisfies the core.Endpoint interface for Globus endpoints
+type Endpoint struct {
 	// descriptive endpoint name (obtained from config)
 	Name string
 	// endpoint UUID (obtained from config)
@@ -41,7 +42,7 @@ type GlobusEndpoint struct {
 	Header http.Header
 }
 
-func NewGlobusEndpoint(endpointName string) (Endpoint, error) {
+func NewEndpoint(endpointName string) (core.Endpoint, error) {
 	epConfig, found := config.Globus.Endpoints[endpointName]
 	if !found {
 		return nil, fmt.Errorf("'%s' is not a Globus endpoint", endpointName)
@@ -67,7 +68,7 @@ func NewGlobusEndpoint(endpointName string) (Endpoint, error) {
 
 // authenticates with Globus using a client ID and secret to obtain an access
 // token (https://docs.globus.org/api/auth/reference/#client_credentials_grant)
-func (ep *GlobusEndpoint) authenticate(clientId uuid.UUID, clientSecret string) error {
+func (ep *Endpoint) authenticate(clientId uuid.UUID, clientSecret string) error {
 	authUrl := "https://auth.globus.org/v2/oauth2/token"
 	data := url.Values{}
 	data.Set("scope", "urn:globus:auth:scope:transfer.api.globus.org:all")
@@ -110,7 +111,7 @@ func (ep *GlobusEndpoint) authenticate(clientId uuid.UUID, clientSecret string) 
 
 // auto-activates a Globus endpoint so we can access Transfer API resources
 // (https://docs.globus.org/api/transfer/endpoint_activation/#autoactivate_endpoint)
-func (ep *GlobusEndpoint) autoActivate() error {
+func (ep *Endpoint) autoActivate() error {
 	activateUrl := fmt.Sprintf("%s/endpoint/%s/autoactivate",
 		globusTransferBaseURL, ep.Id)
 	req, err := http.NewRequest(http.MethodPost, activateUrl, nil)
@@ -136,7 +137,7 @@ func (ep *GlobusEndpoint) autoActivate() error {
 	return err
 }
 
-func (ep *GlobusEndpoint) FilesStaged(filePaths []string) (bool, error) {
+func (ep *Endpoint) FilesStaged(filePaths []string) (bool, error) {
 	// find all the directories in which these files reside
 	filesInDir := make(map[string][]string)
 	for _, filePath := range filePaths {
@@ -196,7 +197,7 @@ func (ep *GlobusEndpoint) FilesStaged(filePaths []string) (bool, error) {
 	return true, nil
 }
 
-func (ep *GlobusEndpoint) Transfers() ([]uuid.UUID, error) {
+func (ep *Endpoint) Transfers() ([]uuid.UUID, error) {
 	// https://docs.globus.org/api/transfer/task/#get_task_list
 	p := url.Values{}
 	p.Add("fields", "task_id")
@@ -239,8 +240,8 @@ func (ep *GlobusEndpoint) Transfers() ([]uuid.UUID, error) {
 	return nil, err
 }
 
-func (ep *GlobusEndpoint) Transfer(dst Endpoint, files []FileTransfer) (uuid.UUID, error) {
-	gDst := dst.(*GlobusEndpoint)
+func (ep *Endpoint) Transfer(dst core.Endpoint, files []FileTransfer) (uuid.UUID, error) {
+	gDst := dst.(*globus.Endpoint)
 	var xferId uuid.UUID
 	u, err := url.ParseRequestURI(globusTransferBaseURL)
 	if err == nil {
@@ -338,7 +339,7 @@ func (ep *GlobusEndpoint) Transfer(dst Endpoint, files []FileTransfer) (uuid.UUI
 	return xferId, err
 }
 
-func (ep *GlobusEndpoint) Status(id uuid.UUID) (TransferStatus, error) {
+func (ep *Endpoint) Status(id uuid.UUID) (core.TransferStatus, error) {
 	u, err := url.ParseRequestURI(globusTransferBaseURL)
 	if err == nil {
 		u.Path = fmt.Sprintf("/task/%s", id.String())
@@ -379,7 +380,7 @@ func (ep *GlobusEndpoint) Status(id uuid.UUID) (TransferStatus, error) {
 	return TransferStatus{}, err
 }
 
-func (ep *GlobusEndpoint) Cancel(id uuid.UUID) error {
+func (ep *Endpoint) Cancel(id uuid.UUID) error {
 	// https://docs.globus.org/api/transfer/task/#cancel_task_by_id
 	u, err := url.ParseRequestURI(globusTransferBaseURL)
 	if err == nil {

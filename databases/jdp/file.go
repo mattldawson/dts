@@ -1,24 +1,11 @@
-package databases
+package jdp
 
 import (
-	"bytes"
 	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-	"net/url"
-	"path/filepath"
-	"strconv"
-	"strings"
-
-	"github.com/google/uuid"
-
-	"dts/config"
-	"dts/databases/credit"
 )
 
 // This type represents a single file entry in a JDP ElasticSearch result.
-type jdpFile struct {
+type File struct {
 	// unique ID used by the DTS to manipulate the file
 	Id string `json:"_id"`
 	// name of the file (excluding Path)
@@ -28,7 +15,7 @@ type jdpFile struct {
 	// file size (bytes)
 	Size int `json:"file_size"`
 	// file metadata
-	Metadata jdpMetadata `json:"metadata"`
+	Metadata Metadata `json:"metadata"`
 	// name of the user that owns the file
 	Owner string `json:"file_owner"`
 	// date that the file was added
@@ -55,12 +42,10 @@ type jdpFile struct {
 	Permissions string `json:"file_permissions"`
 	// name of the group that produced the file's data
 	DataGroup string `json:"data_group"`
-	// portal detail ID (type??)
-	PortalDetailId string `json:"portal_detail_id"`
 }
 
 // this type represents metadata associated with a jdpFile
-type jdpMetadata struct {
+type Metadata struct {
 	// proposal info
 	Proposal struct {
 		// DOI of the awarded proposal

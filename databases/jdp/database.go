@@ -1,4 +1,4 @@
-package databases
+package jdp
 
 import (
 	"bytes"
@@ -9,15 +9,15 @@ import (
 	"net/url"
 	"path/filepath"
 	"strconv"
-	"strings"
 
 	"github.com/google/uuid"
 
 	"dts/config"
-	"dts/databases/credit"
+	"dts/core"
+	"dts/credit"
 )
 
-const suffixToFormat = map[string]string{
+var suffixToFormat = map[string]string{
 	"csv":   "csv",
 	"faa":   "fasta",
 	"fasta": "fasta",
@@ -28,7 +28,7 @@ const suffixToFormat = map[string]string{
 	"txt":   "text",
 }
 
-const suffixToMimeType = map[string]string{
+var suffixToMimeType = map[string]string{
 	"csv":   "text/csv",
 	"faa":   "text/plain",
 	"fasta": "text/plain",
@@ -39,7 +39,7 @@ const suffixToMimeType = map[string]string{
 	"txt":   "text/plain",
 }
 
-const fileTypeToMimeType = map[string]string{
+var fileTypeToMimeType = map[string]string{
 	"text":     "text/plain",
 	"fasta":    "text/plain",
 	"fastq":    "text/plain",
@@ -76,16 +76,16 @@ func mimeTypeFromFileNameAndTypes(fileName string, fileTypes []string) string {
 }
 
 // extracts file type information from the given jdpFile
-func fileTypesFromFile(file jdpFile) []string {
+func fileTypesFromFile(file File) []string {
 	// TODO: See https://pkg.go.dev/encoding/json?utm_source=godoc#example-RawMessage-Unmarshal
 	// TODO: for an example of how to unmarshal a variant type.
 	return []string{}
 }
 
 // extracts source information from the given jdpFile
-func sourcesFromFile(file jdpFile) []DataSource {
-	sources := make([]DataSource, 0)
-	piInfo := file.Metadata.Proposal
+func sourcesFromFile(file File) []core.DataSource {
+	sources := make([]core.DataSource, 0)
+	piInfo := file.Metadata.Proposal.PI
 	if len(piInfo.LastName) > 0 {
 		var title string
 		if len(piInfo.FirstName) > 0 {
@@ -107,7 +107,7 @@ func sourcesFromFile(file jdpFile) []DataSource {
 		if len(file.Metadata.Proposal.AwardDOI) > 0 {
 			doiURL = fmt.Sprintf("https://doi.org/%s", file.Metadata.Proposal.AwardDOI)
 		}
-		source := DataSource{
+		source := core.DataSource{
 			Title: title,
 			Path:  doiURL,
 			Email: piInfo.EmailAddress,
@@ -118,7 +118,7 @@ func sourcesFromFile(file jdpFile) []DataSource {
 }
 
 // extracts KBase credit engine information from the given jdpFile
-func creditFromFile(file jdpFile) credit.CreditMetadata {
+func creditFromFile(file File) credit.CreditMetadata {
 	var itsProjectId int
 
 	creditData := credit.CreditMetadata{
@@ -128,10 +128,10 @@ func creditFromFile(file jdpFile) credit.CreditMetadata {
 	return creditData
 }
 
-// creates a DataResource from a jdpFile (including metadata)
-func dataResourceFromFile(file jdpFile) DataResource {
+// creates a DataResource from a File (including metadata)
+func dataResourceFromFile(file File) core.DataResource {
 	fileTypes := fileTypesFromFile(file)
-	return DataResource{
+	return core.DataResource{
 		Name:      fmt.Sprintf("JDP:%s", file.Metadata.SequencingProjectId),
 		Path:      filepath.Join(file.Path, file.Name),
 		Format:    formatFromFileName(file.Name),
@@ -144,7 +144,8 @@ func dataResourceFromFile(file jdpFile) DataResource {
 }
 
 // file database appropriate for handling JDP searches and transfers
-type JdpDatabase struct {
+// (implements the core.Database interface)
+type Database struct {
 	// database identifier
 	Id string
 	// JDP base URL
@@ -155,7 +156,7 @@ type JdpDatabase struct {
 	StagingIds map[uuid.UUID]int
 }
 
-func NewJdpDatabase(dbName string) (Database, error) {
+func NewDatabase(dbName string) (core.Database, error) {
 	dbConfig, ok := config.Databases[dbName]
 	if !ok {
 		return nil, fmt.Errorf("Database %s not found", dbName)
@@ -172,8 +173,8 @@ func NewJdpDatabase(dbName string) (Database, error) {
 }
 
 // this helper extracts files for the JDP /search GET query with given parameters
-func (db *Database) filesForSearch(params url.Values) (SearchResults, error) {
-	var results SearchResults
+func (db *Database) filesForSearch(params url.Values) (core.SearchResults, error) {
+	var results core.SearchResults
 
 	u, err := url.ParseRequestURI(db.BaseURL)
 	if err == nil {
@@ -190,15 +191,15 @@ func (db *Database) filesForSearch(params url.Values) (SearchResults, error) {
 			if err == nil {
 				type JDPResults struct {
 					Organisms []struct {
-						Files []jdpFile `json:"files"`
+						Files []File `json:"files"`
 					} `json:"organisms"`
 				}
 				var jdpResults JDPResults
-				results.Resources = make([]DataResource, 0)
+				results.Resources = make([]core.DataResource, 0)
 				err = json.Unmarshal(body, &jdpResults)
 				if err == nil {
 					for _, org := range jdpResults.Organisms {
-						resources := make([]DataResource, len(org.Files))
+						resources := make([]core.DataResource, len(org.Files))
 						for i, file := range org.Files {
 							resources[i] = dataResourceFromFile(file)
 						}
@@ -232,7 +233,7 @@ func pageNumberAndSize(offset, maxNum int) (int, int) {
 	return pageNumber, pageSize
 }
 
-func (db *JdpDatabase) Search(params SearchParameters) (SearchResults, error) {
+func (db *Database) Search(params core.SearchParameters) (core.SearchResults, error) {
 	// we assume the JDP interface for ElasticSearch queries
 	// (see https://files.jgi.doe.gov/apidoc/)
 	pageNumber, pageSize := pageNumberAndSize(params.Pagination.Offset, params.Pagination.MaxNum)
@@ -245,7 +246,7 @@ func (db *JdpDatabase) Search(params SearchParameters) (SearchResults, error) {
 	return db.filesForSearch(p)
 }
 
-func (db *JdpDatabase) FilesStaged(fileIds []string) (bool, error) {
+func (db *Database) FilesStaged(fileIds []string) (bool, error) {
 	// fetch the paths for the files with the given IDs that are RESTORED
 	type FileFilter struct {
 		Ids      []string `json:"_id"`
@@ -266,7 +267,7 @@ func (db *JdpDatabase) FilesStaged(fileIds []string) (bool, error) {
 	return len(results.Resources) == len(fileIds), nil
 }
 
-func (db *JdpDatabase) StageFiles(fileIds []string) (uuid.UUID, error) {
+func (db *Database) StageFiles(fileIds []string) (uuid.UUID, error) {
 	var xferId uuid.UUID
 
 	// construct a POST request to restore archived files with the given IDs
@@ -307,7 +308,7 @@ func (db *JdpDatabase) StageFiles(fileIds []string) (uuid.UUID, error) {
 	return xferId, err
 }
 
-func (db *JdpDatabase) StagingStatus(id uuid.UUID) (StagingStatus, error) {
+func (db *Database) StagingStatus(id uuid.UUID) (core.StagingStatus, error) {
 	if restoreId, found := db.StagingIds[id]; found {
 		u, err := url.ParseRequestURI(db.BaseURL)
 		if err == nil {
@@ -327,8 +328,8 @@ func (db *JdpDatabase) StagingStatus(id uuid.UUID) (StagingStatus, error) {
 					var jdpResult JDPResult
 					err = json.Unmarshal(body, &jdpResult)
 					if err == nil {
-						statusForString := map[string]StagingStatus{
-							"ready": StagingStatusSucceeded,
+						statusForString := map[string]core.StagingStatus{
+							"ready": core.StagingStatusSucceeded,
 						}
 						if status, ok := statusForString[jdpResult.Status]; ok {
 							return status, nil
@@ -339,8 +340,8 @@ func (db *JdpDatabase) StagingStatus(id uuid.UUID) (StagingStatus, error) {
 				}
 			}
 		}
-		return StagingStatusUnknown, err
+		return core.StagingStatusUnknown, err
 	} else {
-		return StagingStatusUnknown, nil
+		return core.StagingStatusUnknown, nil
 	}
 }

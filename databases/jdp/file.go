@@ -86,8 +86,9 @@ type Metadata struct {
 		// name of scientific program to which project belongs
 		ScientificProgramName string `json:"scientific_program_name"`
 	} `json:"sequencing_project"`
-	// sequencing project identifier
-	SequencingProjectId interface{} `json:"sequencing_project_id"`
+	// sequencing project ID, sometimes used as ITS project ID. This type can be a
+	// list or a number, so we have to unmarshal it into a RawMessage
+	SequencingProjectId json.RawMessage `json:"sequencing_project_id"`
 	// NCBI taxon metadata
 	NCBITaxon struct {
 		Order   string `json:"ncbi_taxon_order"`
@@ -105,7 +106,7 @@ type Metadata struct {
 	FinalDeliveryProject struct {
 		ProductSearchCategory string `json:"product_search_category"`
 	} `json:"final_deliv_project"`
-	// Analysis project ID, used as ITS project ID. This type can be a list or
-	// a number, so we have to unmarshal it into a RawMessage
+	// analysis project ID, sometimes used as ITS project ID. This type can be a
+	// list or a number, so we have to unmarshal it into a RawMessage
 	AnalysisProjectId json.RawMessage `json:"analysis_project_id"`
 }

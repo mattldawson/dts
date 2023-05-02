@@ -18,6 +18,11 @@ import (
 	"dts/credit"
 )
 
+// the directory in which all JDP files reside, which is the absolute path
+// associated with all Frictionless Data Resource relative POSIX paths
+var filePathPrefix = "/global/dna/dm_archive/"
+
+// a mapping from file suffixes to format labels
 var suffixToFormat = map[string]string{
 	"bam":     "bam",
 	"bam.bai": "bai",
@@ -37,8 +42,10 @@ var suffixToFormat = map[string]string{
 	"txt":     "text",
 }
 
+// this gets populated automatically with the keys in suffixToFormat
 var supportedSuffixes []string
 
+// a mapping from file format labels to mime types
 var formatToMimeType = map[string]string{
 	"bam":   "application/octet-stream",
 	"bai":   "application/octet-stream",
@@ -54,6 +61,8 @@ var formatToMimeType = map[string]string{
 	"txt":   "text/plain",
 }
 
+// a mapping from the JDP's reported file types to mime types
+// (backup method for determining mime types)
 var fileTypeToMimeType = map[string]string{
 	"text":     "text/plain",
 	"fasta":    "text/plain",
@@ -100,24 +109,23 @@ func mimeTypeFromFormatAndTypes(format string, fileTypes []string) string {
 	return ""
 }
 
-// extracts the analysis project ID from the given File, or -1 if no
-// such ID can be extracted
-func curieFromMetadata(md Metadata) string {
-	id := "JDP:unknown"
+// extracts the ITS project ID from the given metadata field, or returns -1 if
+// no such ID can be extracted
+func itsProjectIdFromMetadata(md Metadata, field json.RawMessage) int {
 	// is it an integer?
 	var intId int
-	err := json.Unmarshal(md.AnalysisProjectId, &intId)
+	err := json.Unmarshal(field, &intId)
 	if err == nil {
-		id = fmt.Sprintf("JDP:%d", intId)
+		return intId
 	} else { // nope!
 		// how about an integer list?
 		var listId []int
-		err = json.Unmarshal(md.AnalysisProjectId, &listId)
+		err = json.Unmarshal(field, &listId)
 		if err == nil {
-			id = fmt.Sprintf("JDP:%d", listId[0]) // use the first ID
+			return listId[0] // use the first ID
 		}
 	}
-	return id
+	return -1
 }
 
 // extracts file type information from the given File
@@ -163,8 +171,7 @@ func sourcesFromMetadata(md Metadata) []core.DataSource {
 }
 
 // creates a credit metadata item from other metadata
-func creditFromMetadata(md Metadata) credit.CreditMetadata {
-	curieId := curieFromMetadata(md)
+func creditFromMetadata(curieId string, md Metadata) credit.CreditMetadata {
 	crd := credit.CreditMetadata{
 		Identifier:   curieId,
 		ResourceType: "dataset",
@@ -194,21 +201,43 @@ func creditFromMetadata(md Metadata) credit.CreditMetadata {
 	return crd
 }
 
-// creates a DataResource from a File (including metadata)
-func dataResourceFromFile(file File) core.DataResource {
+// creates a DataResource from a File (including metadata) and the name of the
+// field from which to extract the ITS project ID
+func dataResourceFromFile(file File, itsFieldName string) core.DataResource {
 	format := formatFromFileName(file.Name)
 	fileTypes := fileTypesFromFile(file)
-	curieId := curieFromMetadata(file.Metadata)
 	sources := sourcesFromMetadata(file.Metadata)
+
+	// we use relative file paths in accordance with the Frictionless
+	// Data Resource specification
+	filePath := filepath.Join(strings.ReplaceAll(file.Path, filePathPrefix, ""), file.Name)
+
+	// construct the CURIE identifier for credit metadata
+	// NOTE: the ITS field name we are given doesn't always point to a valid
+	// NOTE: identifier
+	var itsField json.RawMessage
+	if strings.Contains(itsFieldName, "analysis_project_id") {
+		itsField = file.Metadata.AnalysisProjectId
+	} else if strings.Contains(itsFieldName, "sequencing_project_id") {
+		itsField = file.Metadata.SequencingProjectId
+	}
+	itsProjectId := itsProjectIdFromMetadata(file.Metadata, itsField)
+	var curieId string
+	if itsProjectId != -1 {
+		curieId = fmt.Sprintf("JDP:%d", itsProjectId)
+	} else {
+		curieId = "JDP:unknown"
+	}
+
 	return core.DataResource{
 		Name:      curieId,
-		Path:      filepath.Join(file.Path, file.Name),
+		Path:      filePath,
 		Format:    format,
 		MediaType: mimeTypeFromFormatAndTypes(format, fileTypes),
 		Bytes:     file.Size,
 		Hash:      file.MD5Sum,
 		Sources:   sources,
-		Credit:    creditFromMetadata(file.Metadata),
+		Credit:    creditFromMetadata(curieId, file.Metadata),
 	}
 }
 
@@ -261,6 +290,8 @@ func (db *Database) filesForSearch(params url.Values) (core.SearchResults, error
 				type JDPResults struct {
 					Organisms []struct {
 						Files []File `json:"files"`
+						// this determines which file field is used for ITS project IDs
+						GroupedBy string `json:"grouped_by"`
 					} `json:"organisms"`
 				}
 				var jdpResults JDPResults
@@ -270,7 +301,7 @@ func (db *Database) filesForSearch(params url.Values) (core.SearchResults, error
 					for _, org := range jdpResults.Organisms {
 						resources := make([]core.DataResource, 0)
 						for _, file := range org.Files {
-							res := dataResourceFromFile(file)
+							res := dataResourceFromFile(file, org.GroupedBy)
 							if res.Format != "" {
 								resources = append(resources, res)
 							}

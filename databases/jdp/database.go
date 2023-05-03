@@ -170,8 +170,26 @@ func sourcesFromMetadata(md Metadata) []core.DataSource {
 	return sources
 }
 
-// creates a credit metadata item from other metadata
-func creditFromMetadata(curieId string, md Metadata) credit.CreditMetadata {
+// creates a credit metadata item from JDP file metadata
+func creditFromMetadata(md Metadata, itsFieldName string) credit.CreditMetadata {
+	// construct the CURIE identifier for credit metadata
+	// NOTE: the ITS field name we are given doesn't always point to a valid
+	// NOTE: identifier
+	var itsField json.RawMessage
+	if strings.Contains(itsFieldName, "analysis_project_id") {
+		itsField = md.AnalysisProjectId
+	} else if strings.Contains(itsFieldName, "sequencing_project_id") {
+		itsField = md.SequencingProjectId
+	}
+	itsProjectId := itsProjectIdFromMetadata(md, itsField)
+
+	var curieId string
+	if itsProjectId != -1 {
+		curieId = fmt.Sprintf("JDP:%d", itsProjectId)
+	} else {
+		curieId = "JDP:unknown"
+	}
+
 	crd := credit.CreditMetadata{
 		Identifier:   curieId,
 		ResourceType: "dataset",
@@ -212,32 +230,15 @@ func dataResourceFromFile(file File, itsFieldName string) core.DataResource {
 	// Data Resource specification
 	filePath := filepath.Join(strings.ReplaceAll(file.Path, filePathPrefix, ""), file.Name)
 
-	// construct the CURIE identifier for credit metadata
-	// NOTE: the ITS field name we are given doesn't always point to a valid
-	// NOTE: identifier
-	var itsField json.RawMessage
-	if strings.Contains(itsFieldName, "analysis_project_id") {
-		itsField = file.Metadata.AnalysisProjectId
-	} else if strings.Contains(itsFieldName, "sequencing_project_id") {
-		itsField = file.Metadata.SequencingProjectId
-	}
-	itsProjectId := itsProjectIdFromMetadata(file.Metadata, itsField)
-	var curieId string
-	if itsProjectId != -1 {
-		curieId = fmt.Sprintf("JDP:%d", itsProjectId)
-	} else {
-		curieId = "JDP:unknown"
-	}
-
 	return core.DataResource{
-		Name:      curieId,
+		Name:      file.MD5Sum,
 		Path:      filePath,
 		Format:    format,
 		MediaType: mimeTypeFromFormatAndTypes(format, fileTypes),
 		Bytes:     file.Size,
 		Hash:      file.MD5Sum,
 		Sources:   sources,
-		Credit:    creditFromMetadata(curieId, file.Metadata),
+		Credit:    creditFromMetadata(file.Metadata, itsFieldName),
 	}
 }
 

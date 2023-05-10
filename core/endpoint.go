@@ -17,11 +17,11 @@ type FileTransfer struct {
 type TransferStatusCode int
 
 const (
-	Unknown   TransferStatusCode = iota // unknown transfer or status not available
-	Active                              // transfer in progress
-	Inactive                            // transfer suspended
-	Succeeded                           // transfer completed successfully
-	Failed                              // transfer failed
+	TransferStatusUnknown   TransferStatusCode = iota
+	TransferStatusActive                       // transfer in progress
+	TransferStatusInactive                     // transfer suspended
+	TransferStatusSucceeded                    // transfer completed successfully
+	TransferStatusFailed                       // transfer failed
 )
 
 // this type conveys various information about a file transfer's status
@@ -32,8 +32,6 @@ type TransferStatus struct {
 	NumFiles int
 	// number of files that have been transferred
 	NumFilesTransferred int
-	// whether the transfer is paused
-	Paused bool
 }
 
 // This type represents an endpoint for transferring files.

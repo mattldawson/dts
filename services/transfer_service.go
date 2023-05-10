@@ -88,6 +88,10 @@ type TransferStatusResponse struct {
 	Id string `json:"id"`
 	// transfer job status
 	Status string `json:"status"`
+	// number of files being transferred
+	NumFiles int `json:"num_files"`
+	// number of files that have been completely transferred
+	NumFilesTransferred int `json:"num_files_transferred"`
 }
 
 // TransferService defines the interface for our data transfer service.

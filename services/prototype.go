@@ -19,6 +19,15 @@ import (
 	"dts/databases"
 )
 
+// this type holds multiple (possibly null) UUIDs corresponding to different
+// portions of a file transfer
+type taskIds struct {
+	// staging UUID (if any)
+	Staging uuid.NullUUID
+	// endpoint-to-endpoint transfer UUID (if any)
+	Transfer uuid.NullUUID
+}
+
 // This type implements the TransferService interface, allowing file transfers
 // from JGI (via the JGI Data Portal) to KBase via Globus.
 type prototype struct {
@@ -34,9 +43,12 @@ type prototype struct {
 	Router *mux.Router
 	// HTTP server.
 	Server *http.Server
+
+	// table of UUIDs corresponding to different stages of transfers
+	TaskIds map[uuid.UUID]taskIds
 }
 
-// This type encodes a JSON object for responding to root queries.
+// this type encodes a JSON object for responding to root queries
 type RootResponse struct {
 	Name          string `json:"name"`
 	Version       string `json:"version"`
@@ -44,7 +56,7 @@ type RootResponse struct {
 	Documentation string `json:"documentation,omitempty"`
 }
 
-// Handler method for root.
+// handler method for root
 func (service *prototype) getRoot(w http.ResponseWriter,
 	r *http.Request) {
 	log.Printf("Querying root endpoint...")
@@ -191,15 +203,22 @@ func (service *prototype) searchDatabase(w http.ResponseWriter,
 	}
 }
 
-// Handler method for initiating a file transfer operation
+// handler method for initiating a file transfer operation
 func (service *prototype) createTransfer(w http.ResponseWriter,
 	r *http.Request) {
-	// TODO: implement!
-	response := TransferResponse{
-		Id: uuid.New(),
+	xferId := uuid.New()
+	var db core.Database // FIXME
+	var fileIds []string // FIXME
+	stagingId, err := db.StageFiles(fileIds)
+	if err != nil {
+		writeError(w, err.Error(), 500)
+	} else {
+		service.TaskIds[xferId] = taskIds{
+			Staging: uuid.NullUUID{UUID: stagingId, Valid: true},
+		}
+		jsonData, _ := json.Marshal(TransferResponse{Id: xferId})
+		writeJson(w, jsonData)
 	}
-	jsonData, _ := json.Marshal(response)
-	writeJson(w, jsonData)
 }
 
 // handler method for getting the status of a transfer
@@ -215,11 +234,44 @@ func (service *prototype) getTransferStatus(w http.ResponseWriter,
 		return
 	}
 
-	// Fetch the status for the job.
-	// TODO: implement this
-	status := TransferStatusResponse{Id: xferId.String(), Status: "staging"}
-	jsonData, _ := json.Marshal(status)
-	writeJson(w, jsonData)
+	// fetch the status for the job using the appropriate task ID
+	if taskId, ok := service.TaskIds[xferId]; ok {
+		resp := TransferStatusResponse{Id: xferId.String()}
+		if taskId.Staging.Valid { // we're in staging
+			// FIXME: check for completion!
+			resp.Status = "staging"
+		} else if taskId.Transfer.Valid {
+			// ask the endpoint itself for the status
+			s, err := endpoint.Status(taskId.Transfer.UUID)
+			if err != nil {
+				errStr := fmt.Sprintf("Error requesting status of transfer %s", xferId.String())
+				writeError(w, errStr, 500)
+				return
+			}
+			// convert the status code to a nice human-friendly string
+			switch s.StatusCode {
+			case core.TransferStatusUnknown:
+				resp.Status = "unknown"
+			case core.TransferStatusActive:
+				resp.Status = "active"
+			case core.TransferStatusInactive:
+				resp.Status = "inactive"
+			case core.TransferStatusSucceeded:
+				resp.Status = "succeeded"
+			case core.TransferStatusFailed:
+				resp.Status = "failed"
+			}
+			resp.NumFiles = s.NumFiles
+			resp.NumFilesTransferred = s.NumFilesTransferred
+		} else {
+			resp.Status = "unknown"
+		}
+		jsonData, _ := json.Marshal(resp)
+		writeJson(w, jsonData)
+	} else {
+		errStr := fmt.Sprintf("Unknown transfer ID: %s", xferId)
+		writeError(w, errStr, 404)
+	}
 }
 
 // returns the uptime for the service in seconds

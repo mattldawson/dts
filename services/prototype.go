@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -17,15 +18,18 @@ import (
 	"dts/config"
 	"dts/core"
 	"dts/databases"
+	"dts/endpoints"
 )
 
 // this type holds multiple (possibly null) UUIDs corresponding to different
 // portions of a file transfer
-type taskIds struct {
+type task struct {
 	// staging UUID (if any)
 	Staging uuid.NullUUID
 	// endpoint-to-endpoint transfer UUID (if any)
 	Transfer uuid.NullUUID
+	// names of source and destination endpoints
+	SourceEndpoint, DestEndpoint string
 }
 
 // This type implements the TransferService interface, allowing file transfers
@@ -45,7 +49,7 @@ type prototype struct {
 	Server *http.Server
 
 	// table of UUIDs corresponding to different stages of transfers
-	TaskIds map[uuid.UUID]taskIds
+	Tasks map[uuid.UUID]task
 }
 
 // this type encodes a JSON object for responding to root queries
@@ -122,7 +126,7 @@ func (service *prototype) getDatabase(w http.ResponseWriter,
 
 // This helper translates an array of engines.SearchResults to a JSON object
 // containing search results for the query (including the database name).
-func (service *prototype) jsonFromSearchResults(dbName string,
+func jsonFromSearchResults(dbName string,
 	query string, results core.SearchResults) ([]byte, error) {
 
 	data := ElasticSearchResponse{
@@ -198,23 +202,58 @@ func (service *prototype) searchDatabase(w http.ResponseWriter,
 		writeError(w, err.Error(), 400)
 	} else {
 		// Return our results to the caller.
-		jsonData, _ := service.jsonFromSearchResults(dbName, params.Query, results)
+		jsonData, _ := jsonFromSearchResults(dbName, params.Query, results)
 		writeJson(w, jsonData)
 	}
+}
+
+func getTransferRequest(r *http.Request) (TransferRequest, error) {
+	var req TransferRequest
+	var err error
+
+	// is this a JSON request?
+	if r.Header.Get("Content-Type") != "application/json" {
+		err = fmt.Errorf("Request content type must be \"application/json\".")
+	} else {
+		// read the request body
+		rBody, err := io.ReadAll(r.Body)
+		if err == nil {
+			err = json.Unmarshal(rBody, &req)
+			if err == nil {
+				// validate source and destination databases
+				if _, ok := config.Databases[req.Source]; !ok {
+					err = fmt.Errorf("Unknown source database: %s", req.Source)
+				} else if _, ok := config.Databases[req.Destination]; !ok {
+					err = fmt.Errorf("Unknown destination database: %s", req.Destination)
+				}
+
+				// make sure there's at least one file in the request
+				if len(req.FileIds) == 0 {
+					err = fmt.Errorf("No file IDs specified for transfer!")
+				}
+			}
+		}
+	}
+
+	return req, err
 }
 
 // handler method for initiating a file transfer operation
 func (service *prototype) createTransfer(w http.ResponseWriter,
 	r *http.Request) {
+	// extract and validate request data
+	request, err := getTransferRequest(r)
+
+	db, err := databases.NewDatabase(request.Source)
 	xferId := uuid.New()
-	var db core.Database // FIXME
-	var fileIds []string // FIXME
-	stagingId, err := db.StageFiles(fileIds)
+	stagingId, err := db.StageFiles(request.FileIds)
 	if err != nil {
 		writeError(w, err.Error(), 500)
 	} else {
-		service.TaskIds[xferId] = taskIds{
-			Staging: uuid.NullUUID{UUID: stagingId, Valid: true},
+		service.Tasks[xferId] = task{
+			Staging:             uuid.NullUUID{UUID: stagingId, Valid: true},
+			SourceEndpoint:      config.Databases[request.Source].Endpoint,
+			DestEndpoint: config.Databases[request.Destination].Endpoint,
 		}
 		jsonData, _ := json.Marshal(TransferResponse{Id: xferId})
 		writeJson(w, jsonData)
@@ -234,15 +273,16 @@ func (service *prototype) getTransferStatus(w http.ResponseWriter,
 		return
 	}
 
-	// fetch the status for the job using the appropriate task ID
-	if taskId, ok := service.TaskIds[xferId]; ok {
+	// fetch the status for the job using the appropriate task data
+	if task, ok := service.Tasks[xferId]; ok {
+		endpoint := endpoints.NewEndpoint(task.SourceEndpoint)
 		resp := TransferStatusResponse{Id: xferId.String()}
 		if taskId.Staging.Valid { // we're in staging
 			// FIXME: check for completion!
 			resp.Status = "staging"
-		} else if taskId.Transfer.Valid {
+		} else if task.Transfer.Valid {
 			// ask the endpoint itself for the status
-			s, err := endpoint.Status(taskId.Transfer.UUID)
+			s, err := endpoint.Status(task.Transfer.UUID)
 			if err != nil {
 				errStr := fmt.Sprintf("Error requesting status of transfer %s", xferId.String())
 				writeError(w, errStr, 500)

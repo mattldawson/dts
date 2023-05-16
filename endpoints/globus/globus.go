@@ -48,7 +48,7 @@ func NewEndpoint(endpointName string) (core.Endpoint, error) {
 		return nil, fmt.Errorf("'%s' is not a Globus endpoint", endpointName)
 	}
 
-	ep := &GlobusEndpoint{
+	ep := &Endpoint{
 		Name:   epConfig.Name,
 		Id:     epConfig.Id,
 		Header: make(http.Header),

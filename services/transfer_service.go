@@ -68,12 +68,10 @@ type ElasticSearchResponse struct {
 type TransferRequest struct {
 	// name of source database
 	Source string `json:"source"`
-	// source-specific identifiers for files to be transferred
-	SourceIds []string `json:"sourceIds"`
+	// identifiers for files to be transferred
+	FileIds []string `json:"file_ids"`
 	// name of destination database
 	Destination string `json:"destination"`
-	// destination-specific identifiers for files to be transferred
-	DestinationIds []string `json:"destinationIds"`
 }
 
 // a response for a file transfer request (POST)

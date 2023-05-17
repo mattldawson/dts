@@ -240,8 +240,8 @@ func (ep *Endpoint) Transfers() ([]uuid.UUID, error) {
 	return nil, err
 }
 
-func (ep *Endpoint) Transfer(dst core.Endpoint, files []FileTransfer) (uuid.UUID, error) {
-	gDst := dst.(*globus.Endpoint)
+func (ep *Endpoint) Transfer(dst core.Endpoint, files []core.FileTransfer) (uuid.UUID, error) {
+	gDst := dst.(*Endpoint)
 	var xferId uuid.UUID
 	u, err := url.ParseRequestURI(globusTransferBaseURL)
 	if err == nil {
@@ -361,23 +361,22 @@ func (ep *Endpoint) Status(id uuid.UUID) (core.TransferStatus, error) {
 				var response TaskResponse
 				err = json.Unmarshal(body, &response)
 				if err == nil {
-					codes := map[string]TransferStatusCode{
-						"Active":    Active,
-						"Inactive":  Inactive,
-						"Succeeded": Succeeded,
-						"Failed":    Failed,
+					codes := map[string]core.TransferStatusCode{
+						"Active":    core.TransferStatusActive,
+						"Inactive":  core.TransferStatusInactive,
+						"Succeeded": core.TransferStatusSucceeded,
+						"Failed":    core.TransferStatusFailed,
 					}
-					return TransferStatus{
+					return core.TransferStatus{
 						StatusCode:          codes[response.Status],
 						NumFiles:            response.Files,
 						NumFilesTransferred: response.FilesTransferred,
-						Paused:              response.IsPaused,
 					}, nil
 				}
 			}
 		}
 	}
-	return TransferStatus{}, err
+	return core.TransferStatus{}, err
 }
 
 func (ep *Endpoint) Cancel(id uuid.UUID) error {

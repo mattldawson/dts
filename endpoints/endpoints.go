@@ -1,6 +1,8 @@
 package endpoints
 
 import (
+	"fmt"
+
 	"dts/config"
 	"dts/core"
 	"dts/endpoints/globus"

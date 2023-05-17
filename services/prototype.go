@@ -251,9 +251,9 @@ func (service *prototype) createTransfer(w http.ResponseWriter,
 		writeError(w, err.Error(), 500)
 	} else {
 		service.Tasks[xferId] = task{
-			Staging:             uuid.NullUUID{UUID: stagingId, Valid: true},
-			SourceEndpoint:      config.Databases[request.Source].Endpoint,
-			DestEndpoint: config.Databases[request.Destination].Endpoint,
+			Staging:        uuid.NullUUID{UUID: stagingId, Valid: true},
+			SourceEndpoint: config.Databases[request.Source].Endpoint,
+			DestEndpoint:   config.Databases[request.Destination].Endpoint,
 		}
 		jsonData, _ := json.Marshal(TransferResponse{Id: xferId})
 		writeJson(w, jsonData)
@@ -275,9 +275,13 @@ func (service *prototype) getTransferStatus(w http.ResponseWriter,
 
 	// fetch the status for the job using the appropriate task data
 	if task, ok := service.Tasks[xferId]; ok {
-		endpoint := endpoints.NewEndpoint(task.SourceEndpoint)
+		endpoint, err := endpoints.NewEndpoint(task.SourceEndpoint)
+		if err != nil {
+			writeError(w, err.Error(), 500)
+			return
+		}
 		resp := TransferStatusResponse{Id: xferId.String()}
-		if taskId.Staging.Valid { // we're in staging
+		if task.Staging.Valid { // we're in staging
 			// FIXME: check for completion!
 			resp.Status = "staging"
 		} else if task.Transfer.Valid {

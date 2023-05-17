@@ -16,6 +16,7 @@ import (
 	"dts/config"
 	"dts/core"
 	"dts/credit"
+	"dts/endpoints"
 )
 
 // the directory in which all JDP files reside, which is the absolute path
@@ -448,4 +449,9 @@ func (db *Database) StagingStatus(id uuid.UUID) (core.StagingStatus, error) {
 	} else {
 		return core.StagingStatusUnknown, nil
 	}
+}
+
+func (db *Database) Endpoint() core.Endpoint {
+	endpoint, _ := endpoints.NewEndpoint(config.Databases[db.Id].Endpoint)
+	return endpoint
 }

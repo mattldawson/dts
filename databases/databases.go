@@ -7,11 +7,27 @@ import (
 	"dts/databases/jdp"
 )
 
-// creates a database based on the configured type
+// we maintain a table of database instances, identified by their names
+var allDatabases map[string]core.Database = make(map[string]core.Database)
+
+// creates a database based on the configured type, or returns an existing
+// instance
 func NewDatabase(dbName string) (core.Database, error) {
-	if dbName == "jdp" {
-		return jdp.NewDatabase(dbName)
-	} else {
-		return nil, fmt.Errorf("Unknown database type for '%s'", dbName)
+	var err error
+
+	// do we have one of these already?
+	db, found := allDatabases[dbName]
+	if !found {
+		// go get one
+		if dbName == "jdp" {
+			db, err = jdp.NewDatabase(dbName)
+		} else {
+			err = fmt.Errorf("Unknown database type for '%s'", dbName)
+		}
+		// stash it
+		if db != nil {
+			allDatabases[dbName] = db
+		}
 	}
+	return db, err
 }

@@ -46,4 +46,6 @@ type Database interface {
 	FilesStaged(fileIds []string) (bool, error)
 	// returns the status of a given staging operation
 	StagingStatus(id uuid.UUID) (StagingStatus, error)
+	// returns the endpoint associated with this database
+	Endpoint() Endpoint
 }

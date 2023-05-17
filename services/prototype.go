@@ -18,18 +18,18 @@ import (
 	"dts/config"
 	"dts/core"
 	"dts/databases"
-	"dts/endpoints"
+//	"dts/endpoints"
 )
 
 // this type holds multiple (possibly null) UUIDs corresponding to different
 // portions of a file transfer
 type task struct {
-	// staging UUID (if any)
-	Staging uuid.NullUUID
-	// endpoint-to-endpoint transfer UUID (if any)
-	Transfer uuid.NullUUID
-	// names of source and destination endpoints
-	SourceEndpoint, DestEndpoint string
+	// staging and file transfer UUIDs (if any)
+	Staging, Transfer uuid.NullUUID
+	// IDs of files to be transferred
+	FileIds []string
+	// source database
+	SourceDatabase core.Database
 }
 
 // This type implements the TransferService interface, allowing file transfers
@@ -251,9 +251,9 @@ func (service *prototype) createTransfer(w http.ResponseWriter,
 		writeError(w, err.Error(), 500)
 	} else {
 		service.Tasks[xferId] = task{
+			FileIds:        request.FileIds,
 			Staging:        uuid.NullUUID{UUID: stagingId, Valid: true},
-			SourceEndpoint: config.Databases[request.Source].Endpoint,
-			DestEndpoint:   config.Databases[request.Destination].Endpoint,
+			SourceDatabase: db,
 		}
 		jsonData, _ := json.Marshal(TransferResponse{Id: xferId})
 		writeJson(w, jsonData)
@@ -275,17 +275,16 @@ func (service *prototype) getTransferStatus(w http.ResponseWriter,
 
 	// fetch the status for the job using the appropriate task data
 	if task, ok := service.Tasks[xferId]; ok {
-		endpoint, err := endpoints.NewEndpoint(task.SourceEndpoint)
 		if err != nil {
 			writeError(w, err.Error(), 500)
 			return
 		}
 		resp := TransferStatusResponse{Id: xferId.String()}
 		if task.Staging.Valid { // we're in staging
-			// FIXME: check for completion!
 			resp.Status = "staging"
 		} else if task.Transfer.Valid {
-			// ask the endpoint itself for the status
+			// ask the endpoint itself for the file transfer status
+			endpoint := task.SourceDatabase.Endpoint()
 			s, err := endpoint.Status(task.Transfer.UUID)
 			if err != nil {
 				errStr := fmt.Sprintf("Error requesting status of transfer %s", xferId.String())

@@ -171,26 +171,36 @@ func sourcesFromMetadata(md Metadata) []core.DataSource {
 	return sources
 }
 
-// creates a credit metadata item from JDP file metadata
-func creditFromMetadata(md Metadata, itsFieldName string) credit.CreditMetadata {
+// creates a CURIE identifier from the given JDP file metadata
+func curieIdFromMetadata(md Metadata, itsFieldName string) string {
 	// construct the CURIE identifier for credit metadata
 	// NOTE: the ITS field name we are given doesn't always point to a valid
 	// NOTE: identifier
-	var itsField json.RawMessage
+	var itsField, otherItsField json.RawMessage
 	if strings.Contains(itsFieldName, "analysis_project_id") {
 		itsField = md.AnalysisProjectId
+		otherItsField = md.SequencingProjectId
 	} else if strings.Contains(itsFieldName, "sequencing_project_id") {
 		itsField = md.SequencingProjectId
+		otherItsField = md.AnalysisProjectId
 	}
 	itsProjectId := itsProjectIdFromMetadata(md, itsField)
 
-	var curieId string
 	if itsProjectId != -1 {
-		curieId = fmt.Sprintf("JDP:%d", itsProjectId)
+		return fmt.Sprintf("jdp:%d", itsProjectId)
 	} else {
-		curieId = "JDP:unknown"
+		// try the other ITS field name, "just in case"
+		itsProjectId = itsProjectIdFromMetadata(md, otherItsField)
+		if itsProjectId != -1 {
+			return fmt.Sprintf("jdp:%d", itsProjectId)
+		} else {
+			return "jdp:unknown"
+		}
 	}
+}
 
+// creates a credit metadata item from JDP file metadata
+func creditFromCurieIdAndMetadata(curieId string, md Metadata) credit.CreditMetadata {
 	crd := credit.CreditMetadata{
 		Identifier:   curieId,
 		ResourceType: "dataset",
@@ -223,6 +233,7 @@ func creditFromMetadata(md Metadata, itsFieldName string) credit.CreditMetadata 
 // creates a DataResource from a File (including metadata) and the name of the
 // field from which to extract the ITS project ID
 func dataResourceFromFile(file File, itsFieldName string) core.DataResource {
+	curieId := curieIdFromMetadata(file.Metadata, itsFieldName)
 	format := formatFromFileName(file.Name)
 	fileTypes := fileTypesFromFile(file)
 	sources := sourcesFromMetadata(file.Metadata)
@@ -232,14 +243,14 @@ func dataResourceFromFile(file File, itsFieldName string) core.DataResource {
 	filePath := filepath.Join(strings.ReplaceAll(file.Path, filePathPrefix, ""), file.Name)
 
 	return core.DataResource{
-		Name:      file.MD5Sum,
+		Name:      curieId,
 		Path:      filePath,
 		Format:    format,
 		MediaType: mimeTypeFromFormatAndTypes(format, fileTypes),
 		Bytes:     file.Size,
 		Hash:      file.MD5Sum,
 		Sources:   sources,
-		Credit:    creditFromMetadata(file.Metadata, itsFieldName),
+		Credit:    creditFromCurieIdAndMetadata(curieId, file.Metadata),
 	}
 }
 

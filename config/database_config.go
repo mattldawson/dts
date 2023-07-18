@@ -10,6 +10,8 @@ type databaseConfig struct {
 	URL string `yaml:"url"`
 	// the name of an endpoint for this database
 	Endpoint string `yaml:"endpoint"`
+	// authorization data (client secret passed in headers to authorize requests)
+	Auth authConfig `yaml:"auth"`
 	// the name of a monitoring service used by this database for notifications
 	Notifications string `yaml:"notifications"`
 	// search instructions

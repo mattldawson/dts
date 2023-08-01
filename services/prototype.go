@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -50,6 +51,25 @@ type prototype struct {
 
 	// table of UUIDs corresponding to different stages of transfers
 	Tasks map[uuid.UUID]task
+}
+
+// validates a header, ensuring that it uses the HTTP Bearer authentication
+// method with a valid token
+func validateBearer(header http.Header) error {
+	var client http.Client
+	req, err := http.NewRequest(
+		http.MethodGet,
+		"https://ci.kbase.us/services/auth/api/V2/me", // FIXME: hardwired for now
+		http.NoBody,
+	)
+	if err != nil {
+		return err
+	}
+	var accessToken string // FIXME: read from config
+	b64Token := base64.StdEncoding.EncodeToString([]byte(accessToken))
+	req.Header.Set("Authentication", fmt.Sprintf("Bearer %s", b64Token))
+	_, err = client.Do(req)
+	return err
 }
 
 // this type encodes a JSON object for responding to root queries
@@ -215,6 +235,9 @@ func getTransferRequest(r *http.Request) (TransferRequest, error) {
 	if r.Header.Get("Content-Type") != "application/json" {
 		err = fmt.Errorf("Request content type must be \"application/json\".")
 	} else {
+		// do we have a valid token?
+		validateBearer(r.Header)
+
 		// read the request body
 		rBody, err := io.ReadAll(r.Body)
 		if err == nil {

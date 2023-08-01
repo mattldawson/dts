@@ -2,6 +2,7 @@ package jdp
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -292,9 +293,17 @@ func (db *Database) filesForSearch(params url.Values) (core.SearchResults, error
 		u.Path = "search"
 		u.RawQuery = params.Encode()
 
-		request := fmt.Sprintf("%v", u)
+		request, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%v", u), http.NoBody)
+		if err != nil {
+			return results, err
+		}
+		var secret string // FIXME: read from config
+		b64secret := base64.StdEncoding.EncodeToString([]byte(secret))
+		request.Header.Set("Authentication", fmt.Sprintf("Basic %s", b64secret))
+
+		var client http.Client
 		var resp *http.Response
-		resp, err = http.Get(request)
+		resp, err = client.Do(request)
 		defer resp.Body.Close()
 		if err == nil {
 			var body []byte
@@ -399,9 +408,18 @@ func (db *Database) StageFiles(fileIds []string) (uuid.UUID, error) {
 	if err == nil {
 		u.Path = "request_archived_files"
 
-		request := fmt.Sprintf("%v", u)
+		request, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%v", u), bytes.NewReader(data))
+		if err != nil {
+			return xferId, err
+		}
+		var secret string // FIXME: read from config
+		b64secret := base64.StdEncoding.EncodeToString([]byte(secret))
+		request.Header.Set("Authentication", fmt.Sprintf("Basic %s", b64secret))
+		request.Header.Set("Content-Type", "application/json")
+
+		var client http.Client
 		var resp *http.Response
-		resp, err = http.Post(request, "application/json", bytes.NewReader(data))
+		resp, err = client.Do(request)
 		defer resp.Body.Close()
 		if err == nil {
 			var body []byte

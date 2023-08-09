@@ -8,6 +8,11 @@ import (
 	"time"
 )
 
+const (
+	kbaseURL = "https://kbase.us"
+)
+
+
 // this type represents a proxy for the KBase Auth2 server
 // (https://github.com/kbase/auth2)
 type KBaseAuthServer struct {
@@ -35,7 +40,7 @@ type kbaseAuthErrorResponse struct {
 // error explaining any issue encountered
 func NewKBaseAuthServer(accessToken string) (*KBaseAuthServer, error) {
 	server := KBaseAuthServer{
-		URL:         "https://kbase.us/services/auth",
+		URL:         fmt.Sprintf("%s/services/auth", kbaseURL),
 		ApiVersion:  2,
 		AccessToken: accessToken,
 	}
@@ -48,7 +53,6 @@ func NewKBaseAuthServer(accessToken string) (*KBaseAuthServer, error) {
 	} else if resp.StatusCode != 200 {
 		err = kbaseAuthError(resp)
 	}
-	fmt.Printf("status: %d\n", resp.StatusCode)
 
 	return &server, err
 }

@@ -32,7 +32,7 @@ func breakdown() {
 func TestGlobusConstructor(t *testing.T) {
 	assert := assert.New(t) // binds assert to t
 
-	endpoint, err := NewGlobusEndpoint("globus-jdp")
+	endpoint, err := NewEndpoint("globus-jdp")
 	assert.NotNil(endpoint)
 	assert.Nil(err)
 }

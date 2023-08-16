@@ -37,6 +37,15 @@ func TestGlobusConstructor(t *testing.T) {
 	assert.Nil(err)
 }
 
+func TestGlobusTransfers(t *testing.T) {
+	assert := assert.New(t) // binds assert to t
+	endpoint, _ := NewEndpoint("globus-jdp")
+	xfers, err := endpoint.Transfers()
+	print(err.Error() + "\n")
+	assert.NotNil(xfers)
+	assert.Nil(err)
+}
+
 // This runs setup, runs all tests, and does breakdown.
 func TestMain(m *testing.M) {
 	var status int

@@ -20,7 +20,8 @@ import (
 // described at https://docs.globus.org/api/transfer/.
 
 const (
-	globusTransferBaseURL = "https://transfer.api.globusonline.org/v0.10"
+	globusTransferBaseURL    = "https://transfer.api.globusonline.org"
+	globusTransferApiVersion = "v0.10"
 )
 
 // this type captures results from Globus Transfer API responses, including
@@ -40,6 +41,8 @@ type Endpoint struct {
 	Id uuid.UUID
 	// HTTPS header containing basic authentication info
 	Header http.Header
+	// OAuth2 access token
+	AccessToken string
 }
 
 func NewEndpoint(endpointName string) (core.Endpoint, error) {
@@ -75,9 +78,7 @@ func (ep *Endpoint) authenticate(clientId uuid.UUID, clientSecret string) error 
 	data.Set("grant_type", "client_credentials")
 	req, err := http.NewRequest(http.MethodPost, authUrl, strings.NewReader(data.Encode()))
 	if err == nil {
-		// set up request headers
-		req.SetBasicAuth(config.Globus.Auth.ClientId.String(),
-			config.Globus.Auth.ClientSecret)
+		req.SetBasicAuth(config.Globus.Auth.ClientId.String(), config.Globus.Auth.ClientSecret)
 		req.Header.Add("Content-Type", "application-x-www-form-urlencoded")
 
 		// send the request
@@ -85,24 +86,28 @@ func (ep *Endpoint) authenticate(clientId uuid.UUID, clientSecret string) error 
 		var resp *http.Response
 		resp, err = client.Do(req)
 		if err == nil {
-			// read and unmarshal the response
-			buffer := make([]byte, resp.ContentLength)
-			_, err = resp.Body.Read(buffer)
-			if err == nil {
-				type AuthResponse struct {
-					AccessToken    string `json:"access_token"`
-					Scope          string `json:"scope"`
-					ResourceServer string `json:"resource_server"`
-					ExpiresIn      int    `json:"expires_in"`
-					TokenType      string `json:"token_type"`
-				}
-
-				var authResponse AuthResponse
-				err = json.Unmarshal(buffer, &authResponse)
+			if resp.StatusCode == 200 {
+				// read and unmarshal the response
+				buffer := make([]byte, resp.ContentLength)
+				_, err = resp.Body.Read(buffer)
 				if err == nil {
-					// stash the access token in our HTTPS header
-					ep.Header.Add("Authorization", fmt.Sprintf("Bearer %s", authResponse.AccessToken))
+					type AuthResponse struct {
+						AccessToken    string `json:"access_token"`
+						Scope          string `json:"scope"`
+						ResourceServer string `json:"resource_server"`
+						ExpiresIn      int    `json:"expires_in"`
+						TokenType      string `json:"token_type"`
+					}
+
+					var authResponse AuthResponse
+					err = json.Unmarshal(buffer, &authResponse)
+					if err == nil {
+						// stash the access token
+						ep.AccessToken = authResponse.AccessToken
+					}
 				}
+			} else {
+				err = fmt.Errorf("Couldn't authenticate via Globus Auth API (%d)", resp.StatusCode)
 			}
 		}
 	}
@@ -112,29 +117,71 @@ func (ep *Endpoint) authenticate(clientId uuid.UUID, clientSecret string) error 
 // auto-activates a Globus endpoint so we can access Transfer API resources
 // (https://docs.globus.org/api/transfer/endpoint_activation/#autoactivate_endpoint)
 func (ep *Endpoint) autoActivate() error {
-	activateUrl := fmt.Sprintf("%s/endpoint/%s/autoactivate",
-		globusTransferBaseURL, ep.Id)
-	req, err := http.NewRequest(http.MethodPost, activateUrl, nil)
+	activate := fmt.Sprintf("endpoint/%s/autoactivate", ep.Id)
+	req, err := ep.newRequest(http.MethodPost, activate, http.NoBody)
 	if err == nil {
-		req.Header = ep.Header
-
 		// send the request
 		client := &http.Client{}
 		var resp *http.Response
 		resp, err = client.Do(req)
 
 		// inspect the result
+		fmt.Printf("status code = %d (%d)\n", resp.StatusCode, resp.ContentLength)
 		if err == nil && resp.StatusCode != 200 {
-			// read and unmarshal the response
-			buffer := make([]byte, resp.ContentLength)
-			_, err = resp.Body.Read(buffer)
-			var result globusResult
-			json.Unmarshal(buffer, &result)
-			err = fmt.Errorf("Error in Globus endpoint auto-activation (%s): %s",
-				result.Code, result.Message)
+			if resp.ContentLength > 0 {
+				// read and unmarshal the response
+				buffer := make([]byte, resp.ContentLength)
+				_, err = resp.Body.Read(buffer)
+				if err == nil {
+					var result globusResult
+					err = json.Unmarshal(buffer, &result)
+					if err == nil {
+						err = fmt.Errorf("Error in Globus endpoint auto-activation (%s): %s",
+							result.Code, result.Message)
+					}
+				}
+			} else {
+				err = fmt.Errorf("Error in Globus endpoint auto-activation (%d)", resp.StatusCode)
+			}
 		}
 	}
 	return err
+}
+
+// constructs a new request to the auth server with the correct headers, etc
+// * method can be http.MethodGet, http.MethodPut, http.MethodPost, etc
+// * resource is the name of the desired endpoint/resource
+// * body can be http.NoBody
+func (ep *Endpoint) newRequest(method, resource string,
+	body io.Reader) (*http.Request, error) {
+	req, err := http.NewRequest(method,
+		fmt.Sprintf("%s/%s/%s", globusTransferBaseURL, globusTransferApiVersion, resource),
+		body,
+	)
+	if err == nil {
+		req.SetBasicAuth(config.Globus.Auth.ClientId.String(), ep.AccessToken)
+	}
+	return req, err
+}
+
+// performs a GET request on the given resource, returning the resulting
+// response and error
+func (ep *Endpoint) get(resource string, values url.Values) (*http.Response, error) {
+	var u *url.URL
+	u, err := url.ParseRequestURI(globusTransferBaseURL)
+	if err == nil {
+		u.Path = fmt.Sprintf("%s/%s", globusTransferApiVersion, resource)
+		u.RawQuery = values.Encode()
+		res := fmt.Sprintf("%v", u)
+		req, err := ep.newRequest(http.MethodGet, res, http.NoBody)
+		if err == nil {
+			req.SetBasicAuth(config.Globus.Auth.ClientId.String(),
+				config.Globus.Auth.ClientSecret)
+			var client http.Client
+			return client.Do(req)
+		}
+	}
+	return nil, err
 }
 
 func (ep *Endpoint) FilesStaged(filePaths []string) (bool, error) {
@@ -151,40 +198,33 @@ func (ep *Endpoint) FilesStaged(filePaths []string) (bool, error) {
 	// for each directory, check that its files are present
 	// (https://docs.globus.org/api/transfer/file_operations/#list_directory_contents)
 	for dir, files := range filesInDir {
-		p := url.Values{}
-		p.Add("path", dir)
-		p.Add("orderby", "name ASC")
+		values := url.Values{}
+		values.Add("path", dir)
+		values.Add("orderby", "name ASC")
+		resource := fmt.Sprintf("operation/endpoint/%s", ep.Id)
 
-		u, err := url.ParseRequestURI(globusTransferBaseURL)
+		resp, err := ep.get(resource, values)
+		defer resp.Body.Close()
 		if err == nil {
-			u.Path = fmt.Sprintf("operation/endpoint/%s", ep.Id)
-			u.RawQuery = p.Encode()
-
-			request := fmt.Sprintf("%v", u)
-			var resp *http.Response
-			resp, err = http.Get(request)
-			defer resp.Body.Close()
+			var body []byte
+			body, err = io.ReadAll(resp.Body)
 			if err == nil {
-				var body []byte
-				body, err = io.ReadAll(resp.Body)
+				// https://docs.globus.org/api/transfer/file_operations/#dir_listing_response
+				type DirListingResponse struct {
+					Data []struct {
+						Name string `json:"name"`
+					} `json:"DATA"`
+				}
+				var response DirListingResponse
+				err = json.Unmarshal(body, &response)
 				if err == nil {
-					// https://docs.globus.org/api/transfer/file_operations/#dir_listing_response
-					type DirListingResponse struct {
-						Data []struct {
-							Name string `json:"name"`
-						} `json:"DATA"`
+					filesPresent := make(map[string]bool)
+					for _, data := range response.Data {
+						filesPresent[data.Name] = true
 					}
-					var response DirListingResponse
-					err = json.Unmarshal(body, &response)
-					if err == nil {
-						filesPresent := make(map[string]bool)
-						for _, data := range response.Data {
-							filesPresent[data.Name] = true
-						}
-						for _, file := range files {
-							if _, present := filesPresent[file]; !present {
-								return false, nil
-							}
+					for _, file := range files {
+						if _, present := filesPresent[file]; !present {
+							return false, nil
 						}
 					}
 				}
@@ -207,10 +247,11 @@ func (ep *Endpoint) Transfers() ([]uuid.UUID, error) {
 
 	u, err := url.ParseRequestURI(globusTransferBaseURL)
 	if err == nil {
-		u.Path = "/task_list"
+		u.Path = fmt.Sprintf("%s/task_list", globusTransferApiVersion)
 		u.RawQuery = p.Encode()
 
 		request := fmt.Sprintf("%v", u)
+		print(request + "\n")
 		var resp *http.Response
 		resp, err = http.Get(request)
 		defer resp.Body.Close()
@@ -226,7 +267,9 @@ func (ep *Endpoint) Transfers() ([]uuid.UUID, error) {
 					} `json:"DATA"`
 				}
 				var response TaskListResponse
+				print(string(body) + "\n")
 				err = json.Unmarshal(body, &response)
+				print(err.Error() + "\n")
 				if err == nil {
 					taskIds := make([]uuid.UUID, len(response.Data))
 					for i, data := range response.Data {
@@ -247,7 +290,7 @@ func (ep *Endpoint) Transfer(dst core.Endpoint, files []core.FileTransfer) (uuid
 	if err == nil {
 		// first, get a submission ID
 		// https://docs.globus.org/api/transfer/task_submit/#get_submission_id
-		u.Path = "/submission_id"
+		u.Path = fmt.Sprintf("%s/submission_id", globusTransferApiVersion)
 		request := fmt.Sprintf("%v", u)
 		var resp *http.Response
 		resp, err = http.Get(request)
@@ -342,7 +385,7 @@ func (ep *Endpoint) Transfer(dst core.Endpoint, files []core.FileTransfer) (uuid
 func (ep *Endpoint) Status(id uuid.UUID) (core.TransferStatus, error) {
 	u, err := url.ParseRequestURI(globusTransferBaseURL)
 	if err == nil {
-		u.Path = fmt.Sprintf("/task/%s", id.String())
+		u.Path = fmt.Sprintf("%s/task/%s", globusTransferApiVersion, id.String())
 
 		request := fmt.Sprintf("%v", u)
 		var resp *http.Response
@@ -383,7 +426,7 @@ func (ep *Endpoint) Cancel(id uuid.UUID) error {
 	// https://docs.globus.org/api/transfer/task/#cancel_task_by_id
 	u, err := url.ParseRequestURI(globusTransferBaseURL)
 	if err == nil {
-		u.Path = fmt.Sprintf("/task/%s/cancel", id.String())
+		u.Path = fmt.Sprintf("%s/task/%s/cancel", globusTransferApiVersion, id.String())
 
 		request := fmt.Sprintf("%v", u)
 		var resp *http.Response

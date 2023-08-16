@@ -21,12 +21,12 @@ service:
 const VALID_ENDPOINTS string = `
 globus:
   auth:
-    client_id: aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
-    client_secret: MY_SECRET
+    client_id: ${DTS_GLOBUS_CLIENT_ID}
+    client_secret: ${DTS_GLOBUS_CLIENT_SECRET}
   endpoints:
     my-endpoint:
-      name: fake endpoint for testing
-      id: bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb
+      name: Globus test endpoint
+      id: ${DTS_GLOBUS_TEST_ENDPOINT}
 `
 
 // a valid databases config entry

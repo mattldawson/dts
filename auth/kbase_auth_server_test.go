@@ -2,8 +2,8 @@
 // and access a user's ORCID credential(s). The tests require the following
 // environment variables to be set:
 //
-// * KBASE_DEV_TOKEN: a valid unencoded KBase developer token
-// * KBASE_DEV_ORCID: an ORCID identifier corresponding to the developer token
+// * DTS_KBASE_DEV_TOKEN: a valid unencoded KBase developer token
+// * DTS_KBASE_TEST_ORCID: a valid ORCID identifier for a KBase user
 package auth
 
 import (
@@ -17,7 +17,7 @@ import (
 // constructed
 func TestNewKBaseAuthServer(t *testing.T) {
 	assert := assert.New(t) // binds assert to t
-	devToken := os.Getenv("KBASE_DEV_TOKEN")
+	devToken := os.Getenv("DTS_KBASE_DEV_TOKEN")
 	server, err := NewKBaseAuthServer(devToken)
 	assert.NotNil(server, "Authentication server not created")
 	assert.Nil(err, "Authentication server constructor triggered an error")
@@ -27,8 +27,8 @@ func TestNewKBaseAuthServer(t *testing.T) {
 // for the owner of the developer token
 func TestOrchidIds(t *testing.T) {
 	assert := assert.New(t) // binds assert to t
-	devToken := os.Getenv("KBASE_DEV_TOKEN")
-	orcidId := os.Getenv("KBASE_DEV_ORCID")
+	devToken := os.Getenv("DTS_KBASE_DEV_TOKEN")
+	orcidId := os.Getenv("DTS_KBASE_TEST_ORCID")
 	assert.False(orcidId == "")
 	server, _ := NewKBaseAuthServer(devToken)
 	orcidIds, err := server.OrcidIds()

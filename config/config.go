@@ -58,8 +58,6 @@ func readConfig(bytes []byte) error {
 	return err
 }
 
-// This helper validates the given service parameters, returning an
-// error indicating success or failure.
 func validateServiceParameters(params serviceConfig) error {
 	if params.Port < 0 || params.Port > 65535 {
 		return fmt.Errorf("Invalid port: %d (must be 0-65535)", params.Port)
@@ -71,39 +69,50 @@ func validateServiceParameters(params serviceConfig) error {
 	return nil
 }
 
+func validateGlobusEndpoints(params globusConfig) error {
+	if len(Globus.Endpoints) == 0 {
+		return fmt.Errorf("No endpoints were provided!")
+	}
+	for _, endpoint := range Globus.Endpoints {
+		if endpoint.Id.String() == "" { // invalid endpoint UUID
+			return fmt.Errorf("Invalid UUID specified for Globus endpoint '%s'", endpoint.Name)
+		}
+	}
+	return nil
+}
+
+func validateDatabases(databases map[string]databaseConfig) error {
+	if len(databases) == 0 {
+		return fmt.Errorf("No databases were provided!")
+	}
+	for name, db := range databases {
+		if db.URL == "" {
+			return fmt.Errorf("No URL given for database '%s'", name)
+		}
+	}
+	return nil
+}
+
 // This helper validates the given configfile, returning an error that indicates
 // success or failure.
 func validateConfig() error {
 	err := validateServiceParameters(Service)
-	if err != nil {
-		return err
+	if err == nil {
+		err = validateGlobusEndpoints(Globus)
+		if err == nil {
+			err = validateDatabases(Databases)
+		}
 	}
 
-	// Are there any endpoints?
-	numEndpoints := len(Globus.Endpoints)
-	if numEndpoints == 0 {
-		return fmt.Errorf("No endpoints were provided!")
-	}
-
-	// Were we given any databases?
-	if len(Databases) == 0 {
-		return fmt.Errorf("No databases were provided!")
-	}
-	// TODO: validate each database?
-	return nil
+	return err
 }
 
 // Initializes the ID mapping service configuration using the given YAML byte
 // data.
 func Init(yamlData []byte) error {
-
-	// Read the configuration from our YAML file.
 	err := readConfig(yamlData)
-	if err != nil {
-		return err
+	if err == nil {
+		err = validateConfig()
 	}
-
-	// Validate the configuration.
-	err = validateConfig()
 	return err
 }

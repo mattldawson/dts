@@ -12,7 +12,6 @@ const (
 	kbaseURL = "https://kbase.us"
 )
 
-
 // this type represents a proxy for the KBase Auth2 server
 // (https://github.com/kbase/auth2)
 type KBaseAuthServer struct {

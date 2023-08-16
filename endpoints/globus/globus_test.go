@@ -12,12 +12,12 @@ import (
 const globusConfig string = `
 globus:
   auth:
-    client_id: ${GLOBUS_CLIENT_ID}
-    client_secret: ${GLOBUS_CLIENT_SECRET}
+    client_id: ${DTS_GLOBUS_CLIENT_ID}
+    client_secret: ${DTS_GLOBUS_CLIENT_SECRET}
   endpoints:
     globus-jdp:
       name: NERSC DTN
-      id: 9d6d994a-6d04-11e5-ba46-22000b92c6ec
+      id: ${DTS_GLOBUS_TEST_ENDPOINT}
 `
 
 // this function gets called at the begіnning of a test session

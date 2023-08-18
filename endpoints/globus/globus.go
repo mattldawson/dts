@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"path"
@@ -41,6 +42,8 @@ type Endpoint struct {
 	Id uuid.UUID
 	// HTTPS header containing basic authentication info
 	Header http.Header
+	// HTTP client that caches queries
+	Client http.Client
 	// OAuth2 access token
 	AccessToken string
 }
@@ -62,8 +65,8 @@ func NewEndpoint(endpointName string) (core.Endpoint, error) {
 		config.Globus.Auth.ClientSecret)
 
 	if err == nil {
-		// auto-activate the endpoint so we can use it
-		err = ep.autoActivate()
+		// activate the endpoint so we can use it
+		err = ep.activate()
 	}
 
 	return ep, err
@@ -82,9 +85,8 @@ func (ep *Endpoint) authenticate(clientId uuid.UUID, clientSecret string) error 
 		req.Header.Add("Content-Type", "application-x-www-form-urlencoded")
 
 		// send the request
-		client := &http.Client{}
 		var resp *http.Response
-		resp, err = client.Do(req)
+		resp, err = ep.Client.Do(req)
 		if err == nil {
 			if resp.StatusCode == 200 {
 				// read and unmarshal the response
@@ -114,34 +116,73 @@ func (ep *Endpoint) authenticate(clientId uuid.UUID, clientSecret string) error 
 	return err
 }
 
-// auto-activates a Globus endpoint so we can access Transfer API resources
-// (https://docs.globus.org/api/transfer/endpoint_activation/#autoactivate_endpoint)
-func (ep *Endpoint) autoActivate() error {
-	activate := fmt.Sprintf("endpoint/%s/autoactivate", ep.Id)
-	req, err := ep.newRequest(http.MethodPost, activate, http.NoBody)
+// activates a Globus endpoint so we can access Transfer API resources
+// (https://docs.globus.org/api/transfer/endpoint_activation/#activate_endpoint)
+func (ep *Endpoint) activate() error {
+	// get activation requirements for the endpoint
+	resp, err := ep.get(fmt.Sprintf("endpoint/%s/activation_requirements", ep.Id), url.Values{})
 	if err == nil {
-		// send the request
-		client := &http.Client{}
-		var resp *http.Response
-		resp, err = client.Do(req)
-
-		// inspect the result
-		fmt.Printf("status code = %d (%d)\n", resp.StatusCode, resp.ContentLength)
-		if err == nil && resp.StatusCode != 200 {
-			if resp.ContentLength > 0 {
-				// read and unmarshal the response
-				buffer := make([]byte, resp.ContentLength)
-				_, err = resp.Body.Read(buffer)
-				if err == nil {
-					var result globusResult
-					err = json.Unmarshal(buffer, &result)
+		// read and unmarshal the response
+		buffer := make([]byte, 4096) // FIXME: check for truncation!
+		var n int
+		n, err = resp.Body.Read(buffer)
+		if err == io.EOF {
+			err = nil
+		}
+		if err == nil {
+			defer resp.Body.Close()
+			// https://docs.globus.org/api/transfer/endpoint_activation/#activation_requirements_document
+			type ActivationRequirement struct {
+				DataType    string `json:"DATA_TYPE"`
+				Type        string `json:"type"`
+				Name        string `json:"name"`
+				Description string `json:"description"`
+				UIName      string `json:"ui_name"`
+				Private     bool   `json:"private"`
+				Required    bool   `json:"required"`
+				Value       string `json:"value"`
+			}
+			type ActivationRequirements struct {
+				DataType                string                  `json:"DATA_TYPE"`
+				ExpiresIn               int                     `json:"expires_in"`
+				ExpireTime              string                  `json:"expires_time"`
+				AutoActivationSupported bool                    `json:"auto_activation_supported"`
+				Activated               bool                    `json:"activated"`
+				Length                  int                     `json:"length"`
+				OAuthServer             string                  `json:"oauth_server"`
+				Data                    []ActivationRequirement `json:"DATA"`
+			}
+			var requirements ActivationRequirements
+			err = json.Unmarshal(buffer[:n], &requirements)
+			if err == nil {
+				var activated bool
+				if requirements.Activated { // nothing to do!
+					return nil
+				} else if requirements.AutoActivationSupported {
+					// try to auto-activate
+					resp, err = ep.post(fmt.Sprintf("endpoint/%s/autoactivate", ep.Id), http.NoBody)
 					if err == nil {
-						err = fmt.Errorf("Error in Globus endpoint auto-activation (%s): %s",
-							result.Code, result.Message)
+						defer resp.Body.Close()
+						buffer := make([]byte, 4096)
+						n, err = resp.Body.Read(buffer)
+						if err == io.EOF {
+							err = nil
+						}
+						if err == nil {
+							var result globusResult
+							err = json.Unmarshal(buffer[:n], &result)
+							if err == nil {
+								if result.Code != "AutoActivationFailed" {
+									activated = true
+								}
+							}
+						}
 					}
 				}
-			} else {
-				err = fmt.Errorf("Error in Globus endpoint auto-activation (%d)", resp.StatusCode)
+
+				if !activated { // proceed with normal activation workflow
+					err = fmt.Errorf("TODO: implement full Globus endpoint activation!")
+				}
 			}
 		}
 	}
@@ -159,7 +200,7 @@ func (ep *Endpoint) newRequest(method, resource string,
 		body,
 	)
 	if err == nil {
-		req.SetBasicAuth(config.Globus.Auth.ClientId.String(), ep.AccessToken)
+		req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", ep.AccessToken))
 	}
 	return req, err
 }
@@ -173,12 +214,29 @@ func (ep *Endpoint) get(resource string, values url.Values) (*http.Response, err
 		u.Path = fmt.Sprintf("%s/%s", globusTransferApiVersion, resource)
 		u.RawQuery = values.Encode()
 		res := fmt.Sprintf("%v", u)
-		req, err := ep.newRequest(http.MethodGet, res, http.NoBody)
+		log.Printf("GET: %s", res)
+		req, err := http.NewRequest(http.MethodGet, res, http.NoBody)
 		if err == nil {
-			req.SetBasicAuth(config.Globus.Auth.ClientId.String(),
-				config.Globus.Auth.ClientSecret)
-			var client http.Client
-			return client.Do(req)
+			req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", ep.AccessToken))
+			return ep.Client.Do(req)
+		}
+	}
+	return nil, err
+}
+
+// performs a POST request on the given resource, returning the resulting
+// response and error
+func (ep *Endpoint) post(resource string, body io.Reader) (*http.Response, error) {
+	u, err := url.ParseRequestURI(globusTransferBaseURL)
+	if err == nil {
+		u.Path = fmt.Sprintf("%s/%s", globusTransferApiVersion, resource)
+		res := fmt.Sprintf("%v", u)
+		log.Printf("POST: %s", res)
+		var req *http.Request
+		req, err = http.NewRequest(http.MethodPost, res, body)
+		if err == nil {
+			req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", ep.AccessToken))
+			return ep.Client.Do(req)
 		}
 	}
 	return nil, err
@@ -239,44 +297,34 @@ func (ep *Endpoint) FilesStaged(filePaths []string) (bool, error) {
 
 func (ep *Endpoint) Transfers() ([]uuid.UUID, error) {
 	// https://docs.globus.org/api/transfer/task/#get_task_list
-	p := url.Values{}
-	p.Add("fields", "task_id")
-	p.Add("filter", "status:ACTIVE,INACTIVE/label:DTS")
-	p.Add("limit", "1000")
-	p.Add("orderby", "name ASC")
+	values := url.Values{}
+	values.Add("fields", "task_id")
+	values.Add("filter", "status:ACTIVE,INACTIVE/label:DTS")
+	values.Add("limit", "1000")
+	values.Add("orderby", "name ASC")
 
-	u, err := url.ParseRequestURI(globusTransferBaseURL)
+	resp, err := ep.get("task_list", url.Values{})
 	if err == nil {
-		u.Path = fmt.Sprintf("%s/task_list", globusTransferApiVersion)
-		u.RawQuery = p.Encode()
-
-		request := fmt.Sprintf("%v", u)
-		print(request + "\n")
-		var resp *http.Response
-		resp, err = http.Get(request)
 		defer resp.Body.Close()
+		var body []byte
+		body, err = io.ReadAll(resp.Body)
 		if err == nil {
-			var body []byte
-			body, err = io.ReadAll(resp.Body)
+			type TaskListResponse struct {
+				Length int `json:"length"`
+				Limit  int `json:"limіt"`
+				Data   []struct {
+					TaskId uuid.UUID `json:"task_id"`
+				} `json:"DATA"`
+			}
+			var response TaskListResponse
+			print(string(body) + "\n")
+			err = json.Unmarshal(body, &response)
 			if err == nil {
-				type TaskListResponse struct {
-					Length int `json:"length"`
-					Limit  int `json:"limіt"`
-					Data   []struct {
-						TaskId uuid.UUID `json:"task_id"`
-					} `json:"DATA"`
+				taskIds := make([]uuid.UUID, len(response.Data))
+				for i, data := range response.Data {
+					taskIds[i] = data.TaskId
 				}
-				var response TaskListResponse
-				print(string(body) + "\n")
-				err = json.Unmarshal(body, &response)
-				print(err.Error() + "\n")
-				if err == nil {
-					taskIds := make([]uuid.UUID, len(response.Data))
-					for i, data := range response.Data {
-						taskIds[i] = data.TaskId
-					}
-					return taskIds, nil
-				}
+				return taskIds, nil
 			}
 		}
 	}

@@ -41,7 +41,6 @@ func TestGlobusTransfers(t *testing.T) {
 	assert := assert.New(t) // binds assert to t
 	endpoint, _ := NewEndpoint("globus-jdp")
 	xfers, err := endpoint.Transfers()
-	print(err.Error() + "\n")
 	assert.NotNil(xfers)
 	assert.Nil(err)
 }

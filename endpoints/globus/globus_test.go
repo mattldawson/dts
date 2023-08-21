@@ -4,6 +4,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 
 	"dts/config"
@@ -40,9 +41,35 @@ func TestGlobusConstructor(t *testing.T) {
 func TestGlobusTransfers(t *testing.T) {
 	assert := assert.New(t) // binds assert to t
 	endpoint, _ := NewEndpoint("globus-jdp")
+	// this is just a smoke test--we don't check the contents of the result
 	xfers, err := endpoint.Transfers()
-	assert.NotNil(xfers)
+	assert.NotNil(xfers) // empty or non-empty slice
 	assert.Nil(err)
+}
+
+func TestGlobusFilesStaged(t *testing.T) {
+	assert := assert.New(t) // binds assert to t
+	endpoint, _ := NewEndpoint("globus-jdp")
+
+	// provide an empty slice of filenames, which should return true
+	staged, err := endpoint.FilesStaged([]string{})
+	assert.True(staged)
+	assert.Nil(err)
+
+	// provide a (probably) nonexistent file, which should return false
+	staged, err = endpoint.FilesStaged([]string{"yaddayadda/yadda/yaddayadda/yaddayaddayadda.xml"})
+	assert.False(staged)
+	assert.Nil(err)
+}
+
+func TestGlobusStatus(t *testing.T) {
+	assert := assert.New(t) // binds assert to t
+	endpoint, _ := NewEndpoint("globus-jdp")
+
+	// make up a transfer UUID and check its status
+	taskId := uuid.New()
+	_, err := endpoint.Status(taskId)
+	assert.NotNil(err)
 }
 
 // This runs setup, runs all tests, and does breakdown.

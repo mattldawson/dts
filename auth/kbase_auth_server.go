@@ -59,12 +59,18 @@ func NewKBaseAuthServer(accessToken string) (*KBaseAuthServer, error) {
 // emits an error representing the error in a response to the auth server
 func kbaseAuthError(response *http.Response) error {
 	// read the error message from the response body
-	body, err := io.ReadAll(response.Body)
-	if err == nil {
+	var err error
+	body, mErr := io.ReadAll(response.Body)
+	if mErr == nil {
 		var result kbaseAuthErrorResponse
-		err = json.Unmarshal(body, &result)
-		if err == nil {
-			err = fmt.Errorf(result.Message)
+		mErr = json.Unmarshal(body, &result)
+		if mErr == nil {
+			if len(result.Message) > 0 {
+				err = fmt.Errorf("KBase Auth error (%d): %s", response.StatusCode,
+					result.Message)
+			} else {
+				err = fmt.Errorf("KBase Auth error: %d", response.StatusCode)
+			}
 		}
 	}
 	return err

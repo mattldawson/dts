@@ -64,10 +64,12 @@ func NewEndpoint(endpointName string) (core.Endpoint, error) {
 	err := ep.authenticate(config.Globus.Auth.ClientId,
 		config.Globus.Auth.ClientSecret)
 
-	if err == nil {
-		// activate the endpoint so we can use it
-		err = ep.activate()
-	}
+	/*
+		if err == nil {
+			// activate the endpoint so we can use it
+			err = ep.activate()
+		}
+	*/
 
 	return ep, err
 }
@@ -90,8 +92,8 @@ func (ep *Endpoint) authenticate(clientId uuid.UUID, clientSecret string) error 
 		if err == nil {
 			if resp.StatusCode == 200 {
 				// read and unmarshal the response
-				buffer := make([]byte, resp.ContentLength)
-				_, err = resp.Body.Read(buffer)
+				var body []byte
+				body, err = io.ReadAll(resp.Body)
 				if err == nil {
 					type AuthResponse struct {
 						AccessToken    string `json:"access_token"`
@@ -102,7 +104,7 @@ func (ep *Endpoint) authenticate(clientId uuid.UUID, clientSecret string) error 
 					}
 
 					var authResponse AuthResponse
-					err = json.Unmarshal(buffer, &authResponse)
+					err = json.Unmarshal(body, &authResponse)
 					if err == nil {
 						// stash the access token
 						ep.AccessToken = authResponse.AccessToken
@@ -116,6 +118,8 @@ func (ep *Endpoint) authenticate(clientId uuid.UUID, clientSecret string) error 
 	return err
 }
 
+/* LOOKS LIKE GLOBUS ENDPOINT ACTIVATION ISN'T NEEDED FOR NEWER ENDPOINTS
+   ======================================================================
 // activates a Globus endpoint so we can access Transfer API resources
 // (https://docs.globus.org/api/transfer/endpoint_activation/#activate_endpoint)
 func (ep *Endpoint) activate() error {
@@ -155,11 +159,8 @@ func (ep *Endpoint) activate() error {
 			var requirements ActivationRequirements
 			err = json.Unmarshal(buffer[:n], &requirements)
 			if err == nil {
-				var activated bool
-				if requirements.Activated { // nothing to do!
-					return nil
-				} else if requirements.AutoActivationSupported {
-					// try to auto-activate
+        activated := requirements.Activated
+        if !activated && requirements.AutoActivationSupported { // auto-activate
 					resp, err = ep.post(fmt.Sprintf("endpoint/%s/autoactivate", ep.Id), http.NoBody)
 					if err == nil {
 						defer resp.Body.Close()
@@ -181,6 +182,9 @@ func (ep *Endpoint) activate() error {
 				}
 
 				if !activated { // proceed with normal activation workflow
+          for _, reqt := range requirements.Data {
+            log.Printf("%s - %s: %s", reqt.Type, reqt.Name, reqt.Description)
+          }
 					err = fmt.Errorf("TODO: implement full Globus endpoint activation!")
 				}
 			}
@@ -188,6 +192,7 @@ func (ep *Endpoint) activate() error {
 	}
 	return err
 }
+*/
 
 // constructs a new request to the auth server with the correct headers, etc
 // * method can be http.MethodGet, http.MethodPut, http.MethodPost, etc
@@ -317,7 +322,6 @@ func (ep *Endpoint) Transfers() ([]uuid.UUID, error) {
 				} `json:"DATA"`
 			}
 			var response TaskListResponse
-			print(string(body) + "\n")
 			err = json.Unmarshal(body, &response)
 			if err == nil {
 				taskIds := make([]uuid.UUID, len(response.Data))
@@ -338,10 +342,7 @@ func (ep *Endpoint) Transfer(dst core.Endpoint, files []core.FileTransfer) (uuid
 	if err == nil {
 		// first, get a submission ID
 		// https://docs.globus.org/api/transfer/task_submit/#get_submission_id
-		u.Path = fmt.Sprintf("%s/submission_id", globusTransferApiVersion)
-		request := fmt.Sprintf("%v", u)
-		var resp *http.Response
-		resp, err = http.Get(request)
+		resp, err := ep.get("submiѕsion_id", url.Values{})
 		defer resp.Body.Close()
 		if err == nil {
 			var body []byte
@@ -431,27 +432,27 @@ func (ep *Endpoint) Transfer(dst core.Endpoint, files []core.FileTransfer) (uuid
 }
 
 func (ep *Endpoint) Status(id uuid.UUID) (core.TransferStatus, error) {
-	u, err := url.ParseRequestURI(globusTransferBaseURL)
+	resource := fmt.Sprintf("task/%s", id.String())
+	resp, err := ep.get(resource, url.Values{})
+	defer resp.Body.Close()
 	if err == nil {
-		u.Path = fmt.Sprintf("%s/task/%s", globusTransferApiVersion, id.String())
-
-		request := fmt.Sprintf("%v", u)
-		var resp *http.Response
-		resp, err = http.Get(request)
-		defer resp.Body.Close()
+		var body []byte
+		body, err = io.ReadAll(resp.Body)
 		if err == nil {
-			var body []byte
-			body, err = io.ReadAll(resp.Body)
+			type TaskResponse struct {
+				Files            int    `json:"files"`
+				FilesTransferred int    `json:"files_transferred"`
+				IsPaused         bool   `json:"is_paused"`
+				Status           string `json:"status"`
+				Code             string `json:"code"`
+				Message          string `json:"message"`
+			}
+			var response TaskResponse
+			err = json.Unmarshal(body, &response)
 			if err == nil {
-				type TaskResponse struct {
-					Files            int    `json:"files"`
-					FilesTransferred int    `json:"files_transferred"`
-					IsPaused         bool   `json:"is_paused"`
-					Status           string `json:"status"`
-				}
-				var response TaskResponse
-				err = json.Unmarshal(body, &response)
-				if err == nil {
+				if strings.Contains(response.Code, "ClientError") {
+					return core.TransferStatus{}, fmt.Errorf(response.Message)
+				} else {
 					codes := map[string]core.TransferStatusCode{
 						"Active":    core.TransferStatusActive,
 						"Inactive":  core.TransferStatusInactive,
@@ -472,19 +473,13 @@ func (ep *Endpoint) Status(id uuid.UUID) (core.TransferStatus, error) {
 
 func (ep *Endpoint) Cancel(id uuid.UUID) error {
 	// https://docs.globus.org/api/transfer/task/#cancel_task_by_id
-	u, err := url.ParseRequestURI(globusTransferBaseURL)
+	resource := fmt.Sprintf("task/%s/cancel", id.String())
+	resp, err := ep.get(resource, url.Values{})
+	defer resp.Body.Close()
 	if err == nil {
-		u.Path = fmt.Sprintf("%s/task/%s/cancel", globusTransferApiVersion, id.String())
-
-		request := fmt.Sprintf("%v", u)
-		var resp *http.Response
-		resp, err = http.Get(request)
-		defer resp.Body.Close()
-		if err == nil {
-			// FIXME
-			//var body []byte
-			//body, err = io.ReadAll(resp.Body)
-		}
+		// FIXME
+		//var body []byte
+		//body, err = io.ReadAll(resp.Body)
 	}
 	return err
 }

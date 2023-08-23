@@ -24,9 +24,8 @@ func NewDatabase(dbName string) (core.Database, error) {
 		} else {
 			err = fmt.Errorf("Unknown database type for '%s'", dbName)
 		}
-		// stash it
-		if db != nil {
-			allDatabases[dbName] = db
+		if err == nil {
+			allDatabases[dbName] = db // stash it
 		}
 	}
 	return db, err

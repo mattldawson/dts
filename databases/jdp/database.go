@@ -2,12 +2,13 @@ package jdp
 
 import (
 	"bytes"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -20,9 +21,10 @@ import (
 	"dts/endpoints"
 )
 
-// the directory in which all JDP files reside, which is the absolute path
-// associated with all Frictionless Data Resource relative POSIX paths
-var filePathPrefix = "/global/dna/dm_archive/"
+const (
+	jdpBaseURL     = "https://files.jgi.doe.gov/"
+	filePathPrefix = "/global/dna/dm_archive/" // directory containing JDP files
+)
 
 // a mapping from file suffixes to format labels
 var suffixToFormat = map[string]string{
@@ -260,76 +262,101 @@ func dataResourceFromFile(file File, itsFieldName string) core.DataResource {
 type Database struct {
 	// database identifier
 	Id string
-	// JDP base URL
-	BaseURL string
-	// API token used for authentication
-	ApiToken string
+	// HTTP client that caches queries
+	Client http.Client
+	// shared secret used for authentication
+	Secret string
 	// mapping from staging UUIDs to JDP restoration request ID
 	StagingIds map[uuid.UUID]int
 }
 
 func NewDatabase(dbName string) (core.Database, error) {
-	dbConfig, ok := config.Databases[dbName]
+	_, ok := config.Databases[dbName]
 	if !ok {
 		return nil, fmt.Errorf("Database %s not found", dbName)
 	}
 
-	// read our API access token from a file
-	// FIXME
+	// make sure we have a shared secret
+	secret, haveSecret := os.LookupEnv("DTS_JDP_SECRET")
+	if !haveSecret {
+		return nil, fmt.Errorf("No shared secret was found for authentication")
+	}
 
 	return &Database{
 		Id:         dbName,
-		BaseURL:    dbConfig.URL,
+		Secret:     secret,
 		StagingIds: make(map[uuid.UUID]int),
 	}, nil
+}
+
+// performs a GET request on the given resource, returning the resulting
+// response and error
+func (db *Database) get(resource string, values url.Values) (*http.Response, error) {
+	var u *url.URL
+	u, err := url.ParseRequestURI(jdpBaseURL)
+	if err == nil {
+		u.Path = resource
+		u.RawQuery = values.Encode()
+		res := fmt.Sprintf("%v", u)
+		log.Printf("GET: %s", res)
+		req, err := http.NewRequest(http.MethodGet, res, http.NoBody)
+		if err == nil {
+			req.Header.Add("Authorization", db.Secret)
+			return db.Client.Do(req)
+		}
+	}
+	return nil, err
+}
+
+// performs a POST request on the given resource, returning the resulting
+// response and error
+func (db *Database) post(resource string, body io.Reader) (*http.Response, error) {
+	u, err := url.ParseRequestURI(jdpBaseURL)
+	if err == nil {
+		u.Path = resource
+		res := fmt.Sprintf("%v", u)
+		log.Printf("POST: %s", res)
+		var req *http.Request
+		req, err = http.NewRequest(http.MethodPost, res, body)
+		if err == nil {
+			req.Header.Add("Authorization", db.Secret)
+			req.Header.Set("Content-Type", "application/json")
+			return db.Client.Do(req)
+		}
+	}
+	return nil, err
 }
 
 // this helper extracts files for the JDP /search GET query with given parameters
 func (db *Database) filesForSearch(params url.Values) (core.SearchResults, error) {
 	var results core.SearchResults
 
-	u, err := url.ParseRequestURI(db.BaseURL)
+	resp, err := db.get("search", params)
 	if err == nil {
-		u.Path = "search"
-		u.RawQuery = params.Encode()
-
-		request, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%v", u), http.NoBody)
-		if err != nil {
-			return results, err
-		}
-		var secret string // FIXME: read from config
-		b64secret := base64.StdEncoding.EncodeToString([]byte(secret))
-		request.Header.Set("Authentication", fmt.Sprintf("Basic %s", b64secret))
-
-		var client http.Client
-		var resp *http.Response
-		resp, err = client.Do(request)
 		defer resp.Body.Close()
+		var body []byte
+		body, err = io.ReadAll(resp.Body)
 		if err == nil {
-			var body []byte
-			body, err = io.ReadAll(resp.Body)
+			type JDPResults struct {
+				Organisms []struct {
+					Files []File `json:"files"`
+					// this determines which file field is used for ITS project IDs
+					GroupedBy string `json:"grouped_by"`
+				} `json:"organisms"`
+			}
+			var jdpResults JDPResults
+			results.Resources = make([]core.DataResource, 0)
+			err = json.Unmarshal(body, &jdpResults)
 			if err == nil {
-				type JDPResults struct {
-					Organisms []struct {
-						Files []File `json:"files"`
-						// this determines which file field is used for ITS project IDs
-						GroupedBy string `json:"grouped_by"`
-					} `json:"organisms"`
-				}
-				var jdpResults JDPResults
-				results.Resources = make([]core.DataResource, 0)
-				err = json.Unmarshal(body, &jdpResults)
-				if err == nil {
-					for _, org := range jdpResults.Organisms {
-						resources := make([]core.DataResource, 0)
-						for _, file := range org.Files {
-							res := dataResourceFromFile(file, org.GroupedBy)
-							if res.Format != "" {
-								resources = append(resources, res)
-							}
+				for _, org := range jdpResults.Organisms {
+					resources := make([]core.DataResource, 0)
+					for _, file := range org.Files {
+						res := dataResourceFromFile(file, org.GroupedBy)
+						if res.Format != "" {
+							resources = append(resources, res)
 						}
-						results.Resources = append(results.Resources, resources...)
 					}
+					results.Resources = append(results.Resources, resources...)
 				}
 			}
 		}
@@ -404,37 +431,21 @@ func (db *Database) StageFiles(fileIds []string) (uuid.UUID, error) {
 		return xferId, err
 	}
 
-	u, err := url.ParseRequestURI(db.BaseURL)
+	resp, err := db.post("request_archived_files", bytes.NewReader(data))
 	if err == nil {
-		u.Path = "request_archived_files"
-
-		request, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%v", u), bytes.NewReader(data))
-		if err != nil {
-			return xferId, err
-		}
-		var secret string // FIXME: read from config
-		b64secret := base64.StdEncoding.EncodeToString([]byte(secret))
-		request.Header.Set("Authentication", fmt.Sprintf("Basic %s", b64secret))
-		request.Header.Set("Content-Type", "application/json")
-
-		var client http.Client
-		var resp *http.Response
-		resp, err = client.Do(request)
 		defer resp.Body.Close()
+		var body []byte
+		body, err = io.ReadAll(resp.Body)
 		if err == nil {
-			var body []byte
-			body, err = io.ReadAll(resp.Body)
-			if err == nil {
-				type RestoreResponse struct {
-					RequestId int `json:"request_id"`
-				}
+			type RestoreResponse struct {
+				RequestId int `json:"request_id"`
+			}
 
-				var jdpResp RestoreResponse
-				err = json.Unmarshal(body, &jdpResp)
-				if err == nil {
-					xferId = uuid.New()
-					db.StagingIds[xferId] = jdpResp.RequestId
-				}
+			var jdpResp RestoreResponse
+			err = json.Unmarshal(body, &jdpResp)
+			if err == nil {
+				xferId = uuid.New()
+				db.StagingIds[xferId] = jdpResp.RequestId
 			}
 		}
 	}
@@ -444,32 +455,26 @@ func (db *Database) StageFiles(fileIds []string) (uuid.UUID, error) {
 
 func (db *Database) StagingStatus(id uuid.UUID) (core.StagingStatus, error) {
 	if restoreId, found := db.StagingIds[id]; found {
-		u, err := url.ParseRequestURI(db.BaseURL)
+		resource := fmt.Sprintf("request_archived_files/requests/%d", restoreId)
+		resp, err := db.get(resource, url.Values{})
 		if err == nil {
-			u.Path = fmt.Sprintf("request_archived_files/requests/%d", restoreId)
-
-			request := fmt.Sprintf("%v", u)
-			var resp *http.Response
-			resp, err = http.Get(request)
 			defer resp.Body.Close()
+			var body []byte
+			body, err = io.ReadAll(resp.Body)
 			if err == nil {
-				var body []byte
-				body, err = io.ReadAll(resp.Body)
+				type JDPResult struct {
+					Status string `json:"status"` // "ready" or not
+				}
+				var jdpResult JDPResult
+				err = json.Unmarshal(body, &jdpResult)
 				if err == nil {
-					type JDPResult struct {
-						Status string `json:"status"` // "ready" or not
+					statusForString := map[string]core.StagingStatus{
+						"ready": core.StagingStatusSucceeded,
 					}
-					var jdpResult JDPResult
-					err = json.Unmarshal(body, &jdpResult)
-					if err == nil {
-						statusForString := map[string]core.StagingStatus{
-							"ready": core.StagingStatusSucceeded,
-						}
-						if status, ok := statusForString[jdpResult.Status]; ok {
-							return status, nil
-						} else {
-							return status, fmt.Errorf("Unrecognized staging status string: %s", jdpResult.Status)
-						}
+					if status, ok := statusForString[jdpResult.Status]; ok {
+						return status, nil
+					} else {
+						return status, fmt.Errorf("Unrecognized staging status string: %s", jdpResult.Status)
 					}
 				}
 			}

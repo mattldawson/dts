@@ -216,10 +216,12 @@ func (service *prototype) searchDatabase(w http.ResponseWriter,
 	db, err := databases.NewDatabase(dbName)
 	if err != nil {
 		writeError(w, err.Error(), 404)
+		return
 	}
 	results, err := db.Search(params)
 	if err != nil {
 		writeError(w, err.Error(), 400)
+		return
 	} else {
 		// Return our results to the caller.
 		jsonData, _ := jsonFromSearchResults(dbName, params.Query, results)

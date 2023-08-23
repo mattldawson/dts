@@ -40,8 +40,6 @@ type Endpoint struct {
 	Name string
 	// endpoint UUID (obtained from config)
 	Id uuid.UUID
-	// HTTPS header containing basic authentication info
-	Header http.Header
 	// HTTP client that caches queries
 	Client http.Client
 	// OAuth2 access token
@@ -55,9 +53,8 @@ func NewEndpoint(endpointName string) (core.Endpoint, error) {
 	}
 
 	ep := &Endpoint{
-		Name:   epConfig.Name,
-		Id:     epConfig.Id,
-		Header: make(http.Header),
+		Name: epConfig.Name,
+		Id:   epConfig.Id,
 	}
 
 	// authenticate to obtain a Globus Transfer API access token

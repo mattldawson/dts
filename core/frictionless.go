@@ -8,7 +8,7 @@ import (
 // a Frictionless data package describing a set of related resources
 // (https://specs.frictionlessdata.io/data-package/)
 type DataPackage struct {
-	// the name of the resource's file, with any suffix stripped off
+	// the name of the data package
 	Name string `json:"name"`
 	// a list of resources that belong to the package
 	Resources []DataResource `json:"resources"`

@@ -28,22 +28,24 @@ const (
 
 // a mapping from file suffixes to format labels
 var suffixToFormat = map[string]string{
-	"bam":     "bam",
-	"bam.bai": "bai",
-	"csv":     "csv",
-	"faa":     "fasta",
-	"fasta":   "fasta",
-	"fastq":   "fastq",
-	"gff":     "gff",
-	"gff3":    "gff3",
-	"gz":      "gz",
-	"bz":      "bzip",
-	"bz2":     "bzip2",
-	"tar":     "tar",
-	"tar.gz":  "tar",
-	"tar.bz":  "tar",
-	"tar.bz2": "tar",
-	"txt":     "text",
+	"bam":      "bam",
+	"bam.bai":  "bai",
+	"csv":      "csv",
+	"faa":      "fasta",
+	"fasta":    "fasta",
+	"fasta.gz": "fasta",
+	"fastq":    "fastq",
+	"fastq.gz": "fastq",
+	"gff":      "gff",
+	"gff3":     "gff3",
+	"gz":       "gz",
+	"bz":       "bzip",
+	"bz2":      "bzip2",
+	"tar":      "tar",
+	"tar.gz":   "tar",
+	"tar.bz":   "tar",
+	"tar.bz2":  "tar",
+	"txt":      "text",
 }
 
 // this gets populated automatically with the keys in suffixToFormat
@@ -70,6 +72,7 @@ var formatToMimeType = map[string]string{
 var fileTypeToMimeType = map[string]string{
 	"text":     "text/plain",
 	"fasta":    "text/plain",
+	"fasta.gz": "application/gzip",
 	"fastq":    "text/plain",
 	"fastq.gz": "application/gzip",
 	"tab":      "text/plain",
@@ -99,16 +102,15 @@ func formatFromFileName(fileName string) string {
 
 // extracts the file format from the name and type of the file
 func mimeTypeFromFormatAndTypes(format string, fileTypes []string) string {
+	// try to match the file type to a mime type
+	for _, fileType := range fileTypes {
+		if mimeType, ok := fileTypeToMimeType[fileType]; ok {
+			return mimeType
+		}
+	}
 	// check the file format to see whether it matches a mime type
 	if mimeType, ok := formatToMimeType[format]; ok {
 		return mimeType
-	} else {
-		// try to match the file type to a mime type
-		for _, fileType := range fileTypes {
-			if mimeType, ok := fileTypeToMimeType[fileType]; ok {
-				return mimeType
-			}
-		}
 	}
 	return ""
 }
@@ -174,38 +176,10 @@ func sourcesFromMetadata(md Metadata) []core.DataSource {
 	return sources
 }
 
-// creates a CURIE identifier from the given JDP file metadata
-func curieIdFromMetadata(md Metadata, itsFieldName string) string {
-	// construct the CURIE identifier for credit metadata
-	// NOTE: the ITS field name we are given doesn't always point to a valid
-	// NOTE: identifier
-	var itsField, otherItsField json.RawMessage
-	if strings.Contains(itsFieldName, "analysis_project_id") {
-		itsField = md.AnalysisProjectId
-		otherItsField = md.SequencingProjectId
-	} else if strings.Contains(itsFieldName, "sequencing_project_id") {
-		itsField = md.SequencingProjectId
-		otherItsField = md.AnalysisProjectId
-	}
-	itsProjectId := itsProjectIdFromMetadata(md, itsField)
-
-	if itsProjectId != -1 {
-		return fmt.Sprintf("jdp:%d", itsProjectId)
-	} else {
-		// try the other ITS field name, "just in case"
-		itsProjectId = itsProjectIdFromMetadata(md, otherItsField)
-		if itsProjectId != -1 {
-			return fmt.Sprintf("jdp:%d", itsProjectId)
-		} else {
-			return "jdp:unknown"
-		}
-	}
-}
-
 // creates a credit metadata item from JDP file metadata
-func creditFromCurieIdAndMetadata(curieId string, md Metadata) credit.CreditMetadata {
+func creditFromIdAndMetadata(id string, md Metadata) credit.CreditMetadata {
 	crd := credit.CreditMetadata{
-		Identifier:   curieId,
+		Identifier:   id,
 		ResourceType: "dataset",
 	}
 
@@ -236,24 +210,35 @@ func creditFromCurieIdAndMetadata(curieId string, md Metadata) credit.CreditMeta
 // creates a DataResource from a File (including metadata) and the name of the
 // field from which to extract the ITS project ID
 func dataResourceFromFile(file File, itsFieldName string) core.DataResource {
-	curieId := curieIdFromMetadata(file.Metadata, itsFieldName)
+	id := file.Id
 	format := formatFromFileName(file.Name)
 	fileTypes := fileTypesFromFile(file)
 	sources := sourcesFromMetadata(file.Metadata)
+
+	// the resource name is the filename with any suffix stripped off
+	name := file.Name
+	for _, suffix := range supportedSuffixes {
+		index := strings.LastIndex(name, suffix)
+		if index > 0 {
+			name = name[:index-1]
+			break
+		}
+	}
 
 	// we use relative file paths in accordance with the Frictionless
 	// Data Resource specification
 	filePath := filepath.Join(strings.ReplaceAll(file.Path, filePathPrefix, ""), file.Name)
 
 	return core.DataResource{
-		Name:      curieId,
+		Id:        id,
+		Name:      name,
 		Path:      filePath,
 		Format:    format,
 		MediaType: mimeTypeFromFormatAndTypes(format, fileTypes),
 		Bytes:     file.Size,
 		Hash:      file.MD5Sum,
 		Sources:   sources,
-		Credit:    creditFromCurieIdAndMetadata(curieId, file.Metadata),
+		Credit:    creditFromIdAndMetadata(id, file.Metadata),
 	}
 }
 

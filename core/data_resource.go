@@ -7,8 +7,9 @@ import (
 // a Frictionless data resource describing a file in a search
 // (https://specs.frictionlessdata.io/data-resource/)
 type DataResource struct {
-	// a name (CURIE ID) used to uniquely identify a resource in different databases
-	// (format is SOURCE:ID, e.g. JDP:<ITS project ID>)
+	// a unique identifier for the resource
+	Id string `json:"id"`
+	// the name of the resource's file, with any suffix stripped off
 	Name string `json:"name"`
 	// a relative path to the resource's file within a data package directory
 	Path string `json:"path"`

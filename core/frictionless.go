@@ -2,7 +2,22 @@ package core
 
 import (
 	"dts/credit"
+	"encoding/json"
 )
+
+// a Frictionless data package describing a set of related resources
+// (https://specs.frictionlessdata.io/data-package/)
+type DataPackage struct {
+	// the name of the resource's file, with any suffix stripped off
+	Name string `json:"name"`
+	// a list of resources that belong to the package
+	Resources []DataResource `json:"resources"`
+	// a list identifying the license or licenses under which this resource is
+	// managed (optional)
+	Licenses []DataLicense `json:"licenses,omitempty"`
+	// a list identifying the sources for this resource (optional)
+	Sources []DataSource `json:"sources,omitempty"`
+}
 
 // a Frictionless data resource describing a file in a search
 // (https://specs.frictionlessdata.io/data-resource/)
@@ -35,6 +50,8 @@ type DataResource struct {
 	Licenses []DataLicense `json:"licenses,omitempty"`
 	// credit metadata associated with the resource (optional for now)
 	Credit credit.CreditMetadata `json:"credit,omitempty"`
+	// any other metadata the DTS feels like reporting (optional, raw JSON object)
+	Metadata json.RawMessage `json:"metadata,omitempty"`
 }
 
 // information about the source of a DataResource

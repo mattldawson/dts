@@ -10,12 +10,14 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"golang.org/x/net/netutil"
 
+	"dts/auth"
 	"dts/config"
 	"dts/core"
 	"dts/databases"
@@ -54,22 +56,36 @@ type prototype struct {
 }
 
 // validates a header, ensuring that it uses the HTTP Bearer authentication
-// method with a valid token
-func validateBearer(header http.Header) error {
-	var client http.Client
-	req, err := http.NewRequest(
-		http.MethodGet,
-		"https://ci.kbase.us/services/auth/api/V2/me", // FIXME: hardwired for now
-		http.NoBody,
-	)
-	if err != nil {
-		return err
+// method with a valid token, and returns
+// 1. the decoded access token
+// 2. the ORCID ID associated with the access token
+// 3. any error encountered in the process
+func getAuthInfo(header http.Header) (string, string, error) {
+
+	// make sure we're using the Bearer method and that we can get an access token
+	authData := header.Get("Authorization")
+	if !strings.Contains(authData, "Bearer") {
+		return "", "", fmt.Errorf("Invalid authorization header")
 	}
-	var accessToken string // FIXME: read from config
-	b64Token := base64.StdEncoding.EncodeToString([]byte(accessToken))
-	req.Header.Set("Authentication", fmt.Sprintf("Bearer %s", b64Token))
-	_, err = client.Do(req)
-	return err
+	b64Token := authData[:len("Bearer ")]
+	accessTokenBytes, err := base64.StdEncoding.DecodeString(b64Token)
+	if err != nil {
+		return "", "", err
+	}
+
+	// check the access token against the KBase auth server
+	// and fetch the first ORCID associated with it
+	accessToken := string(accessTokenBytes)
+	authServer, err := auth.NewKBaseAuthServer(accessToken)
+	var orcid string
+	var orcids []string
+	if err == nil {
+		orcids, err = authServer.Orcids()
+		if err == nil {
+			orcid = orcids[0]
+		}
+	}
+	return accessToken, orcid, err
 }
 
 // this type encodes a JSON object for responding to root queries
@@ -106,6 +122,14 @@ type dbMetadata struct {
 // handler method for querying all databases
 func (service *prototype) getDatabases(w http.ResponseWriter,
 	r *http.Request) {
+
+	_, _, err := getAuthInfo(r.Header)
+	if err != nil {
+		log.Print(err.Error())
+		writeError(w, err.Error(), 401)
+		return
+	}
+
 	log.Printf("Querying organizational databases...")
 	dbs := make([]dbMetadata, 0)
 	for dbName, db := range config.Databases {
@@ -124,6 +148,14 @@ func (service *prototype) getDatabases(w http.ResponseWriter,
 // handler method for querying a single database for its metadata
 func (service *prototype) getDatabase(w http.ResponseWriter,
 	r *http.Request) {
+
+	_, _, err := getAuthInfo(r.Header)
+	if err != nil {
+		log.Print(err.Error())
+		writeError(w, err.Error(), 401)
+		return
+	}
+
 	vars := mux.Vars(r)
 	dbName := vars["db"]
 
@@ -193,6 +225,13 @@ func extractSearchParams(r *http.Request) (core.SearchParameters, error) {
 func (service *prototype) searchDatabase(w http.ResponseWriter,
 	r *http.Request) {
 
+	_, orcid, err := getAuthInfo(r.Header)
+	if err != nil {
+		log.Print(err.Error())
+		writeError(w, err.Error(), 401)
+		return
+	}
+
 	// fetch search parameters
 	dbName := r.FormValue("database")
 
@@ -213,7 +252,7 @@ func (service *prototype) searchDatabase(w http.ResponseWriter,
 	}
 
 	log.Printf("Searching database %s for files...", dbName)
-	db, err := databases.NewDatabase(dbName)
+	db, err := databases.NewDatabase(orcid, dbName)
 	if err != nil {
 		writeError(w, err.Error(), 404)
 		return
@@ -233,28 +272,31 @@ func getTransferRequest(r *http.Request) (TransferRequest, error) {
 	var req TransferRequest
 	var err error
 
-	// is this a JSON request?
-	if r.Header.Get("Content-Type") != "application/json" {
-		err = fmt.Errorf("Request content type must be \"application/json\".")
-	} else {
-		// do we have a valid token?
-		validateBearer(r.Header)
-
-		// read the request body
-		rBody, err := io.ReadAll(r.Body)
-		if err == nil {
-			err = json.Unmarshal(rBody, &req)
+	_, orcid, err := getAuthInfo(r.Header)
+	if err == nil {
+		// is this a JSON request?
+		if r.Header.Get("Content-Type") != "application/json" {
+			err = fmt.Errorf("Request content type must be \"application/json\".")
+		} else {
+			// read the request body
+			var rBody []byte
+			rBody, err = io.ReadAll(r.Body)
 			if err == nil {
-				// validate source and destination databases
-				if _, ok := config.Databases[req.Source]; !ok {
-					err = fmt.Errorf("Unknown source database: %s", req.Source)
-				} else if _, ok := config.Databases[req.Destination]; !ok {
-					err = fmt.Errorf("Unknown destination database: %s", req.Destination)
-				}
+				err = json.Unmarshal(rBody, &req)
+				if err == nil {
+					// validate source and destination databases
+					if _, ok := config.Databases[req.Source]; !ok {
+						err = fmt.Errorf("Unknown source database: %s", req.Source)
+					} else if _, ok := config.Databases[req.Destination]; !ok {
+						err = fmt.Errorf("Unknown destination database: %s", req.Destination)
+					}
 
-				// make sure there's at least one file in the request
-				if len(req.FileIds) == 0 {
-					err = fmt.Errorf("No file IDs specified for transfer!")
+					// make sure there's at least one file in the request
+					if len(req.FileIds) == 0 {
+						err = fmt.Errorf("No file IDs specified for transfer!")
+					}
+
+					req.Orcid = orcid
 				}
 			}
 		}
@@ -266,10 +308,15 @@ func getTransferRequest(r *http.Request) (TransferRequest, error) {
 // handler method for initiating a file transfer operation
 func (service *prototype) createTransfer(w http.ResponseWriter,
 	r *http.Request) {
+
 	// extract and validate request data
 	request, err := getTransferRequest(r)
+	if err != nil {
+		writeError(w, err.Error(), 401)
+		return
+	}
 
-	db, err := databases.NewDatabase(request.Source)
+	db, err := databases.NewDatabase(request.Orcid, request.Source)
 	xferId := uuid.New()
 	stagingId, err := db.StageFiles(request.FileIds)
 	if err != nil {
@@ -288,6 +335,13 @@ func (service *prototype) createTransfer(w http.ResponseWriter,
 // handler method for getting the status of a transfer
 func (service *prototype) getTransferStatus(w http.ResponseWriter,
 	r *http.Request) {
+
+	_, _, err := getAuthInfo(r.Header)
+	if err != nil {
+		log.Print(err.Error())
+		writeError(w, err.Error(), 401)
+		return
+	}
 
 	// Extract the transfer ID from the request.
 	vars := mux.Vars(r)

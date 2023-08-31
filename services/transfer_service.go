@@ -72,6 +72,8 @@ type TransferRequest struct {
 	FileIds []string `json:"file_ids"`
 	// name of destination database
 	Destination string `json:"destination"`
+	// ORCID identifier associated with the request
+	Orcid string `json:"orcid"`
 }
 
 // a response for a file transfer request (POST)

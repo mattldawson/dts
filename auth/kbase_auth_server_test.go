@@ -25,20 +25,20 @@ func TestNewKBaseAuthServer(t *testing.T) {
 
 // tests whether the authentication server can return the proper credentials
 // for the owner of the developer token
-func TestOrchidIds(t *testing.T) {
+func TestOrchids(t *testing.T) {
 	assert := assert.New(t) // binds assert to t
 	devToken := os.Getenv("DTS_KBASE_DEV_TOKEN")
-	orcidId := os.Getenv("DTS_KBASE_TEST_ORCID")
-	assert.False(orcidId == "")
+	orcid := os.Getenv("DTS_KBASE_TEST_ORCID")
+	assert.False(orcid == "")
 	server, _ := NewKBaseAuthServer(devToken)
-	orcidIds, err := server.OrcidIds()
+	orcids, err := server.Orcids()
 	assert.Nil(err)
-	var foundOrcidId bool
-	for _, id := range orcidIds {
-		if orcidId == id {
-			foundOrcidId = true
+	var foundOrcid bool
+	for _, id := range orcids {
+		if orcid == id {
+			foundOrcid = true
 			break
 		}
 	}
-	assert.True(foundOrcidId)
+	assert.True(foundOrcid)
 }

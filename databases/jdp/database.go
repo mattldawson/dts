@@ -247,6 +247,8 @@ func dataResourceFromFile(file File, itsFieldName string) core.DataResource {
 type Database struct {
 	// database identifier
 	Id string
+	// ORCID identifier for database proxy
+	Orcid string
 	// HTTP client that caches queries
 	Client http.Client
 	// shared secret used for authentication
@@ -255,7 +257,11 @@ type Database struct {
 	StagingIds map[uuid.UUID]int
 }
 
-func NewDatabase(dbName string) (core.Database, error) {
+func NewDatabase(orcid, dbName string) (core.Database, error) {
+	if orcid == "" {
+		return nil, fmt.Errorf("No ORCID ID was given")
+	}
+
 	_, ok := config.Databases[dbName]
 	if !ok {
 		return nil, fmt.Errorf("Database %s not found", dbName)
@@ -269,6 +275,7 @@ func NewDatabase(dbName string) (core.Database, error) {
 
 	return &Database{
 		Id:         dbName,
+		Orcid:      orcid,
 		Secret:     secret,
 		StagingIds: make(map[uuid.UUID]int),
 	}, nil
@@ -286,7 +293,7 @@ func (db *Database) get(resource string, values url.Values) (*http.Response, err
 		log.Printf("GET: %s", res)
 		req, err := http.NewRequest(http.MethodGet, res, http.NoBody)
 		if err == nil {
-			req.Header.Add("Authorization", db.Secret)
+			req.Header.Add("Authorization", fmt.Sprintf("%s_%s", db.Orcid, db.Secret))
 			return db.Client.Do(req)
 		}
 	}
@@ -304,7 +311,7 @@ func (db *Database) post(resource string, body io.Reader) (*http.Response, error
 		var req *http.Request
 		req, err = http.NewRequest(http.MethodPost, res, body)
 		if err == nil {
-			req.Header.Add("Authorization", db.Secret)
+			req.Header.Add("Authorization", fmt.Sprintf("%s_%s", db.Orcid, db.Secret))
 			req.Header.Set("Content-Type", "application/json")
 			return db.Client.Do(req)
 		}

@@ -34,26 +34,40 @@ type kbaseAuthErrorResponse struct {
 	Time       time.Duration `json:"time"`
 }
 
-// constructs a new proxy to the KBase authentication server using the given
-// OAuth2 access token (corresponding to the current user), or returns a non-nil
-// error explaining any issue encountered
+// here's a set of instances to the KBase auth server, mapped by OAuth2
+// access token
+var instances map[string]*KBaseAuthServer
+
+// constructs or retrieves a proxy to the KBase authentication server using the
+// given OAuth2 access token (corresponding to the current user), or returns a
+// non-nil error explaining any issue encountered
 func NewKBaseAuthServer(accessToken string) (*KBaseAuthServer, error) {
-	server := KBaseAuthServer{
-		URL:         fmt.Sprintf("%s/services/auth", kbaseURL),
-		ApiVersion:  2,
-		AccessToken: accessToken,
-	}
 
-	// verify that the access token works (i.e. that the user is logged in)
-	resp, err := server.get("me")
-	defer resp.Body.Close()
-	if err != nil {
-		return nil, err
-	} else if resp.StatusCode != 200 {
-		err = kbaseAuthError(resp)
+	// check our list of KBase auth server instances for this access token
+	if instances == nil {
+		instances = make(map[string]*KBaseAuthServer)
 	}
+	if server, found := instances[accessToken]; found {
+		return server, nil
+	} else {
+		server := KBaseAuthServer{
+			URL:         fmt.Sprintf("%s/services/auth", kbaseURL),
+			ApiVersion:  2,
+			AccessToken: accessToken,
+		}
 
-	return &server, err
+		// verify that the access token works (i.e. that the user is logged in)
+		resp, err := server.get("me")
+		defer resp.Body.Close()
+		if err != nil {
+			return nil, err
+		} else if resp.StatusCode != 200 {
+			err = kbaseAuthError(resp)
+		}
+
+		instances[accessToken] = &server
+		return &server, err
+	}
 }
 
 // emits an error representing the error in a response to the auth server
@@ -108,7 +122,7 @@ func (server *KBaseAuthServer) get(resource string) (*http.Response, error) {
 
 // returns the current KBase user's registered ORCID identifiers (and/or an error)
 // a user can have 0, 1, or many associated ORCID identifiers
-func (server *KBaseAuthServer) OrcidIds() ([]string, error) {
+func (server *KBaseAuthServer) Orcids() ([]string, error) {
 	resp, err := server.get("me")
 	var orcidIds []string
 	if err == nil {
@@ -126,6 +140,9 @@ func (server *KBaseAuthServer) OrcidIds() ([]string, error) {
 				}
 				err = json.Unmarshal(body, &result)
 				if err == nil {
+					if len(result.Idents) < 1 {
+						return nil, fmt.Errorf("No ORCID IDs associated with this user!")
+					}
 					orcidIds = make([]string, 0)
 					for _, pid := range result.Idents {
 						if pid.Provider == "OrcID" {

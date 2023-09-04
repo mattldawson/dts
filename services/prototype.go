@@ -328,6 +328,9 @@ func (service *prototype) createTransfer(w http.ResponseWriter,
 	if err != nil {
 		writeError(w, err.Error(), 500)
 	} else {
+		if service.Tasks == nil {
+			service.Tasks = make(map[uuid.UUID]task)
+		}
 		service.Tasks[xferId] = task{
 			FileIds:        request.FileIds,
 			Staging:        uuid.NullUUID{UUID: stagingId, Valid: true},

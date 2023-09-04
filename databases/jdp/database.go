@@ -115,25 +115,6 @@ func mimeTypeFromFormatAndTypes(format string, fileTypes []string) string {
 	return ""
 }
 
-// extracts the ITS project ID from the given metadata field, or returns -1 if
-// no such ID can be extracted
-func itsProjectIdFromMetadata(md Metadata, field json.RawMessage) int {
-	// is it an integer?
-	var intId int
-	err := json.Unmarshal(field, &intId)
-	if err == nil {
-		return intId
-	} else { // nope!
-		// how about an integer list?
-		var listId []int
-		err = json.Unmarshal(field, &listId)
-		if err == nil {
-			return listId[0] // use the first ID
-		}
-	}
-	return -1
-}
-
 // extracts file type information from the given File
 func fileTypesFromFile(file File) []string {
 	// TODO: See https://pkg.go.dev/encoding/json?utm_source=godoc#example-RawMessage-Unmarshal
@@ -207,9 +188,8 @@ func creditFromIdAndMetadata(id string, md Metadata) credit.CreditMetadata {
 	return crd
 }
 
-// creates a DataResource from a File (including metadata) and the name of the
-// field from which to extract the ITS project ID
-func dataResourceFromFile(file File, itsFieldName string) core.DataResource {
+// creates a DataResource from a File
+func dataResourceFromFile(file File) core.DataResource {
 	id := file.Id
 	format := formatFromFileName(file.Name)
 	fileTypes := fileTypesFromFile(file)
@@ -332,8 +312,6 @@ func (db *Database) filesForSearch(params url.Values) (core.SearchResults, error
 			type JDPResults struct {
 				Organisms []struct {
 					Files []File `json:"files"`
-					// this determines which file field is used for ITS project IDs
-					GroupedBy string `json:"grouped_by"`
 				} `json:"organisms"`
 			}
 			var jdpResults JDPResults
@@ -343,7 +321,7 @@ func (db *Database) filesForSearch(params url.Values) (core.SearchResults, error
 				for _, org := range jdpResults.Organisms {
 					resources := make([]core.DataResource, 0)
 					for _, file := range org.Files {
-						res := dataResourceFromFile(file, org.GroupedBy)
+						res := dataResourceFromFile(file)
 						if res.Format != "" {
 							resources = append(resources, res)
 						}

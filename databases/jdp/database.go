@@ -30,21 +30,28 @@ const (
 var suffixToFormat = map[string]string{
 	"bam":      "bam",
 	"bam.bai":  "bai",
+	"blasttab": "blast",
+	"bz":       "bzip",
+	"bz2":      "bzip2",
 	"csv":      "csv",
 	"faa":      "fasta",
 	"fasta":    "fasta",
 	"fasta.gz": "fasta",
 	"fastq":    "fastq",
 	"fastq.gz": "fastq",
+	"fna":      "fna",
 	"gff":      "gff",
 	"gff3":     "gff3",
 	"gz":       "gz",
-	"bz":       "bzip",
-	"bz2":      "bzip2",
+	"html":     "html",
+	"info":     "texinfo",
+	"out":      "text",
+	"pdf":      "pdf",
 	"tar":      "tar",
 	"tar.gz":   "tar",
 	"tar.bz":   "tar",
 	"tar.bz2":  "tar",
+	"tsv":      "tsv",
 	"txt":      "text",
 }
 
@@ -97,7 +104,7 @@ func formatFromFileName(fileName string) string {
 			return suffixToFormat[suffix]
 		}
 	}
-	return ""
+	return "unknown"
 }
 
 // extracts the file format from the name and type of the file
@@ -336,9 +343,7 @@ func (db *Database) filesForSearch(params url.Values) (core.SearchResults, error
 					resources := make([]core.DataResource, 0)
 					for _, file := range org.Files {
 						res := dataResourceFromFile(file)
-						if res.Format != "" {
-							resources = append(resources, res)
-						}
+						resources = append(resources, res)
 					}
 					results.Resources = append(results.Resources, resources...)
 				}

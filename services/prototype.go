@@ -9,6 +9,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -67,15 +68,20 @@ func getAuthInfo(header http.Header) (string, string, error) {
 	if !strings.Contains(authData, "Bearer") {
 		return "", "", fmt.Errorf("Invalid authorization header")
 	}
-	b64Token := authData[:len("Bearer ")]
+	b64Token := authData[len("Bearer "):]
 	accessTokenBytes, err := base64.StdEncoding.DecodeString(b64Token)
 	if err != nil {
 		return "", "", err
 	}
+	accessToken := string(accessTokenBytes)
+
+	// FIXME: KBase Auth server needs to be modified to use an RFC-compliant
+	// FIXME: Authorization header (https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Authorization)
+	// FIXME: so for now we just use a hard-wired ORCID
+	return accessToken, os.Getenv("DTS_KBASE_TEST_ORCID"), err
 
 	// check the access token against the KBase auth server
 	// and fetch the first ORCID associated with it
-	accessToken := string(accessTokenBytes)
 	authServer, err := auth.NewKBaseAuthServer(accessToken)
 	var orcid string
 	var orcids []string

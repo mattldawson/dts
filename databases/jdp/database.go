@@ -233,6 +233,8 @@ type Database struct {
 	Client http.Client
 	// shared secret used for authentication
 	Secret string
+	// SSO token used for interim JDP access
+	SsoToken string
 	// mapping from staging UUIDs to JDP restoration request ID
 	StagingIds map[uuid.UUID]int
 }
@@ -249,14 +251,18 @@ func NewDatabase(orcid, dbName string) (core.Database, error) {
 
 	// make sure we have a shared secret
 	secret, haveSecret := os.LookupEnv("DTS_JDP_SECRET")
-	if !haveSecret {
-		return nil, fmt.Errorf("No shared secret was found for authentication")
+	if !haveSecret { // check for SSO token
+		_, haveToken := os.LookupEnv("DTS_JDP_SSO_TOKEN")
+		if !haveToken {
+			return nil, fmt.Errorf("No shared secret or SSO token was found for JDP authentication")
+		}
 	}
 
 	return &Database{
 		Id:         dbName,
 		Orcid:      orcid,
 		Secret:     secret,
+		SsoToken:   os.Getenv("DTS_JDP_SSO_TOKEN"),
 		StagingIds: make(map[uuid.UUID]int),
 	}, nil
 }
@@ -273,7 +279,11 @@ func (db *Database) get(resource string, values url.Values) (*http.Response, err
 		log.Printf("GET: %s", res)
 		req, err := http.NewRequest(http.MethodGet, res, http.NoBody)
 		if err == nil {
-			req.Header.Add("Authorization", fmt.Sprintf("%s_%s", db.Orcid, db.Secret))
+			if len(db.Secret) > 0 {
+				req.Header.Add("Authorization", fmt.Sprintf("Bearer %s_%s", db.Orcid, db.Secret))
+			} else { // try SSO token
+				req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", db.SsoToken))
+			}
 			return db.Client.Do(req)
 		}
 	}
@@ -291,7 +301,11 @@ func (db *Database) post(resource string, body io.Reader) (*http.Response, error
 		var req *http.Request
 		req, err = http.NewRequest(http.MethodPost, res, body)
 		if err == nil {
-			req.Header.Add("Authorization", fmt.Sprintf("%s_%s", db.Orcid, db.Secret))
+			if len(db.Secret) > 0 {
+				req.Header.Add("Authorization", fmt.Sprintf("Bearer %s_%s", db.Orcid, db.Secret))
+			} else { // try SSO token
+				req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", db.SsoToken))
+			}
 			req.Header.Set("Content-Type", "application/json")
 			return db.Client.Do(req)
 		}
@@ -394,9 +408,15 @@ func (db *Database) StageFiles(fileIds []string) (uuid.UUID, error) {
 
 	// construct a POST request to restore archived files with the given IDs
 	type RestoreRequest struct {
-		Ids []string `json:"ids"`
+		Ids        []string `json:"ids"`
+		SendEmail  bool     `json:"send_email"`
+		ApiVersion string   `json:"api_version"`
 	}
-	data, err := json.Marshal(RestoreRequest{Ids: fileIds})
+	data, err := json.Marshal(RestoreRequest{
+		Ids:        fileIds,
+		SendEmail:  false,
+		ApiVersion: "2",
+	})
 	if err != nil {
 		return xferId, err
 	}

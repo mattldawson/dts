@@ -197,7 +197,7 @@ func creditFromIdAndMetadata(id string, md Metadata) credit.CreditMetadata {
 
 // creates a DataResource from a File
 func dataResourceFromFile(file File) core.DataResource {
-	id := file.Id
+	id := "JDP:" + file.Id
 	format := formatFromFileName(file.Name)
 	fileTypes := fileTypesFromFile(file)
 	sources := sourcesFromMetadata(file.Metadata)
@@ -321,7 +321,7 @@ func (db *Database) post(resource string, body io.Reader) (*http.Response, error
 }
 
 // this helper extracts files for the JDP /search GET query with given parameters
-func (db *Database) filesForSearch(params url.Values) (core.SearchResults, error) {
+func (db *Database) filesFromSearch(params url.Values) (core.SearchResults, error) {
 	var results core.SearchResults
 
 	resp, err := db.get("search", params)
@@ -384,10 +384,11 @@ func (db *Database) Search(params core.SearchParameters) (core.SearchResults, er
 	p.Add("p", strconv.Itoa(pageNumber))
 	p.Add("x", strconv.Itoa(pageSize))
 
-	return db.filesForSearch(p)
+	return db.filesFromSearch(p)
 }
 
 func (db *Database) FilesStaged(fileIds []string) (bool, error) {
+	// FIXME: This function looks like it has to be rewritten.
 	// fetch the paths for the files with the given IDs that are RESTORED
 	type FileFilter struct {
 		Ids      []string `json:"_id"`
@@ -399,7 +400,7 @@ func (db *Database) FilesStaged(fileIds []string) (bool, error) {
 	}
 	p := url.Values{}
 	p.Add("ff=", string(ff))
-	results, err := db.filesForSearch(p)
+	results, err := db.filesFromSearch(p)
 	if err != nil {
 		return false, err
 	}
@@ -417,8 +418,17 @@ func (db *Database) StageFiles(fileIds []string) (uuid.UUID, error) {
 		SendEmail  bool     `json:"send_email"`
 		ApiVersion string   `json:"api_version"`
 	}
+
+	// strip "JDP:" off the file IDs (and remove those without this prefix)
+	fileIdsWithoutPrefix := make([]string, 0)
+	for _, fileId := range fileIds {
+		if strings.HasPrefix(fileId, "JDP:") {
+			fileIdsWithoutPrefix = append(fileIdsWithoutPrefix, fileId[4:])
+		}
+	}
+
 	data, err := json.Marshal(RestoreRequest{
-		Ids:        fileIds,
+		Ids:        fileIdsWithoutPrefix,
 		SendEmail:  false,
 		ApiVersion: "2",
 	})

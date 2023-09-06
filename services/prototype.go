@@ -182,8 +182,8 @@ func (service *prototype) getDatabase(w http.ResponseWriter,
 	}
 }
 
-// This helper translates an array of engines.SearchResults to a JSON object
-// containing search results for the query (including the database name).
+// this helper translates an array of engines.SearchResults to a JSON object
+// containing search results for the query (including the database name)
 func jsonFromSearchResults(dbName string,
 	query string, results core.SearchResults) ([]byte, error) {
 
@@ -268,7 +268,7 @@ func (service *prototype) searchDatabase(w http.ResponseWriter,
 		writeError(w, err.Error(), 400)
 		return
 	} else {
-		// Return our results to the caller.
+		// return our results to the caller
 		jsonData, _ := jsonFromSearchResults(dbName, params.Query, results)
 		writeJson(w, jsonData)
 	}
@@ -410,27 +410,27 @@ func (service *prototype) uptime() float64 {
 	return time.Since(service.StartTime).Seconds()
 }
 
-// Constructs a prototype file transfer service given our configuration
+// constructs a prototype file transfer service given our configuration
 func NewDTSPrototype() (TransferService, error) {
 	service := new(prototype)
 	service.Name = "DTS prototype"
 	service.Version = core.Version
 	service.Port = -1
 
-	// Set up routing.
+	// set up routing
 	r := mux.NewRouter()
 	r.HandleFunc("/", service.getRoot).Methods("GET")
 
-	// Serve documentation endpoints.
+	// serve documentation endpoints
 	AddDocEndpoints(r)
 
-	// API calls are routed through /api.
+	// API calls are routed through /api
 	api := r.PathPrefix("/api").Subrouter()
 	api.NotFoundHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 	})
 
-	// Version 1.
+	// v1
 	api_v1 := api.PathPrefix("/v1").Subrouter()
 	api_v1.NotFoundHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
@@ -453,10 +453,8 @@ func (service *prototype) Start(port int) error {
 
 	service.StartTime = time.Now()
 
-	// Set the port.
+	// create a listener that limits the number of incoming connections
 	service.Port = port
-
-	// Create a listener that limits the number of incoming connections.
 	listener, err := net.Listen("tcp", ":"+strconv.Itoa(port))
 	if err != nil {
 		return err
@@ -464,12 +462,12 @@ func (service *prototype) Start(port int) error {
 	defer listener.Close()
 	listener = netutil.LimitListener(listener, config.Service.MaxConnections)
 
-	// Start the server.
+	// start the server
 	service.Server = &http.Server{
 		Handler: service.Router}
 	err = service.Server.Serve(listener)
 
-	// We don't report the server closing as an error.
+	// we don't report the server closing as an error
 	if err != http.ErrServerClosed {
 		return err
 	} else {

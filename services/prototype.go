@@ -42,7 +42,7 @@ type prototype struct {
 	Server *http.Server
 
 	// manager of transfer tasks
-	Tasks *TaskManager
+	Tasks *core.TaskManager
 }
 
 // validates a header, ensuring that it uses the HTTP Bearer authentication
@@ -311,20 +311,41 @@ func (service *prototype) createTransfer(w http.ResponseWriter,
 		return
 	}
 
-	db, err := databases.NewDatabase(request.Orcid, request.Source)
-	xferId := uuid.New()
-	stagingId, err := db.StageFiles(request.FileIds)
-	if err != nil {
-		writeError(w, err.Error(), 500)
-	} else {
-		service.Tasks[xferId] = task{
-			FileIds:        request.FileIds,
-			Staging:        uuid.NullUUID{UUID: stagingId, Valid: true},
-			SourceDatabase: db,
-		}
-		jsonData, _ := json.Marshal(TransferResponse{Id: xferId})
-		writeJson(w, jsonData)
+	// fetch source and destination databases
+	var source, destination core.Database
+	source, err = databases.NewDatabase(request.Orcid, request.Source)
+	if err == nil {
+		destination, err = databases.NewDatabase(request.Orcid, request.Destination)
 	}
+	if err != nil {
+		writeError(w, err.Error(), 404)
+		return
+	}
+
+	taskId, err := service.Tasks.Add(source, destination, request.FileIds)
+	if err == nil {
+		jsonData, _ := json.Marshal(TransferResponse{Id: taskId})
+		writeJson(w, jsonData)
+	} else {
+		writeError(w, err.Error(), 500)
+	}
+}
+
+// convert a transfer status code to a nice human-friendly string
+func statusAsString(statusCode core.TransferStatusCode) string {
+	switch statusCode {
+	case core.TransferStatusStaging:
+		return "staging"
+	case core.TransferStatusActive:
+		return "active"
+	case core.TransferStatusInactive:
+		return "inactive"
+	case core.TransferStatusSucceeded:
+		return "succeeded"
+	case core.TransferStatusFailed:
+		return "failed"
+	}
+	return "unknown"
 }
 
 // handler method for getting the status of a transfer
@@ -348,47 +369,23 @@ func (service *prototype) getTransferStatus(w http.ResponseWriter,
 	}
 
 	// fetch the status for the job using the appropriate task data
-	if task, ok := service.Tasks[xferId]; ok {
-		if err != nil {
-			writeError(w, err.Error(), 500)
-			return
+	status, err := service.Tasks.Status(xferId)
+	if err != nil {
+		errCode := 500
+		if strings.Contains(err.Error(), "not found") {
+			errCode = 404
 		}
-		resp := TransferStatusResponse{Id: xferId.String()}
-		if task.Staging.Valid { // we're in staging
-			resp.Status = "staging"
-		} else if task.Transfer.Valid {
-			// ask the endpoint itself for the file transfer status
-			endpoint := task.SourceDatabase.Endpoint()
-			s, err := endpoint.Status(task.Transfer.UUID)
-			if err != nil {
-				errStr := fmt.Sprintf("Error requesting status of transfer %s", xferId.String())
-				writeError(w, errStr, 500)
-				return
-			}
-			// convert the status code to a nice human-friendly string
-			switch s.StatusCode {
-			case core.TransferStatusUnknown:
-				resp.Status = "unknown"
-			case core.TransferStatusActive:
-				resp.Status = "active"
-			case core.TransferStatusInactive:
-				resp.Status = "inactive"
-			case core.TransferStatusSucceeded:
-				resp.Status = "succeeded"
-			case core.TransferStatusFailed:
-				resp.Status = "failed"
-			}
-			resp.NumFiles = s.NumFiles
-			resp.NumFilesTransferred = s.NumFilesTransferred
-		} else {
-			resp.Status = "unknown"
-		}
-		jsonData, _ := json.Marshal(resp)
-		writeJson(w, jsonData)
-	} else {
-		errStr := fmt.Sprintf("Unknown transfer ID: %s", xferId)
-		writeError(w, errStr, 404)
+		writeError(w, err.Error(), errCode)
+		return
 	}
+	resp := TransferStatusResponse{
+		Id:                  xferId.String(),
+		Status:              statusAsString(status.StatusCode),
+		NumFiles:            status.NumFiles,
+		NumFilesTransferred: status.NumFilesTransferred,
+	}
+	jsonData, _ := json.Marshal(resp)
+	writeJson(w, jsonData)
 }
 
 // returns the uptime for the service in seconds
@@ -448,7 +445,7 @@ func (service *prototype) Start(port int) error {
 	defer listener.Close()
 	listener = netutil.LimitListener(listener, config.Service.MaxConnections)
 
-	service.Tasks = NewTaskManager()
+	service.Tasks = core.NewTaskManager()
 
 	// start the server
 	service.Server = &http.Server{

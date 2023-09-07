@@ -409,6 +409,26 @@ func (db *Database) FilesStaged(fileIds []string) (bool, error) {
 	return len(results.Resources) == len(fileIds), nil
 }
 
+func (db *Database) FilePaths(fileIds []string) ([]string, error) {
+	var filePaths []string
+	type FileFilter struct {
+		Ids []string `json:"_id"`
+	}
+	ff, err := json.Marshal(FileFilter{Ids: fileIds})
+	if err == nil {
+		p := url.Values{}
+		p.Add("ff=", string(ff))
+		results, err := db.filesFromSearch(p)
+		if err == nil {
+			filePaths = make([]string, len(results.Resources))
+			for i, resource := range results.Resources {
+				filePaths[i] = resource.Path
+			}
+		}
+	}
+	return filePaths, err
+}
+
 func (db *Database) StageFiles(fileIds []string) (uuid.UUID, error) {
 	var xferId uuid.UUID
 

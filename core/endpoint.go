@@ -28,7 +28,7 @@ const (
 // this type conveys various information about a file transfer's status
 type TransferStatus struct {
 	// status code (see above)
-	StatusCode TransferStatusCode
+	Code TransferStatusCode
 	// total number of files being transferred
 	NumFiles int
 	// number of files that have been transferred

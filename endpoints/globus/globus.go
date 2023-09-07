@@ -457,7 +457,7 @@ func (ep *Endpoint) Status(id uuid.UUID) (core.TransferStatus, error) {
 						"Failed":    core.TransferStatusFailed,
 					}
 					return core.TransferStatus{
-						StatusCode:          codes[response.Status],
+						Code:                codes[response.Status],
 						NumFiles:            response.Files,
 						NumFilesTransferred: response.FilesTransferred,
 					}, nil

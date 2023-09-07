@@ -10,12 +10,10 @@ import (
 // this type holds multiple (possibly null) UUIDs corresponding to different
 // portions of a file transfer
 type taskType struct {
-	// source and destination databases
-	Source, Destination Database
-	// IDs and paths of files to be transferred (within the database)
-	FileIds, FilePaths []string
-	// staging and file transfer UUIDs (if any)
-	Staging, Transfer uuid.NullUUID
+	Source, Destination Database      // source and destination databases
+	FileIds, FilePaths  []string      // IDs and paths of files within Source
+	Staging, Transfer   uuid.NullUUID // staging and file transfer UUIDs (if any)
+	Finished            bool          // true iff the task has completed
 }
 
 // this type holds various channels used by the TaskManager to communicate
@@ -79,11 +77,15 @@ func processTasks(channels channelsType) {
 				var status TransferStatus
 				if task.Staging.Valid { // files are being staged
 					status = TransferStatus{
-						StatusCode: TransferStatusStaging,
-						NumFiles:   len(task.FileIds),
+						Code:     TransferStatusStaging,
+						NumFiles: len(task.FileIds),
 					}
 				} else if task.Transfer.Valid {
 					status, err = task.Source.Endpoint().Status(task.Transfer.UUID)
+					if status.Code == TransferStatusSucceeded || status.Code == TransferStatusFailed {
+						task.Finished = true
+						tasks[taskId] = task
+					}
 				} else {
 					err = fmt.Errorf("Task %s status in invalid state!", taskId.String())
 				}
@@ -95,7 +97,43 @@ func processTasks(channels channelsType) {
 			} else {
 				errorChan <- fmt.Errorf("Task %s not found!", taskId.String())
 			}
-		case <-pollChan: // time to poll endpoints for info
+		case <-pollChan: // time to update tasks statuses
+			var status TransferStatus
+			for taskId, task := range tasks {
+				var staged bool
+				if !task.Finished {
+					endpoint := task.Source.Endpoint()
+					if task.Staging.Valid {
+						// are the files staged?
+						staged, err = endpoint.FilesStaged(task.FilePaths)
+						if staged { // yup -- start the transfer
+							fileXfers := make([]FileTransfer, len(task.FilePaths))
+							for i, path := range task.FilePaths {
+								fileXfers[i] = FileTransfer{
+									SourcePath:      path,
+									DestinationPath: path, // FIXME: how do we get this?
+									// FIXME: MD5 checksum?
+								}
+							}
+							task.Transfer.UUID, err = endpoint.Transfer(task.Destination.Endpoint(), fileXfers)
+							if err == nil {
+								task.Staging.Valid = false
+								task.Transfer.Valid = true
+							}
+						}
+					} else if task.Transfer.Valid {
+						// has the task completed?
+						status, err = endpoint.Status(task.Transfer.UUID)
+						if err == nil && (status.Code == TransferStatusSucceeded || status.Code == TransferStatusFailed) {
+							task.Finished = true
+							tasks[taskId] = task
+						}
+					}
+					if err != nil {
+						// FIXME: log the issue!
+					}
+				}
+			}
 		case <-stopChan: // Close() called
 			break
 		}

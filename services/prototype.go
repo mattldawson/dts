@@ -380,7 +380,7 @@ func (service *prototype) getTransferStatus(w http.ResponseWriter,
 	}
 	resp := TransferStatusResponse{
 		Id:                  xferId.String(),
-		Status:              statusAsString(status.StatusCode),
+		Status:              statusAsString(status.Code),
 		NumFiles:            status.NumFiles,
 		NumFilesTransferred: status.NumFilesTransferred,
 	}

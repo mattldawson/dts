@@ -18,6 +18,7 @@ type TransferStatusCode int
 
 const (
 	TransferStatusUnknown   TransferStatusCode = iota
+	TransferStatusStaging                      // files being staged
 	TransferStatusActive                       // transfer in progress
 	TransferStatusInactive                     // transfer suspended
 	TransferStatusSucceeded                    // transfer completed successfully

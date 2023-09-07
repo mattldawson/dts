@@ -25,35 +25,24 @@ import (
 	// "dts/endpoints"
 )
 
-// this type holds multiple (possibly null) UUIDs corresponding to different
-// portions of a file transfer
-type task struct {
-	// staging and file transfer UUIDs (if any)
-	Staging, Transfer uuid.NullUUID
-	// IDs of files to be transferred
-	FileIds []string
-	// source database
-	SourceDatabase core.Database
-}
-
 // This type implements the TransferService interface, allowing file transfers
 // from JGI (via the JGI Data Portal) to KBase via Globus.
 type prototype struct {
-	// Name of the service.
+	// name of the service
 	Name string
-	// Service version identifier.
+	// service version identifier
 	Version string
-	// Time which the service was started
+	// time which the service was started
 	StartTime time.Time
-	// Port on which the service currently runs.
+	// port on which the service currently runs
 	Port int
-	// Router for REST endpoints.
+	// router for REST endpoints
 	Router *mux.Router
 	// HTTP server.
 	Server *http.Server
 
-	// table of UUIDs corresponding to different stages of transfers
-	Tasks map[uuid.UUID]task
+	// manager of transfer tasks
+	Tasks *TaskManager
 }
 
 // validates a header, ensuring that it uses the HTTP Bearer authentication
@@ -328,9 +317,6 @@ func (service *prototype) createTransfer(w http.ResponseWriter,
 	if err != nil {
 		writeError(w, err.Error(), 500)
 	} else {
-		if service.Tasks == nil {
-			service.Tasks = make(map[uuid.UUID]task)
-		}
 		service.Tasks[xferId] = task{
 			FileIds:        request.FileIds,
 			Staging:        uuid.NullUUID{UUID: stagingId, Valid: true},
@@ -461,6 +447,8 @@ func (service *prototype) Start(port int) error {
 	}
 	defer listener.Close()
 	listener = netutil.LimitListener(listener, config.Service.MaxConnections)
+
+	service.Tasks = NewTaskManager()
 
 	// start the server
 	service.Server = &http.Server{

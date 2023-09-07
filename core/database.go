@@ -38,6 +38,8 @@ const (
 type Database interface {
 	// search for files using the given parameters
 	Search(params SearchParameters) (SearchResults, error)
+	// returns a set of paths corresponding to the files with the given IDs
+	FilePaths(fileIds []string) ([]string, error)
 	// begins staging the files for a transfer, returning a UUID representing the
 	// staging operation
 	StageFiles(fileIds []string) (uuid.UUID, error)

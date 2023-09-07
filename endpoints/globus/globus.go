@@ -61,13 +61,6 @@ func NewEndpoint(endpointName string) (core.Endpoint, error) {
 	err := ep.authenticate(config.Globus.Auth.ClientId,
 		config.Globus.Auth.ClientSecret)
 
-	/*
-		if err == nil {
-			// activate the endpoint so we can use it
-			err = ep.activate()
-		}
-	*/
-
 	return ep, err
 }
 
@@ -114,82 +107,6 @@ func (ep *Endpoint) authenticate(clientId uuid.UUID, clientSecret string) error 
 	}
 	return err
 }
-
-/* LOOKS LIKE GLOBUS ENDPOINT ACTIVATION ISN'T NEEDED FOR NEWER ENDPOINTS
-   ======================================================================
-// activates a Globus endpoint so we can access Transfer API resources
-// (https://docs.globus.org/api/transfer/endpoint_activation/#activate_endpoint)
-func (ep *Endpoint) activate() error {
-	// get activation requirements for the endpoint
-	resp, err := ep.get(fmt.Sprintf("endpoint/%s/activation_requirements", ep.Id), url.Values{})
-	if err == nil {
-		// read and unmarshal the response
-		buffer := make([]byte, 4096) // FIXME: check for truncation!
-		var n int
-		n, err = resp.Body.Read(buffer)
-		if err == io.EOF {
-			err = nil
-		}
-		if err == nil {
-			defer resp.Body.Close()
-			// https://docs.globus.org/api/transfer/endpoint_activation/#activation_requirements_document
-			type ActivationRequirement struct {
-				DataType    string `json:"DATA_TYPE"`
-				Type        string `json:"type"`
-				Name        string `json:"name"`
-				Description string `json:"description"`
-				UIName      string `json:"ui_name"`
-				Private     bool   `json:"private"`
-				Required    bool   `json:"required"`
-				Value       string `json:"value"`
-			}
-			type ActivationRequirements struct {
-				DataType                string                  `json:"DATA_TYPE"`
-				ExpiresIn               int                     `json:"expires_in"`
-				ExpireTime              string                  `json:"expires_time"`
-				AutoActivationSupported bool                    `json:"auto_activation_supported"`
-				Activated               bool                    `json:"activated"`
-				Length                  int                     `json:"length"`
-				OAuthServer             string                  `json:"oauth_server"`
-				Data                    []ActivationRequirement `json:"DATA"`
-			}
-			var requirements ActivationRequirements
-			err = json.Unmarshal(buffer[:n], &requirements)
-			if err == nil {
-        activated := requirements.Activated
-        if !activated && requirements.AutoActivationSupported { // auto-activate
-					resp, err = ep.post(fmt.Sprintf("endpoint/%s/autoactivate", ep.Id), http.NoBody)
-					if err == nil {
-						defer resp.Body.Close()
-						buffer := make([]byte, 4096)
-						n, err = resp.Body.Read(buffer)
-						if err == io.EOF {
-							err = nil
-						}
-						if err == nil {
-							var result globusResult
-							err = json.Unmarshal(buffer[:n], &result)
-							if err == nil {
-								if result.Code != "AutoActivationFailed" {
-									activated = true
-								}
-							}
-						}
-					}
-				}
-
-				if !activated { // proceed with normal activation workflow
-          for _, reqt := range requirements.Data {
-            log.Printf("%s - %s: %s", reqt.Type, reqt.Name, reqt.Description)
-          }
-					err = fmt.Errorf("TODO: implement full Globus endpoint activation!")
-				}
-			}
-		}
-	}
-	return err
-}
-*/
 
 // constructs a new request to the auth server with the correct headers, etc
 // * method can be http.MethodGet, http.MethodPut, http.MethodPost, etc

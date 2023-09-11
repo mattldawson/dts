@@ -3,8 +3,9 @@
 
 # service parameters
 service:
-  port: 8080              # port on which the service listenѕ
-  maxConnections: 100     # maximum incoming HTTP connections
+  port: 8080           # port on which the service listenѕ
+  max_connections: 100 # maximum incoming HTTP connections
+  poll_interval:   60  # interval at which DTS checks transfer statuses
 
 endpoints: # file transfer endpoints (all names unique)
   globus: # named globus endpoints

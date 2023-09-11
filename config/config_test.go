@@ -14,7 +14,8 @@ import (
 const VALID_SERVICE string = `
 service:
   port: 8080
-  maxConnections: 100
+  max_connections: 100
+  poll_interval: 60
 `
 
 // a valid endpoints config entry
@@ -62,7 +63,7 @@ func TestInitRejectsBadPort(t *testing.T) {
 // tests whether config.Init reports an error for an invalid max number of
 // connections
 func TestInitRejectsBadMaxConnections(t *testing.T) {
-	yaml := "service:\n  maxConnections: 0\n\n" + VALID_ENDPOINTS + VALID_DATABASES
+	yaml := "service:\n  max_connections: 0\n\n" + VALID_ENDPOINTS + VALID_DATABASES
 	b := []byte(yaml)
 	err := Init(b)
 	assert.NotNil(t, err, "Config with bad maxConnections didn't trigger an error.")

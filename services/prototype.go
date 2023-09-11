@@ -445,7 +445,7 @@ func (service *prototype) Start(port int) error {
 	defer listener.Close()
 	listener = netutil.LimitListener(listener, config.Service.MaxConnections)
 
-	service.Tasks = core.NewTaskManager()
+	service.Tasks = core.NewTaskManager(config.Service.PollInterval)
 
 	// start the server
 	service.Server = &http.Server{

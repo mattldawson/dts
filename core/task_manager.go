@@ -144,18 +144,20 @@ func processTasks(channels channelsType) {
 // This type manages all the behind-the-scenes work involved in orchestrating
 // the staging and transfer of files.
 type TaskManager struct {
-	Channels channelsType
+	PollInterval int // interval at which task manager checks statuses (seconds)
+	Channels     channelsType
 }
 
-// creates a new task manager
-func NewTaskManager() *TaskManager {
+// creates a new task manager with the given poll interval
+func NewTaskManager(pollInterval int) *TaskManager {
 	mgr := TaskManager{
-		Channels: newChannels(),
+		PollInterval: pollInterval,
+		Channels:     newChannels(),
 	}
 
 	go processTasks(mgr.Channels) // start processing tasks
 	go func() {                   // start polling heartbeat
-		time.Sleep(60 * time.Second)
+		time.Sleep(time.Duration(mgr.PollInterval) * time.Second)
 		mgr.Channels.Poll <- struct{}{}
 	}()
 	return &mgr

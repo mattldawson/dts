@@ -12,10 +12,12 @@ import (
 
 // a type with service configuration parameters
 type serviceConfig struct {
-	// Port on which the service listens‥
+	// port on which the service listens
 	Port int `json:"port" yaml:"port"`
-	// Maximum number of allowed incoming connections.
-	MaxConnections int `json:"maxConnections" yaml:"maxConnections"`
+	// maximum number of allowed incoming connections
+	MaxConnections int `json:"max_connections" yaml:"max_connections"`
+	// polling interval for checking transfer statuses (seconds)
+	PollInterval int `json:"poll_interval" yaml:"poll_interval"`
 }
 
 // global config variables
@@ -37,12 +39,13 @@ type configFile struct {
 // indicating success or failure. All environment variables of the form
 // ${ENV_VAR} are expanded.
 func readConfig(bytes []byte) error {
-	// Before we do anything else, expand any provided environment variables.
+	// before we do anything else, expand any provided environment variables
 	bytes = []byte(os.ExpandEnv(string(bytes)))
 
 	var conf configFile
 	conf.Service.Port = 8080
 	conf.Service.MaxConnections = 100
+	conf.Service.PollInterval = 60
 	err := yaml.Unmarshal(bytes, &conf)
 	if err != nil {
 		log.Printf("Couldn't parse configuration data: %s\n", err)
@@ -63,7 +66,7 @@ func validateServiceParameters(params serviceConfig) error {
 		return fmt.Errorf("Invalid port: %d (must be 0-65535)", params.Port)
 	}
 	if params.MaxConnections <= 0 {
-		return fmt.Errorf("Invalid maxConnections: %d (must be positive)",
+		return fmt.Errorf("Invalid max_connections: %d (must be positive)",
 			params.MaxConnections)
 	}
 	return nil

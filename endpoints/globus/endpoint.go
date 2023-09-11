@@ -281,7 +281,7 @@ func (ep *Endpoint) Transfer(dst core.Endpoint, files []core.FileTransfer) (uuid
 				DataType          string `json:"DATA_TYPE"` // "transfer_item"
 				SourcePath        string `json:"source_path"`
 				DestinationPath   string `json:"destination_path"`
-				Recursive         bool   `json:"recursive"` // false
+				Recursive         bool   `json:"recursive"`
 				ExternalChecksum  string `json:"external_checksum"`
 				ChecksumAlgorithm string `json:"checksum_algorithm"`
 			}
@@ -302,7 +302,7 @@ func (ep *Endpoint) Transfer(dst core.Endpoint, files []core.FileTransfer) (uuid
 					DataType:          "transfer_item",
 					SourcePath:        file.SourcePath,
 					DestinationPath:   file.DestinationPath,
-					Recursive:         false,
+					Recursive:         true,
 					ExternalChecksum:  file.Hash,
 					ChecksumAlgorithm: file.HashAlgorithm,
 				}

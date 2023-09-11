@@ -302,7 +302,7 @@ func (ep *Endpoint) Transfer(dst core.Endpoint, files []core.FileTransfer) (uuid
 					SourcePath:       file.SourcePath,
 					DestinationPath:  file.DestinationPath,
 					Recursive:        false,
-					ExternalChecksum: file.MD5Checksum,
+					ExternalChecksum: file.Hash,
 				}
 			}
 			var data []byte

@@ -11,7 +11,9 @@ import (
 // portions of a file transfer
 type taskType struct {
 	Source, Destination Database      // source and destination databases
-	FileIds, FilePaths  []string      // IDs and paths of files within Source
+	FileIds             []string      // IDs of files within Source
+	FilePaths           []string      // relative file paths on Source
+	Hashes              []string      // (MD5) hashes used for validation
 	Staging, Transfer   uuid.NullUUID // staging and file transfer UUIDs (if any)
 	Finished            bool          // true iff the task has completed
 }
@@ -58,8 +60,15 @@ func processTasks(channels channelsType) {
 		select {
 		case newTask := <-taskChan: // Add() called
 			// resolve file paths using file IDs
-			newTask.FilePaths, err = newTask.Source.FilePaths(newTask.FileIds)
+			var fileInfo []DataResource
+			fileInfo, err = newTask.Source.FileInfo(newTask.FileIds)
 			if err == nil {
+				newTask.FilePaths = make([]string, len(fileInfo))
+				newTask.Hashes = make([]string, len(fileInfo))
+				for i, resource := range fileInfo {
+					newTask.FilePaths[i] = resource.Path
+					newTask.Hashes[i] = resource.Hash
+				}
 				// tell the source DB to stage the files, stash the task, and return
 				// its new ID
 				newTask.Staging.UUID, err = newTask.Source.StageFiles(newTask.FileIds)
@@ -112,7 +121,7 @@ func processTasks(channels channelsType) {
 								fileXfers[i] = FileTransfer{
 									SourcePath:      path,
 									DestinationPath: path, // FIXME: how do we get this?
-									// FIXME: MD5 checksum?
+									Hash:            task.Hashes[i],
 								}
 							}
 							task.Transfer.UUID, err = endpoint.Transfer(task.Destination.Endpoint(), fileXfers)
@@ -169,7 +178,7 @@ func (mgr *TaskManager) Add(source, destination Database, fileIDs []string) (uui
 	mgr.Channels.Task <- taskType{
 		Source:      source,
 		Destination: destination,
-		FilePaths:   fileIDs, // IDs are converted to paths asynchronously
+		FileIds:     fileIDs,
 	}
 	select {
 	case taskId = <-mgr.Channels.TaskId:

@@ -38,14 +38,12 @@ const (
 type Database interface {
 	// search for files using the given parameters
 	Search(params SearchParameters) (SearchResults, error)
-	// returns a set of paths corresponding to the files with the given IDs
-	FilePaths(fileIds []string) ([]string, error)
+	// returns a slice of Frictionless DataResource metadata for the files
+	// with the given IDs
+	FileInfo(fileIds []string) ([]DataResource, error)
 	// begins staging the files for a transfer, returning a UUID representing the
 	// staging operation
 	StageFiles(fileIds []string) (uuid.UUID, error)
-	// returns true if the files identified by IDs are present in the database's
-	// staging area AND are valid, false if not
-	FilesStaged(fileIds []string) (bool, error)
 	// returns the status of a given staging operation
 	StagingStatus(id uuid.UUID) (StagingStatus, error)
 	// returns the endpoint associated with this database

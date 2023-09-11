@@ -9,8 +9,8 @@ import (
 type FileTransfer struct {
 	// absolute source and destination paths on respective endpoints
 	SourcePath, DestinationPath string
-	// MD5 checksum for the file
-	MD5Checksum string
+	// Hash used to validate the file (usually an MD5 checksum)
+	Hash string
 }
 
 // this "enum" type encodes the status of a file transfer between endpoints

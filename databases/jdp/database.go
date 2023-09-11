@@ -387,28 +387,6 @@ func (db *Database) Search(params core.SearchParameters) (core.SearchResults, er
 	return db.filesFromSearch(p)
 }
 
-func (db *Database) FilesStaged(fileIds []string) (bool, error) {
-	// FIXME: This function looks like it has to be rewritten.
-	// fetch the paths for the files with the given IDs that are RESTORED
-	type FileFilter struct {
-		Ids      []string `json:"_id"`
-		Statuses []string `json:"file_status"`
-	}
-	ff, err := json.Marshal(FileFilter{Ids: fileIds, Statuses: []string{"RESTORED"}})
-	if err != nil {
-		return false, err
-	}
-	p := url.Values{}
-	p.Add("ff=", string(ff))
-	results, err := db.filesFromSearch(p)
-	if err != nil {
-		return false, err
-	}
-
-	// Did we get back all files we requested? If so, all files are staged.
-	return len(results.Resources) == len(fileIds), nil
-}
-
 func (db *Database) Resources(fileIds []string) ([]core.DataResource, error) {
 	type FileFilter struct {
 		Ids []string `json:"_id"`

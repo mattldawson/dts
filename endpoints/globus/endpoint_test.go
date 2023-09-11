@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"dts/config"
+	"dts/core"
 )
 
 const globusConfig string = `
@@ -52,12 +53,18 @@ func TestGlobusFilesStaged(t *testing.T) {
 	endpoint, _ := NewEndpoint("globus-jdp")
 
 	// provide an empty slice of filenames, which should return true
-	staged, err := endpoint.FilesStaged([]string{})
+	staged, err := endpoint.FilesStaged([]core.DataResource{})
 	assert.True(staged)
 	assert.Nil(err)
 
 	// provide a (probably) nonexistent file, which should return false
-	staged, err = endpoint.FilesStaged([]string{"yaddayadda/yadda/yaddayadda/yaddayaddayadda.xml"})
+	resources := []core.DataResource{
+		core.DataResource{
+			Id:   "yadda",
+			Path: "yaddayadda/yadda/yaddayadda/yaddayaddayadda.xml",
+		},
+	}
+	staged, err = endpoint.FilesStaged(resources)
 	assert.False(staged)
 	assert.Nil(err)
 }

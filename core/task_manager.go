@@ -112,7 +112,7 @@ func processTasks(channels channelsType) {
 							for i, resource := range task.Resources {
 								fileXfers[i] = FileTransfer{
 									SourcePath:      resource.Path,
-									DestinationPath: resource.Path, // FIXME: how do we get this?
+									DestinationPath: resource.Path,
 									Hash:            resource.Hash,
 								}
 							}

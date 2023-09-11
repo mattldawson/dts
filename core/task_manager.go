@@ -10,12 +10,11 @@ import (
 // this type holds multiple (possibly null) UUIDs corresponding to different
 // portions of a file transfer
 type taskType struct {
-	Source, Destination Database      // source and destination databases
-	FileIds             []string      // IDs of files within Source
-	FilePaths           []string      // relative file paths on Source
-	Hashes              []string      // (MD5) hashes used for validation
-	Staging, Transfer   uuid.NullUUID // staging and file transfer UUIDs (if any)
-	Finished            bool          // true iff the task has completed
+	Source, Destination Database       // source and destination databases
+	FileIds             []string       // IDs of files within Source
+	Resources           []DataResource // Frictionless DataResources for files
+	Staging, Transfer   uuid.NullUUID  // staging and file transfer UUIDs (if any)
+	Finished            bool           // true iff the task has completed
 }
 
 // this type holds various channels used by the TaskManager to communicate
@@ -60,15 +59,8 @@ func processTasks(channels channelsType) {
 		select {
 		case newTask := <-taskChan: // Add() called
 			// resolve file paths using file IDs
-			var fileInfo []DataResource
-			fileInfo, err = newTask.Source.FileInfo(newTask.FileIds)
+			newTask.Resources, err = newTask.Source.Resources(newTask.FileIds)
 			if err == nil {
-				newTask.FilePaths = make([]string, len(fileInfo))
-				newTask.Hashes = make([]string, len(fileInfo))
-				for i, resource := range fileInfo {
-					newTask.FilePaths[i] = resource.Path
-					newTask.Hashes[i] = resource.Hash
-				}
 				// tell the source DB to stage the files, stash the task, and return
 				// its new ID
 				newTask.Staging.UUID, err = newTask.Source.StageFiles(newTask.FileIds)
@@ -114,14 +106,14 @@ func processTasks(channels channelsType) {
 					endpoint := task.Source.Endpoint()
 					if task.Staging.Valid {
 						// are the files staged?
-						staged, err = endpoint.FilesStaged(task.FilePaths)
+						staged, err = endpoint.FilesStaged(task.Resources)
 						if staged { // yup -- start the transfer
-							fileXfers := make([]FileTransfer, len(task.FilePaths))
-							for i, path := range task.FilePaths {
+							fileXfers := make([]FileTransfer, len(task.Resources))
+							for i, resource := range task.Resources {
 								fileXfers[i] = FileTransfer{
-									SourcePath:      path,
-									DestinationPath: path, // FIXME: how do we get this?
-									Hash:            task.Hashes[i],
+									SourcePath:      resource.Path,
+									DestinationPath: resource.Path, // FIXME: how do we get this?
+									Hash:            resource.Hash,
 								}
 							}
 							task.Transfer.UUID, err = endpoint.Transfer(task.Destination.Endpoint(), fileXfers)

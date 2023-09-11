@@ -38,9 +38,9 @@ const (
 type Database interface {
 	// search for files using the given parameters
 	Search(params SearchParameters) (SearchResults, error)
-	// returns a slice of Frictionless DataResource metadata for the files
-	// with the given IDs
-	FileInfo(fileIds []string) ([]DataResource, error)
+	// returns a slice of Frictionless DataResources for the files with the
+	// given IDs
+	Resources(fileIds []string) ([]DataResource, error)
 	// begins staging the files for a transfer, returning a UUID representing the
 	// staging operation
 	StageFiles(fileIds []string) (uuid.UUID, error)

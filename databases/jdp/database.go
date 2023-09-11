@@ -409,7 +409,7 @@ func (db *Database) FilesStaged(fileIds []string) (bool, error) {
 	return len(results.Resources) == len(fileIds), nil
 }
 
-func (db *Database) FileInfo(fileIds []string) ([]core.DataResource, error) {
+func (db *Database) Resources(fileIds []string) ([]core.DataResource, error) {
 	type FileFilter struct {
 		Ids []string `json:"_id"`
 	}

@@ -161,11 +161,11 @@ func (ep *Endpoint) post(resource string, body io.Reader) (*http.Response, error
 	return nil, err
 }
 
-func (ep *Endpoint) FilesStaged(filePaths []string) (bool, error) {
+func (ep *Endpoint) FilesStaged(files []core.DataResource) (bool, error) {
 	// find all the directories in which these files reside
 	filesInDir := make(map[string][]string)
-	for _, filePath := range filePaths {
-		dir, file := path.Split(filePath)
+	for _, resource := range files {
+		dir, file := path.Split(resource.Path)
 		if _, found := filesInDir[dir]; !found {
 			filesInDir[dir] = make([]string, 0)
 		}
@@ -278,11 +278,12 @@ func (ep *Endpoint) Transfer(dst core.Endpoint, files []core.FileTransfer) (uuid
 			// https://docs.globus.org/api/transfer/task_submit/#submit_transfer_task
 			// https://docs.globus.org/api/transfer/task_submit/#transfer_item_fields
 			type TransferItem struct {
-				DataType         string `json:"DATA_TYPE"` // "transfer_item"
-				SourcePath       string `json:"source_path"`
-				DestinationPath  string `json:"destination_path"`
-				Recursive        bool   `json:"recursive"`         // false
-				ExternalChecksum string `json:"external_checksum"` // md5 checksum
+				DataType          string `json:"DATA_TYPE"` // "transfer_item"
+				SourcePath        string `json:"source_path"`
+				DestinationPath   string `json:"destination_path"`
+				Recursive         bool   `json:"recursive"` // false
+				ExternalChecksum  string `json:"external_checksum"`
+				ChecksumAlgorithm string `json:"checksum_algorithm"`
 			}
 			type SubmissionRequest struct {
 				DataType            string         `json":DATA_TYPE"` // "transfer"
@@ -298,11 +299,12 @@ func (ep *Endpoint) Transfer(dst core.Endpoint, files []core.FileTransfer) (uuid
 			xferItems := make([]TransferItem, len(files))
 			for i, file := range files {
 				xferItems[i] = TransferItem{
-					DataType:         "transfer_item",
-					SourcePath:       file.SourcePath,
-					DestinationPath:  file.DestinationPath,
-					Recursive:        false,
-					ExternalChecksum: file.Hash,
+					DataType:          "transfer_item",
+					SourcePath:        file.SourcePath,
+					DestinationPath:   file.DestinationPath,
+					Recursive:         false,
+					ExternalChecksum:  file.Hash,
+					ChecksumAlgorithm: file.HashAlgorithm,
 				}
 			}
 			var data []byte

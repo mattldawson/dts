@@ -9,8 +9,8 @@ import (
 type FileTransfer struct {
 	// absolute source and destination paths on respective endpoints
 	SourcePath, DestinationPath string
-	// Hash used to validate the file (usually an MD5 checksum)
-	Hash string
+	// Hash and hash algorithm used to validate the file
+	Hash, HashAlgorithm string
 }
 
 // this "enum" type encodes the status of a file transfer between endpoints
@@ -37,9 +37,9 @@ type TransferStatus struct {
 
 // This type represents an endpoint for transferring files.
 type Endpoint interface {
-	// returns true if the files with the given absolute paths are staged at this
-	// endpoint AND are valid, false otherwise
-	FilesStaged(filePaths []string) (bool, error)
+	// returns true if the files associated with the given DataResources are
+	// staged at this endpoint AND are valid, false otherwise
+	FilesStaged(files []DataResource) (bool, error)
 	// returns a list of UUIDs for all transfers associated with this endpoint
 	Transfers() ([]uuid.UUID, error)
 	// begins a transfer task that moves the files identified by the FileTransfer

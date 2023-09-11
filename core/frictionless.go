@@ -3,6 +3,7 @@ package core
 import (
 	"dts/credit"
 	"encoding/json"
+	"strings"
 )
 
 // a Frictionless data package describing a set of related resources
@@ -40,7 +41,7 @@ type DataResource struct {
 	Encoding string `json:"encoding,omitempty"`
 	// the size of the resource's file in bytes
 	Bytes int `json:"bytes"`
-	// the MD5 hash for the resource's file (other algorithms are indicated with
+	// the hash for the resource's file (other algorithms are indicated with
 	// a prefix to the hash delimited by a colon)
 	Hash string `json:"hash"`
 	// a list identifying the sources for this resource (optional)
@@ -52,6 +53,17 @@ type DataResource struct {
 	Credit credit.CreditMetadata `json:"credit,omitempty"`
 	// any other metadata the DTS feels like reporting (optional, raw JSON object)
 	Metadata json.RawMessage `json:"metadata,omitempty"`
+}
+
+// call this to get a string containing the name of the hashing algorithm used
+// by the receiver
+func (res DataResource) HashAlgorithm() string {
+	colon := strings.Index(res.Hash, ":")
+	if colon != -1 {
+		return res.Hash[:colon]
+	} else {
+		return "md5"
+	}
 }
 
 // information about the source of a DataResource

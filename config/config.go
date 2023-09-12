@@ -45,7 +45,7 @@ func readConfig(bytes []byte) error {
 	var conf configFile
 	conf.Service.Port = 8080
 	conf.Service.MaxConnections = 100
-	conf.Service.PollInterval = 60
+	conf.Service.PollInterval = 60000
 	err := yaml.Unmarshal(bytes, &conf)
 	if err != nil {
 		log.Printf("Couldn't parse configuration data: %s\n", err)

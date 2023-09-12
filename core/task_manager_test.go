@@ -29,6 +29,23 @@ func TestNewTaskManager(t *testing.T) {
 	mgr.Close()
 }
 
+func TestAddTask(t *testing.T) {
+	assert := assert.New(t) // binds assert to t
+
+	mgr, err := NewTaskManager(time.Duration(100) * time.Millisecond)
+	assert.Nil(err)
+	src := NewFakeDatabase()
+	dest := NewFakeDatabase()
+	taskId, err := mgr.Add(src, dest, []string{"file_a.dat", "file_b.dat"})
+	assert.Nil(err)
+	assert.True(taskId != uuid.UUID{})
+	status, err := mgr.Status(taskId)
+	assert.Nil(err)
+	assert.Equal(status.Code, TransferStatusActive)
+
+	mgr.Close()
+}
+
 // This runs setup, runs all tests, and does breakdown.
 func TestMain(m *testing.M) {
 	var status int

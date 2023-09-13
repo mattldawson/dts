@@ -39,4 +39,7 @@ jobs:
     - name: Testing DTS
       shell: bash
       run: |
-        go test -v ./...
+        go test -v ./... -coverprofile=coverage.out -covermode=atomic
+
+    - name: Uploading code coverage report to Codecov
+      uses: codecov/codecov-action@v3

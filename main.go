@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -38,6 +39,10 @@ func main() {
 		usage()
 	}
 	configFile := os.Args[1]
+
+	// enables a default structured logger with JSON output
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	slog.SetDefault(logger)
 
 	// Read the configuration file.
 	log.Printf("Reading configuration from '%s'...\n", configFile)

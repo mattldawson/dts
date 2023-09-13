@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -69,9 +70,11 @@ func processTasks(channels channelsType) {
 					taskId := uuid.New()
 					tasks[taskId] = newTask
 					taskIdChan <- taskId
+					slog.Info(fmt.Sprintf("Staging files for new task %s.", taskId.String()))
 				}
 			}
 			if err != nil {
+				slog.Error(err.Error())
 				errorChan <- err
 			}
 		case taskId := <-taskIdChan: // Status() called
@@ -94,10 +97,13 @@ func processTasks(channels channelsType) {
 				if err == nil {
 					statusChan <- status
 				} else {
+					slog.Error(err.Error())
 					errorChan <- err
 				}
 			} else {
-				errorChan <- fmt.Errorf("Task %s not found!", taskId.String())
+				err = fmt.Errorf("Task %s not found!", taskId.String())
+				slog.Error(err.Error())
+				errorChan <- err
 			}
 		case <-pollChan: // time to move things along
 			var status TransferStatus
@@ -109,6 +115,7 @@ func processTasks(channels channelsType) {
 						// are the files staged?
 						staged, err = endpoint.FilesStaged(task.Resources)
 						if staged { // yup -- start the transfer
+							slog.Info(fmt.Sprintf("File staging for task %s completed successfully.", taskId.String()))
 							fileXfers := make([]FileTransfer, len(task.Resources))
 							for i, resource := range task.Resources {
 								fileXfers[i] = FileTransfer{
@@ -121,6 +128,7 @@ func processTasks(channels channelsType) {
 							if err == nil {
 								task.Staging.Valid = false
 								task.Transfer.Valid = true
+								slog.Info(fmt.Sprintf("Beginning transfer for task %s.", taskId.String()))
 								tasks[taskId] = task
 							}
 						}
@@ -130,10 +138,15 @@ func processTasks(channels channelsType) {
 						if err == nil && (status.Code == TransferStatusSucceeded || status.Code == TransferStatusFailed) {
 							task.Finished = true
 							tasks[taskId] = task
+							if status.Code == TransferStatusSucceeded {
+								slog.Info(fmt.Sprintf("Transfer task %s completed successfully.", taskId.String()))
+							} else {
+								slog.Info(fmt.Sprintf("Transfer task %s failed.", taskId.String()))
+							}
 						}
 					}
 					if err != nil {
-						// FIXME: log the error
+						slog.Error(err.Error())
 					}
 				}
 			}
@@ -163,8 +176,10 @@ func NewTaskManager(pollInterval time.Duration) (*TaskManager, error) {
 
 	go processTasks(mgr.Channels) // start processing tasks
 	go func() {                   // start polling heartbeat
-		time.Sleep(mgr.PollInterval)
-		mgr.Channels.Poll <- struct{}{}
+		for {
+			time.Sleep(mgr.PollInterval)
+			mgr.Channels.Poll <- struct{}{}
+		}
 	}()
 	return &mgr, nil
 }

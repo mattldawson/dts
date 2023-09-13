@@ -11,13 +11,44 @@ import (
 )
 
 // the interval at which our test task manager polls to update status
-var pollInterval time.Duration = time.Duration(100) * time.Millisecond
+var pollInterval time.Duration = time.Duration(50) * time.Millisecond
 
 // the amount of time it takes a test database to stage files
-var stagingDuration time.Duration = time.Duration(300) * time.Millisecond
+var stagingDuration time.Duration = time.Duration(150) * time.Millisecond
 
 // the amount of time it takes a test endpoint to transfer files
-var transferDuration time.Duration = time.Second
+var transferDuration time.Duration = time.Duration(500) * time.Millisecond
+
+// a pause to give the task manager a bit of time
+var pause time.Duration = time.Duration(25) * time.Millisecond
+
+// file test metadata
+var testResources map[string]DataResource = map[string]DataResource{
+	"file1": DataResource{
+		Id:     "file1",
+		Name:   "file1.dat",
+		Path:   "dir1/file1.dat",
+		Format: "text",
+		Bytes:  1024,
+		Hash:   "d91f97974d06563cab48d4d43a17e08a",
+	},
+	"file2": DataResource{
+		Id:     "file2",
+		Name:   "file2.dat",
+		Path:   "dir2/file2.dat",
+		Format: "text",
+		Bytes:  2048,
+		Hash:   "d91f9e974d0e563cab48d4d43a17e08a",
+	},
+	"file3": DataResource{
+		Id:     "file3",
+		Name:   "file3.dat",
+		Path:   "dir3/file3.dat",
+		Format: "text",
+		Bytes:  4096,
+		Hash:   "e91f9e974d0e563cab48d4d43a17e08e",
+	},
+}
 
 // this function gets called at the begіnning of a test session
 func setup() {
@@ -47,7 +78,7 @@ func TestAddTask(t *testing.T) {
 	// queue up a transfer task between two phony databases
 	src := NewFakeDatabase()
 	dest := NewFakeDatabase()
-	taskId, err := mgr.Add(src, dest, []string{"file_a.dat", "file_b.dat"})
+	taskId, err := mgr.Add(src, dest, []string{"file1", "file2"})
 	assert.Nil(err)
 	assert.True(taskId != uuid.UUID{})
 
@@ -58,10 +89,17 @@ func TestAddTask(t *testing.T) {
 
 	// wait for the staging to complete and then check its status
 	// again (should be actively transferring)
-	time.Sleep(stagingDuration)
+	time.Sleep(pause + stagingDuration)
 	status, err = mgr.Status(taskId)
 	assert.Nil(err)
 	assert.Equal(TransferStatusActive, status.Code)
+
+	// wait again for the transfer to complete and then check its status
+	// (should have successfully completed)
+	time.Sleep(pause + transferDuration)
+	status, err = mgr.Status(taskId)
+	assert.Nil(err)
+	assert.Equal(TransferStatusSucceeded, status.Code)
 
 	mgr.Close()
 }
@@ -75,19 +113,25 @@ func TestMain(m *testing.M) {
 	os.Exit(status)
 }
 
+type FakeStagingRequest struct {
+	FileIds []string
+	Time    time.Time
+}
+
 // This type implements core.Database with only enough behavior
 // to test the task manager.
 type FakeDatabase struct {
-	StagingDuration time.Duration // time it takes to "stage files"
-	Endpt           *FakeEndpoint
+	Endpt   *FakeEndpoint
+	Staging map[uuid.UUID]FakeStagingRequest
 }
 
 // creates a new fake database that stages its 3 files
 func NewFakeDatabase() *FakeDatabase {
 	db := FakeDatabase{
-		StagingDuration: stagingDuration,
-		Endpt:           NewFakeSourceEndpoint(),
+		Endpt:   NewFakeEndpoint(),
+		Staging: make(map[uuid.UUID]FakeStagingRequest),
 	}
+	db.Endpt.Database = &db
 	return &db
 }
 
@@ -97,17 +141,38 @@ func (db *FakeDatabase) Search(params SearchParameters) (SearchResults, error) {
 }
 
 func (db *FakeDatabase) Resources(fileIds []string) ([]DataResource, error) {
-	resources := make([]DataResource, 3)
+	resources := make([]DataResource, 0)
 	var err error
+	for _, fileId := range fileIds {
+		if resource, found := testResources[fileId]; found {
+			resources = append(resources, resource)
+		} else {
+			err = fmt.Errorf("Unrecognized File ID: %s", fileId)
+			break
+		}
+	}
 	return resources, err
 }
 
 func (db *FakeDatabase) StageFiles(fileIds []string) (uuid.UUID, error) {
-	return uuid.New(), nil
+	id := uuid.New()
+	db.Staging[id] = FakeStagingRequest{
+		FileIds: fileIds,
+		Time:    time.Now(),
+	}
+	return id, nil
 }
 
 func (db *FakeDatabase) StagingStatus(id uuid.UUID) (StagingStatus, error) {
-	return StagingStatusUnknown, nil
+	if info, found := db.Staging[id]; found {
+		if time.Now().Sub(info.Time) >= stagingDuration {
+			return StagingStatusSucceeded, nil
+		} else {
+			return StagingStatusActive, nil
+		}
+	} else {
+		return StagingStatusUnknown, nil
+	}
 }
 
 func (db *FakeDatabase) Endpoint() Endpoint {
@@ -122,35 +187,37 @@ type TransferInfo struct {
 // This type implements core.Endpoint with only enough behavior
 // to test the task manager.
 type FakeEndpoint struct {
+	Database         *FakeDatabase // fake database attached to endpoint
 	TransferDuration time.Duration // time it takes to "transfer files"
-	Source           bool          // true if this endpoint represents a source, false if not
 	Xfers            map[uuid.UUID]TransferInfo
 }
 
 // creates a new fake source endpoint that transfers a fictional payload in 1
 // second
-func NewFakeSourceEndpoint() *FakeEndpoint {
+func NewFakeEndpoint() *FakeEndpoint {
 	return &FakeEndpoint{
 		TransferDuration: transferDuration,
-		Source:           true,
 		Xfers:            make(map[uuid.UUID]TransferInfo),
 	}
 }
 
-// creates a new fake destination endpoint
-func NewFakeDestinationEndpoint() *FakeEndpoint {
-	return &FakeEndpoint{
-		TransferDuration: transferDuration,
-		Source:           false,
-	}
-}
-
 func (ep *FakeEndpoint) FilesStaged(files []DataResource) (bool, error) {
-	if ep.Source {
+	if ep.Database != nil {
+		// are there any unrecognized files?
+		for _, file := range files {
+			if _, found := testResources[file.Id]; !found {
+				return false, fmt.Errorf("Unrecognized file: %s\n", file.Id)
+			}
+		}
 		// the source endpoint should report true for the staged files as long
 		// as the source database has had time to stage them
+		for _, req := range ep.Database.Staging {
+			if time.Now().Sub(req.Time) < stagingDuration {
+				return false, nil
+			}
+		}
 	}
-	return true, nil // FIXME
+	return true, nil
 }
 
 func (ep *FakeEndpoint) Transfers() ([]uuid.UUID, error) {
@@ -176,6 +243,10 @@ func (ep *FakeEndpoint) Transfer(dst Endpoint, files []FileTransfer) (uuid.UUID,
 
 func (ep *FakeEndpoint) Status(id uuid.UUID) (TransferStatus, error) {
 	if info, found := ep.Xfers[id]; found {
+		if info.Status.Code != TransferStatusSucceeded && time.Now().Sub(info.Time) >= transferDuration { // update if needed
+			info.Status.Code = TransferStatusSucceeded
+			ep.Xfers[id] = info
+		}
 		return info.Status, nil
 	} else {
 		return TransferStatus{}, fmt.Errorf("Invalid transfer ID: %s", id.String())

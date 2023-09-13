@@ -10,6 +10,15 @@ import (
 	"testing"
 )
 
+// the interval at which our test task manager polls to update status
+var pollInterval time.Duration = time.Duration(100) * time.Millisecond
+
+// the amount of time it takes a test database to stage files
+var stagingDuration time.Duration = time.Duration(300) * time.Millisecond
+
+// the amount of time it takes a test endpoint to transfer files
+var transferDuration time.Duration = time.Second
+
 // this function gets called at the begіnning of a test session
 func setup() {
 }
@@ -21,10 +30,10 @@ func breakdown() {
 func TestNewTaskManager(t *testing.T) {
 	assert := assert.New(t) // binds assert to t
 
-	mgr, err := NewTaskManager(time.Duration(100) * time.Millisecond)
+	mgr, err := NewTaskManager(pollInterval)
 	assert.NotNil(mgr)
 	assert.Nil(err)
-	assert.Equal(mgr.PollInterval, time.Duration(100)*time.Millisecond)
+	assert.Equal(pollInterval, mgr.PollInterval)
 
 	mgr.Close()
 }
@@ -32,16 +41,27 @@ func TestNewTaskManager(t *testing.T) {
 func TestAddTask(t *testing.T) {
 	assert := assert.New(t) // binds assert to t
 
-	mgr, err := NewTaskManager(time.Duration(100) * time.Millisecond)
+	mgr, err := NewTaskManager(pollInterval)
 	assert.Nil(err)
+
+	// queue up a transfer task between two phony databases
 	src := NewFakeDatabase()
 	dest := NewFakeDatabase()
 	taskId, err := mgr.Add(src, dest, []string{"file_a.dat", "file_b.dat"})
 	assert.Nil(err)
 	assert.True(taskId != uuid.UUID{})
+
+	// check its status (should be staging)
 	status, err := mgr.Status(taskId)
 	assert.Nil(err)
-	assert.Equal(status.Code, TransferStatusActive)
+	assert.Equal(TransferStatusStaging, status.Code)
+
+	// wait for the staging to complete and then check its status
+	// again (should be actively transferring)
+	time.Sleep(stagingDuration)
+	status, err = mgr.Status(taskId)
+	assert.Nil(err)
+	assert.Equal(TransferStatusActive, status.Code)
 
 	mgr.Close()
 }
@@ -59,12 +79,14 @@ func TestMain(m *testing.M) {
 // to test the task manager.
 type FakeDatabase struct {
 	StagingDuration time.Duration // time it takes to "stage files"
+	Endpt           *FakeEndpoint
 }
 
-// creates a new fake database that stages its 3 files in 300 ms
+// creates a new fake database that stages its 3 files
 func NewFakeDatabase() *FakeDatabase {
 	db := FakeDatabase{
-		StagingDuration: time.Duration(300) * time.Millisecond,
+		StagingDuration: stagingDuration,
+		Endpt:           NewFakeSourceEndpoint(),
 	}
 	return &db
 }
@@ -89,7 +111,7 @@ func (db *FakeDatabase) StagingStatus(id uuid.UUID) (StagingStatus, error) {
 }
 
 func (db *FakeDatabase) Endpoint() Endpoint {
-	return NewFakeSourceEndpoint()
+	return db.Endpt
 }
 
 type TransferInfo struct {
@@ -109,7 +131,7 @@ type FakeEndpoint struct {
 // second
 func NewFakeSourceEndpoint() *FakeEndpoint {
 	return &FakeEndpoint{
-		TransferDuration: time.Second,
+		TransferDuration: transferDuration,
 		Source:           true,
 		Xfers:            make(map[uuid.UUID]TransferInfo),
 	}
@@ -118,7 +140,7 @@ func NewFakeSourceEndpoint() *FakeEndpoint {
 // creates a new fake destination endpoint
 func NewFakeDestinationEndpoint() *FakeEndpoint {
 	return &FakeEndpoint{
-		TransferDuration: time.Second,
+		TransferDuration: transferDuration,
 		Source:           false,
 	}
 }

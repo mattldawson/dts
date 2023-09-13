@@ -64,10 +64,11 @@ func processTasks(channels channelsType) {
 				// tell the source DB to stage the files, stash the task, and return
 				// its new ID
 				newTask.Staging.UUID, err = newTask.Source.StageFiles(newTask.FileIds)
+				newTask.Staging.Valid = true
 				if err == nil {
-					xferId := uuid.New()
-					tasks[xferId] = newTask
-					taskIdChan <- xferId
+					taskId := uuid.New()
+					tasks[taskId] = newTask
+					taskIdChan <- taskId
 				}
 			}
 			if err != nil {
@@ -98,7 +99,7 @@ func processTasks(channels channelsType) {
 			} else {
 				errorChan <- fmt.Errorf("Task %s not found!", taskId.String())
 			}
-		case <-pollChan: // time to update tasks statuses
+		case <-pollChan: // time to move things along
 			var status TransferStatus
 			for taskId, task := range tasks {
 				var staged bool
@@ -120,6 +121,7 @@ func processTasks(channels channelsType) {
 							if err == nil {
 								task.Staging.Valid = false
 								task.Transfer.Valid = true
+								tasks[taskId] = task
 							}
 						}
 					} else if task.Transfer.Valid {
@@ -131,7 +133,7 @@ func processTasks(channels channelsType) {
 						}
 					}
 					if err != nil {
-						// FIXME: log the issue!
+						// FIXME: log the error
 					}
 				}
 			}

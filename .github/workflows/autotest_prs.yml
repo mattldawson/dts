@@ -7,7 +7,12 @@ on:
     branches: [ main ]
 
 env:
-  LAST_VERSION: 1422
+  DTS_KBASE_DEV_TOKEN: ${{ secrets.DTS_KBASE_DEV_TOKEN }}
+  DTS_KBASE_TEST_ORCID: ${{ secrets.DTS_KBASE_TEST_ORCID }}
+  DTS_GLOBUS_CLIENT_ID: ${{ secrets.DTS_GLOBUS_CLIENT_ID }}
+  DTS_GLOBUS_CLIENT_SECRET: ${{ secrets.DTS_GLOBUS_CLIENT_SECRET }}
+  DTS_GLOBUS_TEST_ENDPOINT: ${{ secrets.DTS_GLOBUS_TEST_ENDPOINT }}
+  DTS_JDP_ЅECRET: ${{ secrets.DTS_JDP_SECRET }}
 
 jobs:
 

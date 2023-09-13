@@ -286,7 +286,7 @@ func (ep *Endpoint) Transfer(dst core.Endpoint, files []core.FileTransfer) (uuid
 				ChecksumAlgorithm string `json:"checksum_algorithm"`
 			}
 			type SubmissionRequest struct {
-				DataType            string         `json":DATA_TYPE"` // "transfer"
+				DataType            string         `json:"DATA_TYPE"` // "transfer"
 				Id                  string         `json:"submission_id"`
 				Label               string         `json:"label"` // "DTS"
 				Data                []TransferItem `json:"DATA"`
@@ -324,8 +324,8 @@ func (ep *Endpoint) Transfer(dst core.Endpoint, files []core.FileTransfer) (uuid
 				request := fmt.Sprintf("%v", u)
 				var resp *http.Response
 				resp, err = http.Post(request, "application/json", bytes.NewReader(data))
-				defer resp.Body.Close()
 				if err == nil {
+					defer resp.Body.Close()
 					var body []byte
 					body, err = io.ReadAll(resp.Body)
 					if err == nil {

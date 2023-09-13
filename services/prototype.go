@@ -18,7 +18,7 @@ import (
 	"github.com/gorilla/mux"
 	"golang.org/x/net/netutil"
 
-	"dts/auth"
+	//	"dts/auth"
 	"dts/config"
 	"dts/core"
 	"dts/databases"
@@ -69,18 +69,20 @@ func getAuthInfo(header http.Header) (string, string, error) {
 	// FIXME: so for now we just use a hard-wired ORCID
 	return accessToken, os.Getenv("DTS_KBASE_TEST_ORCID"), err
 
-	// check the access token against the KBase auth server
-	// and fetch the first ORCID associated with it
-	authServer, err := auth.NewKBaseAuthServer(accessToken)
-	var orcid string
-	var orcids []string
-	if err == nil {
-		orcids, err = authServer.Orcids()
+	/*
+		// check the access token against the KBase auth server
+		// and fetch the first ORCID associated with it
+		authServer, err := auth.NewKBaseAuthServer(accessToken)
+		var orcid string
+		var orcids []string
 		if err == nil {
-			orcid = orcids[0]
+			orcids, err = authServer.Orcids()
+			if err == nil {
+				orcid = orcids[0]
+			}
 		}
-	}
-	return accessToken, orcid, err
+		return accessToken, orcid, err
+	*/
 }
 
 // this type encodes a JSON object for responding to root queries

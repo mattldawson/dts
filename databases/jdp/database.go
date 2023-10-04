@@ -407,9 +407,33 @@ func (db *Database) Search(params core.SearchParameters) (core.SearchResults, er
 	return db.filesFromSearch(p)
 }
 
-// this method needs a feature implemented by the JDP team.
 func (db *Database) Resources(fileIds []string) ([]core.DataResource, error) {
-	return nil, fmt.Errorf("Not yet implemented!")
+	// For the moment, this implementation is a stopgap to save the JDP team
+	// from implementing additional functionality for the DTS. Here we query JAMO
+	// directly for information about files that correspond to the given set of
+	// file IDs.
+	// JAMO read access is available without authentication on the LBL VPN and
+	// unavailable elsewhere, which complicates our testing of this feature.
+	// Hopefully we can find a better solution down the line.
+
+	jamoFiles, err := queryJamo(fileIds)
+	if err != nil {
+		return nil, err
+	}
+
+	// translate from JAMOese to Frictionless-ese
+	resources := make([]core.DataResource, len(jamoFiles))
+	for i, jamoFile := range jamoFiles {
+		resources[i] = core.DataResource{
+			Id:     jamoFile.Id,
+			Name:   filepath.Base(jamoFile.FilePath),
+			Path:   filepath.Dir(jamoFile.FilePath),
+			Format: jamoFile.Metadata.FileFormat,
+			Bytes:  jamoFile.FileSize,
+			Hash:   jamoFile.MD5Sum,
+		}
+	}
+	return resources, err
 }
 
 func (db *Database) StageFiles(fileIds []string) (uuid.UUID, error) {

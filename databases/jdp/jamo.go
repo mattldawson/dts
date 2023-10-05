@@ -11,13 +11,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 )
 
 // this type represents a request to JAMO's pagequery endpoint
 type jamoPageQuery struct {
-	Query     string   `json:"query"`
-	Fields    []string `json:"fields"`
-	Requestor string   `json:"requestor"`
+	Query     string `json:"query"`
+	Requestor string `json:"requestor"`
 }
 
 // this type represents an individual JAMO file record returned within a
@@ -50,6 +50,7 @@ type jamoFileRecord struct {
 		JatKey           string `json:"jat_key"`
 		JatPublishFlag   bool   `json:"jat_publish_flag"`
 	} `json:"metadata"`
+	FileName             string `json:"file_name"`
 	FilePath             string `json:"file_path"`
 	User                 string `json:"user"`
 	MD5Sum               string `json:"md5_sum"`
@@ -76,9 +77,21 @@ type jamoPageQueryResponse struct {
 // as the list of file IDs.
 func queryJamo(fileIds []string) ([]jamoFileRecord, error) {
 	// prepare a JAMO query with the desired file IDs
+	// (also record the indices of each file ID so we can preserve their order)
+	fileIdsString := "( "
+	indexForFileId := make(map[string]int)
+	for i, fileId := range fileIds {
+		if i == len(fileIds)-1 {
+			fileIdsString += fmt.Sprintf("%s )", fileId)
+		} else {
+			fileIdsString += fmt.Sprintf("%s, ", fileId)
+		}
+		indexForFileId[fileId] = i
+	}
 	payload, err := json.Marshal(jamoPageQuery{
-		Query:     "",
-		Fields:    []string{"_id", "file_path"},
+		Query: fmt.Sprintf("select "+
+			"_id, file_name, file_path, metadata.file_format, file_size, md5_sum "+
+			"where _id in %s", fileIdsString),
 		Requestor: "dts@kbase.us",
 	})
 	if err != nil {
@@ -90,47 +103,56 @@ func queryJamo(fileIds []string) ([]jamoFileRecord, error) {
 	var results jamoPageQueryResponse
 	const jamoBaseURL = "https://jamo-dev.jgi.doe.gov/api/metadata/"
 
-	{
-		const jamoPageQueryURL = jamoBaseURL + "pagequery"
-		req, err := http.NewRequest(http.MethodPost, jamoPageQueryURL, bytes.NewReader(payload))
-		if err != nil {
-			return nil, err
-		}
-		req.Header.Add("Content-type", "application/json; charset=utf-8")
-		resp, err := client.Do(req)
+	const jamoPageQueryURL = jamoBaseURL + "pagequery"
+	req, err := http.NewRequest(http.MethodPost, jamoPageQueryURL, bytes.NewReader(payload))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Add("Content-type", "application/json; charset=utf-8")
+	resp, err := client.Do(req)
+	if err == nil {
+		defer resp.Body.Close()
+		var body []byte
+		body, err = io.ReadAll(resp.Body)
 		if err == nil {
-			defer resp.Body.Close()
-			var body []byte
-			body, err = io.ReadAll(resp.Body)
-			if err == nil {
-				err = json.Unmarshal(body, &results)
-			}
+			err = json.Unmarshal(body, &results)
 		}
 	}
 
 	// sift file results into place and fetch remaining records
-	var records []jamoFileRecord
+	records := make([]jamoFileRecord, len(fileIds))
 	for err == nil {
-		for i := results.Start; i < results.End; i++ {
-			records = append(records, results.Records[i])
+		for i := results.Start - 1; i < results.End; i++ {
+			if index, found := indexForFileId[results.Records[i].Id]; found {
+				records[index] = results.Records[i]
+			} else {
+				err = fmt.Errorf("Unrequested record for file ID %s returned!",
+					results.Records[i].Id)
+				break
+			}
+		}
+		if err != nil {
+			break
 		}
 
 		// go back for more records
 		if results.End < results.RecordCount {
 			jamoNextPageURL := fmt.Sprintf("%snextpage/%s", jamoBaseURL, results.CursorId)
-			req, err := http.NewRequest(http.MethodGet, jamoNextPageURL, http.NoBody)
-			if err != nil {
-				break
-			}
-			var resp *http.Response
-			resp, err = client.Do(req)
+			req, err = http.NewRequest(http.MethodGet, jamoNextPageURL, http.NoBody)
 			if err == nil {
-				defer resp.Body.Close()
-				var body []byte
-				body, err = io.ReadAll(resp.Body)
+				resp, err = client.Do(req)
 				if err == nil {
-					err = json.Unmarshal(body, &results)
+					defer resp.Body.Close()
+					var body []byte
+					body, err = io.ReadAll(resp.Body)
+					if err == nil {
+						err = json.Unmarshal(body, &results)
+						if err == nil {
+						}
+					}
 				}
+				// give the ape some time to respond
+				time.Sleep(1 * time.Second)
 			}
 		} else {
 			break

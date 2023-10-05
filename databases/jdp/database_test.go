@@ -82,26 +82,42 @@ func TestSearch(t *testing.T) {
 	assert.Nil(err, "JDP search query encountered an error")
 }
 
-/* FIXME: This feature doesn't work--needs some work from JDP team
-// tests that the metadata returned by Database.Resources matches that
-// returned by Database.Search
 func TestResources(t *testing.T) {
-	assert := assert.New(t) // binds assert to t
-	orcid := os.Getenv("DTS_KBASE_TEST_ORCID")
-	db, _ := NewDatabase(orcid)
-	params := core.SearchParameters{
-		Query: "prochlorococcus",
+	// Since the Resources() method is backed by JAMO and not the JDP itself, it
+	// can only be called when the DTS is running within LBL's virtual private
+	// network.
+	if _, onVPN := os.LookupEnv("DTS_ON_LBL_VPN"); onVPN { // any value will work
+		assert := assert.New(t) // binds assert to t
+		orcid := os.Getenv("DTS_KBASE_TEST_ORCID")
+		db, _ := NewDatabase(orcid)
+		params := core.SearchParameters{
+			Query: "prochlorococcus",
+		}
+		results, _ := db.Search(params)
+		fileIds := make([]string, len(results.Resources))
+		for i, res := range results.Resources {
+			fileIds[i] = res.Id
+		}
+		resources, err := db.Resources(fileIds[:10])
+		assert.Equal(10, len(resources),
+			"JDP resource query didn't return requested number of results")
+		// JAMO doesn't return source/credit metadata, and sometimes doesn't
+		// have hashes either, so we have to check field by field
+		for i, _ := range resources {
+			jdpSearchResult := results.Resources[i]
+			resource := resources[i]
+			assert.Equal(jdpSearchResult.Id, resource.Id, "Resource ID mismatch")
+			assert.Equal(jdpSearchResult.Name, resource.Name, "Resource name mismatch")
+			assert.Equal(jdpSearchResult.Path, resource.Path, "Resource path mismatch")
+			assert.Equal(jdpSearchResult.Format, resource.Format, "Resource format mismatch")
+			assert.Equal(jdpSearchResult.Bytes, resource.Bytes, "Resource size mismatch")
+			assert.Equal(jdpSearchResult.MediaType, resource.MediaType, "Resource media type mismatch")
+			assert.Equal(jdpSearchResult.Credit.Identifier, resource.Credit.Identifier, "Resource credit ID mismatch")
+			assert.Equal(jdpSearchResult.Credit.ResourceType, resource.Credit.ResourceType, "Resource credit resource type mismatch")
+		}
+		assert.Nil(err, "JDP resource query encountered an error")
 	}
-	results, _ := db.Search(params)
-	fileIds := make([]string, len(results.Resources))
-	for i, res := range results.Resources {
-		fileIds[i] = res.Id
-	}
-	resources, err := db.Resources(fileIds[:10])
-	assert.Equal(results.Resources[:10], resources, "JDP resource query returned non-matching metadata")
-	assert.Nil(err, "JDP resource query encountered an error")
 }
-*/
 
 func TestEndpoint(t *testing.T) {
 	assert := assert.New(t) // binds assert to t

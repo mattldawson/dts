@@ -41,13 +41,15 @@ func NewEndpoint(endpointName string) (core.Endpoint, error) {
 	endpoint, found := allEndpoints[endpointName]
 	if !found {
 		// is it a Globus endpoint?
-		_, ok := config.Globus.Endpoints[endpointName]
-		if ok {
+		if config.Endpoints[endpointName].Provider == "globus" {
 			endpoint, err = globus.NewEndpoint(endpointName)
+		} else {
+			err = fmt.Errorf("Invalid provider for endpoint '%s': %s", endpointName,
+				config.Endpoints[endpointName].Provider)
 		}
 
 		// stash it
-		if endpoint != nil {
+		if err == nil {
 			allEndpoints[endpointName] = endpoint
 		}
 	} else {

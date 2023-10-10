@@ -9,7 +9,6 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -18,11 +17,10 @@ import (
 	"github.com/gorilla/mux"
 	"golang.org/x/net/netutil"
 
-	//	"dts/auth"
+	"dts/auth"
 	"dts/config"
 	"dts/core"
 	"dts/databases"
-	// "dts/endpoints"
 )
 
 // This type implements the TransferService interface, allowing file transfers
@@ -62,27 +60,20 @@ func getAuthInfo(header http.Header) (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
-	accessToken := string(accessTokenBytes)
+	accessToken := strings.TrimSpace(string(accessTokenBytes))
 
-	// FIXME: KBase Auth server needs to be modified to use an RFC-compliant
-	// FIXME: Authorization header (https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Authorization)
-	// FIXME: so for now we just use a hard-wired ORCID
-	return accessToken, os.Getenv("DTS_KBASE_TEST_ORCID"), err
-
-	/*
-		// check the access token against the KBase auth server
-		// and fetch the first ORCID associated with it
-		authServer, err := auth.NewKBaseAuthServer(accessToken)
-		var orcid string
-		var orcids []string
+	// check the access token against the KBase auth server
+	// and fetch the first ORCID associated with it
+	authServer, err := auth.NewKBaseAuthServer(accessToken)
+	var orcid string
+	var orcids []string
+	if err == nil {
+		orcids, err = authServer.Orcids()
 		if err == nil {
-			orcids, err = authServer.Orcids()
-			if err == nil {
-				orcid = orcids[0]
-			}
+			orcid = orcids[0]
 		}
-		return accessToken, orcid, err
-	*/
+	}
+	return accessToken, orcid, err
 }
 
 // this type encodes a JSON object for responding to root queries
@@ -96,6 +87,14 @@ type RootResponse struct {
 // handler method for root
 func (service *prototype) getRoot(w http.ResponseWriter,
 	r *http.Request) {
+
+	_, _, err := getAuthInfo(r.Header)
+	if err != nil {
+		log.Print(err.Error())
+		writeError(w, err.Error(), 401)
+		return
+	}
+
 	log.Printf("Querying root endpoint...")
 	data := RootResponse{
 		Name:    service.Name,

@@ -267,17 +267,12 @@ type Database struct {
 	StagingIds map[uuid.UUID]int
 }
 
-func NewDatabase(orcid, dbName string) (core.Database, error) {
+func NewDatabase(orcid string) (core.Database, error) {
 	if orcid == "" {
 		return nil, fmt.Errorf("No ORCID ID was given")
 	}
 
-	_, ok := config.Databases[dbName]
-	if !ok {
-		return nil, fmt.Errorf("Database %s not found", dbName)
-	}
-
-	// make sure we have a shared secret
+	// make sure we have a shared secret or an SSO token
 	secret, haveSecret := os.LookupEnv("DTS_JDP_SECRET")
 	if !haveSecret { // check for SSO token
 		_, haveToken := os.LookupEnv("DTS_JDP_SSO_TOKEN")
@@ -287,7 +282,7 @@ func NewDatabase(orcid, dbName string) (core.Database, error) {
 	}
 
 	return &Database{
-		Id:         dbName,
+		Id:         "jdp",
 		Orcid:      orcid,
 		Secret:     secret,
 		SsoToken:   os.Getenv("DTS_JDP_SSO_TOKEN"),
@@ -345,6 +340,7 @@ func (db *Database) post(resource string, body io.Reader) (*http.Response, error
 func (db *Database) filesFromSearch(params url.Values) (core.SearchResults, error) {
 	var results core.SearchResults
 
+	idEncountered := make(map[string]bool) // keep track of duplicates
 	resp, err := db.get("search", params)
 	if err == nil {
 		defer resp.Body.Close()
@@ -364,7 +360,10 @@ func (db *Database) filesFromSearch(params url.Values) (core.SearchResults, erro
 					resources := make([]core.DataResource, 0)
 					for _, file := range org.Files {
 						res := dataResourceFromFile(file)
-						resources = append(resources, res)
+						if _, encountered := idEncountered[res.Id]; !encountered {
+							resources = append(resources, res)
+							idEncountered[res.Id] = true
+						}
 					}
 					results.Resources = append(results.Resources, resources...)
 				}
@@ -408,18 +407,9 @@ func (db *Database) Search(params core.SearchParameters) (core.SearchResults, er
 	return db.filesFromSearch(p)
 }
 
+// this method needs a feature implemented by the JDP team.
 func (db *Database) Resources(fileIds []string) ([]core.DataResource, error) {
-	type FileFilter struct {
-		Ids []string `json:"_id"`
-	}
-	ff, err := json.Marshal(FileFilter{Ids: fileIds})
-	if err == nil {
-		p := url.Values{}
-		p.Add("ff=", string(ff))
-		results, err := db.filesFromSearch(p)
-		return results.Resources, err
-	}
-	return nil, err
+	return nil, fmt.Errorf("Not yet implemented!")
 }
 
 func (db *Database) StageFiles(fileIds []string) (uuid.UUID, error) {

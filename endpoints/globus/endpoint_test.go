@@ -33,14 +33,21 @@ import (
 )
 
 const globusConfig string = `
-globus:
-  auth:
-    client_id: ${DTS_GLOBUS_CLIENT_ID}
-    client_secret: ${DTS_GLOBUS_CLIENT_SECRET}
-  endpoints:
-    globus-jdp:
-      name: NERSC DTN
-      id: ${DTS_GLOBUS_TEST_ENDPOINT}
+endpoints:
+  globus-jdp:
+    name: NERSC DTN
+    id: ${DTS_GLOBUS_TEST_ENDPOINT}
+    provider: globus
+    auth:
+      client_id: ${DTS_GLOBUS_CLIENT_ID}
+      client_secret: ${DTS_GLOBUS_CLIENT_SECRET}
+  not-globus-jdp:
+    name: NERSC DTN
+    id: ${DTS_GLOBUS_TEST_ENDPOINT}
+    provider: not-globus
+    auth:
+      client_id: ${DTS_GLOBUS_CLIENT_ID}
+      client_secret: ${DTS_GLOBUS_CLIENT_SECRET}
 `
 
 // this function gets called at the begіnning of a test session
@@ -58,6 +65,14 @@ func TestGlobusConstructor(t *testing.T) {
 	endpoint, err := NewEndpoint("globus-jdp")
 	assert.NotNil(endpoint)
 	assert.Nil(err)
+}
+
+func TestBadGlobusConstructor(t *testing.T) {
+	assert := assert.New(t) // binds assert to t
+
+	endpoint, err := NewEndpoint("not-globus-jdp")
+	assert.Nil(endpoint)
+	assert.NotNil(err)
 }
 
 func TestGlobusTransfers(t *testing.T) {
@@ -100,7 +115,7 @@ func TestGlobusStatus(t *testing.T) {
 	assert.NotNil(err)
 }
 
-// This runs setup, runs all tests, and does breakdown.
+// this runs setup, runs all tests, and does breakdown
 func TestMain(m *testing.M) {
 	var status int
 	setup()

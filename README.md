@@ -1,7 +1,7 @@
 # Data Transfer Service (DTS)
 
-![build](https://github.com/jeff-cohere/dts/actions/workflows/autotest_prs.yml/badge.svg)
-[![codecov](https://codecov.io/gh/jeff-cohere/dts/graph/badge.svg?token=188OWRPPK6)](https://codecov.io/gh/jeff-cohere/dts)
+![build](https://github.com/kbase/dts/actions/workflows/autotest_prs.yml/badge.svg)
+[![codecov](https://codecov.io/gh/kbase/dts/graph/badge.svg?token=188OWRPPK6)](https://codecov.io/gh/kbase/dts)
 
 The Data Transfer Service is a web service that handles requests for file
 transfers between participating organizations interested in exchanging

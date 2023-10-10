@@ -79,10 +79,10 @@ func NewKBaseAuthServer(accessToken string) (*KBaseAuthServer, error) {
 
 		// verify that the access token works (i.e. that the user is logged in)
 		resp, err := server.get("me")
-		defer resp.Body.Close()
 		if err != nil {
 			return nil, err
 		} else if resp.StatusCode != 200 {
+			defer resp.Body.Close()
 			err = kbaseAuthError(resp)
 		}
 
@@ -125,16 +125,8 @@ func (server *KBaseAuthServer) newRequest(method, resource string,
 	if err != nil {
 		return nil, err
 	}
-	// The required authorization header contains only the unencoded access token.
-	// Unfortunately, this is a non-RFC-compliant Authorization header, and Go
-	// validates its request headers, so it can't send non-compliant ones, and I
-	// don't want to spend time trying to work around this issue when the right
-	// answer is to update the KBase auth server to be RFC-compliant. Why not use
-	// the Bearer method?
-
-	// Anyway the following won't work till this is fixed, so we can't rely on
-	// the KBase auth server for now
-	req.Header.Set("Authorization", server.AccessToken)
+	// the required authorization header contains only the unencoded access token
+	req.Header.Add("Authorization", server.AccessToken)
 	return req, nil
 }
 

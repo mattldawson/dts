@@ -12,7 +12,7 @@ env:
   DTS_GLOBUS_CLIENT_ID: ${{ secrets.DTS_GLOBUS_CLIENT_ID }}
   DTS_GLOBUS_CLIENT_SECRET: ${{ secrets.DTS_GLOBUS_CLIENT_SECRET }}
   DTS_GLOBUS_TEST_ENDPOINT: ${{ secrets.DTS_GLOBUS_TEST_ENDPOINT }}
-  DTS_JDP_ЅECRET: ${{ secrets.DTS_JDP_SECRET }}
+  DTS_JDP_SECRET: ${{ secrets.DTS_JDP_SECRET }}
 
 jobs:
 
@@ -43,5 +43,5 @@ jobs:
 
     - name: Uploading code coverage report to Codecov
       uses: codecov/codecov-action@v3
-      env:
-        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+      with:
+        fail_ci_if_error: true

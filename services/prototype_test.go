@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 
 	"dts/config"
@@ -77,6 +78,74 @@ endpoints:
       client_id: ${DTS_GLOBUS_CLIENT_ID}
       client_secret: ${DTS_GLOBUS_CLIENT_SECRET}
 `
+
+//===============================
+// Test Database Implementations
+//===============================
+// Our source and destination test databases are thin wrappers around a
+// collection of files on a couple of Globus endpoints. These endpoints
+// are used to illustrate a simple file transfer here:
+// https://globus-sdk-python.readthedocs.io/en/stable/examples/minimal_transfer_script/index.html#example-minimal-transfer
+
+type testDatabase struct {
+	endpoint core.Endpoint
+}
+
+func NewSourceTestDatabase(orcid string) (core.Database, error) {
+}
+
+func NewDestinationTestDatabase(orcid string) (core.Database, error) {
+}
+
+func (db *testDatabase) Search(params core.SearchParameters) (core.SearchResults, error) {
+	// the test database returns the query as the file ID for IDs "1", "2", and "3".
+	if params.Query == "1" || params.Query == "2" || params.Query == "3" {
+		return SearchResults{
+			Resources: []core.DataResource{
+				Id:        params.Query,
+				Name:      fmt.Sprintf("file%s", params.Query),
+				Path:      fmt.Sprintf("share/godata/file%s.txt", params.Query),
+				Format:    "text",
+				MediaType: "text/plain",
+				Bytes:     4,
+			},
+		}
+	}
+}
+
+func (db *testDatabase) Resources(fileIds []string) ([]core.DataResource, error) {
+	results := make([]core.DataResource, 0)
+	for _, id := range fileIds {
+		if params.Query == "1" || params.Query == "2" || params.Query == "3" {
+			results = append(results, SearchResults{
+				Resources: []core.DataResource{
+					Id:        id,
+					Name:      fmt.Sprintf("file%s", id),
+					Path:      fmt.Sprintf("share/godata/file%s.txt", id),
+					Format:    "text",
+					MediaType: "text/plain",
+					Bytes:     4,
+				},
+			})
+		}
+	}
+	return results, nil
+}
+
+func (db *testDatabase) StageFiles(fileIds []string) (uuid.UUID, error) {
+	// no need to stage files, since they're already in place; just return
+	// a UUID.
+	return uuid.NewUUID(), nil
+}
+
+func (db *testDatabase) StagingStatus(stagingId uuid.UUID) (core.StagingStatus, error) {
+	// the files are already in place, so staging has always "succeeded".
+	return StagingStatusSucceeded, nil
+}
+
+func (db *testDatabase) Endpoint() core.Endpoint {
+	return db.endpoint
+}
 
 // performs testing setup
 func setup() {

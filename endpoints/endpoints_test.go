@@ -48,6 +48,13 @@ func TestInvalidEndpoint(t *testing.T) {
 	assert.NotNil(err, "Invalid endpoint creation returned no error")
 }
 
+func TestNonexistentEndpoint(t *testing.T) {
+	assert := assert.New(t) // binds assert to t
+	ep, err := NewEndpoint("nonexistent")
+	assert.Nil(ep, "Nonexistent endpoint somehow created")
+	assert.NotNil(err, "Nonexistent endpoint creation returned no error")
+}
+
 // this runs setup, runs all tests, and does breakdown
 func TestMain(m *testing.M) {
 	var status int

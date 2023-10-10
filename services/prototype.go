@@ -9,7 +9,6 @@ import (
 	"log"
 	"net"
 	"net/http"
-	//	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -22,7 +21,6 @@ import (
 	"dts/config"
 	"dts/core"
 	"dts/databases"
-	// "dts/endpoints"
 )
 
 // This type implements the TransferService interface, allowing file transfers

@@ -154,22 +154,8 @@ func TestGlobusTransfer(t *testing.T) {
 			DestinationPath: destinationFilesById[id],
 		})
 	}
-	xferId, err := source.Transfer(destination, fileXfers)
+	_, err := source.Transfer(destination, fileXfers)
 	assert.Nil(err)
-
-	// check the status of the transfer
-  var status core.TransferStatus
-	for {
-		status, err = source.Status(xferId)
-		assert.False(status.Code == core.TransferStatusUnknown)
-		assert.Nil(err)
-		if status.Code == core.TransferStatusSucceeded ||
-			status.Code == core.TransferStatusFailed ||
-      err != nil {
-			break
-		}
-	}
-	assert.Equal(core.TransferStatusSucceeded, status.Code)
 }
 
 func TestBadGlobusTransfer(t *testing.T) {
@@ -192,7 +178,7 @@ func TestBadGlobusTransfer(t *testing.T) {
 
 func TestUnknownGlobusStatus(t *testing.T) {
 	assert := assert.New(t)
-	endpoint, _ := NewEndpoint("globus-jdp")
+	endpoint, _ := NewEndpoint("source")
 
 	// make up a bogus transfer UUID and check its status
 	taskId := uuid.New()

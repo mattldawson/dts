@@ -158,12 +158,14 @@ func TestGlobusTransfer(t *testing.T) {
 	assert.Nil(err)
 
 	// check the status of the transfer
+  var status core.TransferStatus
 	for {
-		status, err := endpoint.Status(xferId)
+		status, err = source.Status(xferId)
 		assert.False(status.Code == core.TransferStatusUnknown)
 		assert.Nil(err)
 		if status.Code == core.TransferStatusSucceeded ||
-			status.Code == core.TransferStatusFailed {
+			status.Code == core.TransferStatusFailed ||
+      err != nil {
 			break
 		}
 	}
@@ -175,7 +177,7 @@ func TestBadGlobusTransfer(t *testing.T) {
 	source, _ := NewEndpoint("source")
 	destination, _ := NewEndpoint("destination")
 
-  // ask for some nonexistent files
+	// ask for some nonexistent files
 	fileXfers := make([]core.FileTransfer, 0)
 	for i := 1; i <= 3; i++ {
 		id := fmt.Sprintf("%d", i)
@@ -184,7 +186,7 @@ func TestBadGlobusTransfer(t *testing.T) {
 			DestinationPath: destinationFilesById[id],
 		})
 	}
-	xferId, err := source.Transfer(destination, fileXfers)
+	_, err := source.Transfer(destination, fileXfers)
 	assert.NotNil(err)
 }
 

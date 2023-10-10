@@ -22,6 +22,7 @@ import (
 
 	"dts/config"
 	"dts/core"
+	"dts/databases"
 	"dts/endpoints/globus"
 )
 
@@ -188,6 +189,8 @@ func setup() {
 		if err != nil {
 			log.Panicf("Couldn't construct the service: %s", err.Error())
 		}
+		databases.RegisterDatabase("source", NewSourceTestDatabase)
+		databases.RegisterDatabase("destination", NewSourceTestDatabase)
 		err = service.Start(config.Service.Port)
 		if err != nil {
 			log.Panicf("Couldn't start search service: %s", err.Error())
@@ -238,6 +241,7 @@ func post(resource string, body io.Reader) (*http.Response, error) {
 		accessToken := os.Getenv("DTS_KBASE_DEV_TOKEN")
 		b64Token := base64.StdEncoding.EncodeToString([]byte(accessToken))
 		req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", b64Token))
+		req.Header.Add("Content-Type", "application/json")
 		return http.DefaultClient.Do(req)
 	} else {
 		return nil, err
@@ -353,7 +357,7 @@ func TestCreateTransfer(t *testing.T) {
 	// request a transfer of file1.txt, file2.txt, and file3.txt
 	payload, err := json.Marshal(TransferRequest{
 		Source:      "source",
-		FileIds:     []string{"SOURCE:1", "SOURCE:2", "SOURCE:3"},
+		FileIds:     []string{"1", "2", "3"},
 		Destination: "destination",
 	})
 	resp, err := post(baseUrl+apiPrefix+"transfers", bytes.NewReader(payload))

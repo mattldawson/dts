@@ -1,6 +1,8 @@
 package services
 
-// unit test setup for the DTS prototype service
+// This file defines a unit test setup for the DTS prototype service. To
+// simplify the testing protocol, we implement source and destination
+// test databases that support the transfer of a test payload.
 import (
 	"bytes"
 	"context"
@@ -27,10 +29,20 @@ var CWD string
 // temporary testing directory
 var TESTING_DIR string
 
+// DTS URLs
 var (
 	baseUrl   = "http://localhost:8080/"
 	apiPrefix = "api/v1/"
 )
+
+// source database files by ID
+// (these files exist on Globus Tutorial Endpoint 1 (see below) for exactly
+// this sort of testing)
+var sourceFilesById = map[string]string{
+	"1": "share/godata/file1.txt",
+	"2": "share/godata/file2.txt",
+	"3": "share/godata/file3.txt",
+}
 
 // service instance
 var service TransferService
@@ -41,30 +53,25 @@ service:
   max_connections: 100
   poll_interval: 100
 databases:
-  jdp:
-    name: JGI Data Portal
-    organization: Joint Genome Institute
-    url: https://files.jgi.doe.gov
-    endpoint: globus-jdp
-    auth:
-      client_id: ${JGI_CLIENT_ID}
-      client_secret: ${JGI_CLIENT_SECRET}
-  kbase:
-    name: KBase
-    organization: KBase
-    url: https://kbase.us
-    endpoint: globus-kbase
+  source:
+    name: Source Test Database
+    organization: The Source Company
+    endpoint: source-endpoint
+  destination:
+    name: Destination Test Database
+    organization: Fabulous Destinations, Inc.
+    endpoint: destination-endpoint
 endpoints:
-  globus-jdp:
-    name: Globus NERSC DTN
-    id: ${DTS_GLOBUS_TEST_ENDPOINT}
+  source-endpoint:
+    name: Globus Tutorial Endpoint 1
+    id: ddb59aef-6d04-11e5-ba46-22000b92c6ec
     provider: globus
     auth:
       client_id: ${DTS_GLOBUS_CLIENT_ID}
       client_secret: ${DTS_GLOBUS_CLIENT_SECRET}
-  globus-kbase:
-    name: Globus NERSC DTN
-    id: ${DTS_GLOBUS_TEST_ENDPOINT}
+  destination-endpoint:
+    name: Globus Tutorial Endpoint 2
+    id: ddb59af0-6d04-11e5-ba46-22000b92c6ec
     provider: globus
     auth:
       client_id: ${DTS_GLOBUS_CLIENT_ID}
@@ -188,7 +195,7 @@ func TestQueryDatabases(t *testing.T) {
 	err = json.Unmarshal(respBody, &dbs)
 	assert.Nil(err)
 	assert.Equal(2, len(dbs))
-	slices.SortFunc(dbs, func(a, b dbMetadata) int {
+	slices.SortFunc(dbs, func(a, b dbMetadata) int { // sort alphabetically
 		if a.Id < b.Id {
 			return -1
 		} else if a.Id == b.Id {
@@ -197,19 +204,21 @@ func TestQueryDatabases(t *testing.T) {
 			return 1
 		}
 	})
-	assert.Equal("jdp", dbs[0].Id)
-	assert.Equal("JGI Data Portal", dbs[0].Name)
-	assert.Equal("Joint Genome Institute", dbs[0].Organization)
-	assert.Equal("kbase", dbs[1].Id)
-	assert.Equal("KBase", dbs[1].Name)
-	assert.Equal("KBase", dbs[1].Organization)
+
+	assert.Equal("destination", dbs[0].Id)
+	assert.Equal("Destination Test Database", dbs[0].Name)
+	assert.Equal("Fabulous Destinations, Inc.", dbs[0].Organization)
+
+	assert.Equal("source", dbs[1].Id)
+	assert.Equal("Source Test Database", dbs[1].Name)
+	assert.Equal("The Source Company", dbs[1].Organization)
 }
 
 // queries a specific (valid) database
 func TestQueryValidDatabase(t *testing.T) {
 	assert := assert.New(t)
 
-	resp, err := get(baseUrl + apiPrefix + "databases/jdp")
+	resp, err := get(baseUrl + apiPrefix + "databases/source")
 	assert.Nil(err)
 
 	respBody, err := io.ReadAll(resp.Body)
@@ -219,9 +228,9 @@ func TestQueryValidDatabase(t *testing.T) {
 	var db dbMetadata
 	err = json.Unmarshal(respBody, &db)
 	assert.Nil(err)
-	assert.Equal("jdp", db.Id)
-	assert.Equal("JGI Data Portal", db.Name)
-	assert.Equal("Joint Genome Institute", db.Organization)
+	assert.Equal("source", db.Id)
+	assert.Equal("Source Test Database", db.Name)
+	assert.Equal("The Source Company", db.Organization)
 }
 
 // queries a database that doesn't exist
@@ -237,55 +246,50 @@ func TestQueryInvalidDatabase(t *testing.T) {
 func TestSearchDatabase(t *testing.T) {
 	assert := assert.New(t)
 
-	resp, err := get(baseUrl + apiPrefix + "files?database=jdp&query=prochlorococcus")
+	// our source test database returns all requested source files
+	resp, err := get(baseUrl + apiPrefix + "files?database=source&query=1")
 	assert.Nil(err)
 
 	respBody, err := io.ReadAll(resp.Body)
 	assert.Nil(err)
+	assert.Equal(200, resp.StatusCode)
 	defer resp.Body.Close()
 
 	var results ElasticSearchResponse
 	err = json.Unmarshal(respBody, &results)
 	assert.Nil(err)
-	assert.Equal("jdp", results.Database)
-	assert.Equal("prochlorococcus", results.Query)
-	assert.NotNil(results.Resources)
+	assert.Equal("source", results.Database)
+	assert.Equal("1", results.Query)
+	assert.Equal(1, len(results.Resources))
+	assert.Equal("file1", results.Resources[0].Name)
 }
 
 // creates a transfer for a single file
 func TestCreateTransfer(t *testing.T) {
 	assert := assert.New(t)
 
-	// The JDP database currently relies on JAMO to locate files with given
-	// IDs, so we can only run this test when the DTS is running within LBL's
-	// virtual private network.
-	if _, onVPN := os.LookupEnv("DTS_ON_LBL_VPN"); onVPN { // any value will work
-		// request a transfer of Ga0451497_cog.gff
-		payload, err := json.Marshal(TransferRequest{
-			Source:      "jdp",
-			FileIds:     []string{"JDP:5fa4fb4547675a20c852c5f8"},
-			Destination: "kbase",
-		})
-		resp, err := post(baseUrl+apiPrefix+"transfers", bytes.NewReader(payload))
+	// request a transfer of file1.txt, file2.txt, and file3.txt
+	payload, err := json.Marshal(TransferRequest{
+		Source:      "source",
+		FileIds:     []string{"SOURCE:1", "SOURCE:2", "SOURCE:3"},
+		Destination: "destination",
+	})
+	resp, err := post(baseUrl+apiPrefix+"transfers", bytes.NewReader(payload))
+	assert.Nil(err)
+	assert.Equal(200, resp.StatusCode)
+	if err == nil {
+		defer resp.Body.Close()
+		var body []byte
+		body, err = io.ReadAll(resp.Body)
+		assert.Nil(err)
+		var xferResp TransferResponse
+		err = json.Unmarshal(body, &xferResp)
+		xferId := xferResp.Id
+
+		// get the transfer status
+		resp, err := get(baseUrl + apiPrefix + fmt.Sprintf("transfers/%s", xferId.String()))
 		assert.Nil(err)
 		assert.Equal(200, resp.StatusCode)
-		if err == nil {
-			defer resp.Body.Close()
-			var body []byte
-			body, err = io.ReadAll(resp.Body)
-			assert.Nil(err)
-			var xferResp TransferResponse
-			err = json.Unmarshal(body, &xferResp)
-			xferId := xferResp.Id
-
-			// get the transfer status
-			resp, err := get(baseUrl + apiPrefix + fmt.Sprintf("transfers/%s", xferId.String()))
-			assert.Nil(err)
-			assert.Equal(200, resp.StatusCode)
-		}
-	} else {
-		log.Printf("Skipping (JAMO-backed) JDP transfer tests")
-		log.Printf("To enable these tests, set the DTS_ON_LBL_VPN environment variable")
 	}
 }
 

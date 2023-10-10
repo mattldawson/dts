@@ -22,6 +22,7 @@ import (
 
 	"dts/config"
 	"dts/core"
+	"dts/endpoints/globus"
 )
 
 // working directory from which the tests were invoked
@@ -92,41 +93,53 @@ type testDatabase struct {
 }
 
 func NewSourceTestDatabase(orcid string) (core.Database, error) {
+	ep, err := globus.NewEndpoint("source-endpoint")
+	return &testDatabase{
+		endpoint: ep,
+	}, err
 }
 
 func NewDestinationTestDatabase(orcid string) (core.Database, error) {
+	ep, err := globus.NewEndpoint("destination-endpoint")
+	return &testDatabase{
+		endpoint: ep,
+	}, err
 }
 
 func (db *testDatabase) Search(params core.SearchParameters) (core.SearchResults, error) {
 	// the test database returns the query as the file ID for IDs "1", "2", and "3".
 	if params.Query == "1" || params.Query == "2" || params.Query == "3" {
-		return SearchResults{
+		return core.SearchResults{
 			Resources: []core.DataResource{
-				Id:        params.Query,
-				Name:      fmt.Sprintf("file%s", params.Query),
-				Path:      fmt.Sprintf("share/godata/file%s.txt", params.Query),
-				Format:    "text",
-				MediaType: "text/plain",
-				Bytes:     4,
+				core.DataResource{
+					Id:        params.Query,
+					Name:      fmt.Sprintf("file%s", params.Query),
+					Path:      fmt.Sprintf("share/godata/file%s.txt", params.Query),
+					Format:    "text",
+					MediaType: "text/plain",
+					Bytes:     4,
+				},
 			},
-		}
+		}, nil
+	} else {
+		return core.SearchResults{}, nil
 	}
 }
 
 func (db *testDatabase) Resources(fileIds []string) ([]core.DataResource, error) {
 	results := make([]core.DataResource, 0)
 	for _, id := range fileIds {
-		if params.Query == "1" || params.Query == "2" || params.Query == "3" {
-			results = append(results, SearchResults{
-				Resources: []core.DataResource{
-					Id:        id,
-					Name:      fmt.Sprintf("file%s", id),
-					Path:      fmt.Sprintf("share/godata/file%s.txt", id),
-					Format:    "text",
-					MediaType: "text/plain",
-					Bytes:     4,
-				},
+		if id == "1" || id == "2" || id == "3" {
+			results = append(results, core.DataResource{
+				Id:        id,
+				Name:      fmt.Sprintf("file%s", id),
+				Path:      fmt.Sprintf("share/godata/file%s.txt", id),
+				Format:    "text",
+				MediaType: "text/plain",
+				Bytes:     4,
 			})
+		} else {
+			return nil, fmt.Errorf("Unrecognized file ID: %s", id)
 		}
 	}
 	return results, nil
@@ -135,12 +148,12 @@ func (db *testDatabase) Resources(fileIds []string) ([]core.DataResource, error)
 func (db *testDatabase) StageFiles(fileIds []string) (uuid.UUID, error) {
 	// no need to stage files, since they're already in place; just return
 	// a UUID.
-	return uuid.NewUUID(), nil
+	return uuid.NewUUID()
 }
 
 func (db *testDatabase) StagingStatus(stagingId uuid.UUID) (core.StagingStatus, error) {
 	// the files are already in place, so staging has always "succeeded".
-	return StagingStatusSucceeded, nil
+	return core.StagingStatusSucceeded, nil
 }
 
 func (db *testDatabase) Endpoint() core.Endpoint {

@@ -11,7 +11,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"time"
+
+	"gopkg.in/dnaeon/go-vcr.v3/recorder"
 )
 
 // this type represents a request to JAMO's pagequery endpoint
@@ -76,6 +79,21 @@ type jamoPageQueryResponse struct {
 // the given list of file IDs. The list of files is returned in the same order
 // as the list of file IDs.
 func queryJamo(fileIds []string) ([]jamoFileRecord, error) {
+	// fire up a recorder based on our testing needs (since we rely on JAMO
+	// for fetching file paths, and since JAMO only works within LBL's VPN)
+	var recordingMode recorder.Mode
+	if _, onVPN := os.LookupEnv("DTS_ON_LBL_VPN"); onVPN {
+		recordingMode = recorder.ModeRecordOnce
+	} else {
+		recordingMode = recorder.ModeReplayOnly
+	}
+	r, err := recorder.NewWithOptions(&recorder.Options{
+		CassetteName: "fixtures/dts-jamo-cassette",
+		Mode:         recordingMode,
+	})
+	defer r.Stop()
+	client := r.GetDefaultClient()
+
 	// prepare a JAMO query with the desired file IDs
 	// (also record the indices of each file ID so we can preserve their order)
 	fileIdsString := "( "
@@ -99,7 +117,6 @@ func queryJamo(fileIds []string) ([]jamoFileRecord, error) {
 	}
 
 	// do the initial POST to JAMO and fetch results
-	var client http.Client
 	var results jamoPageQueryResponse
 	const jamoBaseURL = "https://jamo-dev.jgi.doe.gov/api/metadata/"
 

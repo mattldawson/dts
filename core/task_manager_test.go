@@ -200,6 +200,10 @@ func (db *FakeDatabase) Endpoint() Endpoint {
 	return db.Endpt
 }
 
+func (db *FakeDatabase) Close() error {
+	return nil
+}
+
 type TransferInfo struct {
 	Time   time.Time // transfer initiation time
 	Status TransferStatus

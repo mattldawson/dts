@@ -415,10 +415,6 @@ func (db *Database) Resources(fileIds []string) ([]core.DataResource, error) {
 	// from implementing additional functionality for the DTS. Here we query JAMO
 	// directly for information about files that correspond to the given set of
 	// file IDs.
-	// JAMO read access is available without authentication on the LBL VPN and
-	// unavailable elsewhere, which complicates our testing of this feature.
-	// Hopefully we can find a better solution down the line.
-
 	strippedFileIds := make([]string, len(fileIds))
 	for i, fileId := range fileIds {
 		strippedFileIds[i] = strings.TrimPrefix(fileId, "JDP:")
@@ -539,4 +535,8 @@ func (db *Database) StagingStatus(id uuid.UUID) (core.StagingStatus, error) {
 func (db *Database) Endpoint() core.Endpoint {
 	endpoint, _ := endpoints.NewEndpoint(config.Databases[db.Id].Endpoint)
 	return endpoint
+}
+
+func (db *Database) Close() error {
+	return nil
 }

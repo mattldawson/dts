@@ -12,6 +12,7 @@ func TestNewJDPDatabase(t *testing.T) {
 	jdpDb, err := NewDatabase(orcid, "jdp")
 	assert.NotNil(jdpDb, "JDP database not created")
 	assert.Nil(err, "JDP database creation encountered an error")
+	jdpDb.Close()
 }
 
 func TestInvalidDatabase(t *testing.T) {

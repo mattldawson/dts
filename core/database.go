@@ -22,6 +22,8 @@
 package core
 
 import (
+	"io"
+
 	"github.com/google/uuid"
 )
 
@@ -57,6 +59,8 @@ const (
 // Database defines the interface for a database that is used to search for
 // files and initiate file transfers
 type Database interface {
+	// provides a Close() method
+	io.Closer
 	// search for files using the given parameters
 	Search(params SearchParameters) (SearchResults, error)
 	// returns a slice of Frictionless DataResources for the files with the

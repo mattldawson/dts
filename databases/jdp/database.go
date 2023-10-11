@@ -536,7 +536,3 @@ func (db *Database) Endpoint() core.Endpoint {
 	endpoint, _ := endpoints.NewEndpoint(config.Databases[db.Id].Endpoint)
 	return endpoint
 }
-
-func (db *Database) Close() error {
-	return nil
-}

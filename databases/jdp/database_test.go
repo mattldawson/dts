@@ -45,7 +45,6 @@ func TestNewDatabase(t *testing.T) {
 	jdpDb, err := NewDatabase(orcid)
 	assert.NotNil(jdpDb, "JDP database not created")
 	assert.Nil(err, "JDP database creation encountered an error")
-	jdpDb.Close()
 }
 
 func TestNewDatabaseWithoutOrcid(t *testing.T) {
@@ -70,7 +69,6 @@ func TestSearch(t *testing.T) {
 	assert := assert.New(t)
 	orcid := os.Getenv("DTS_KBASE_TEST_ORCID")
 	db, _ := NewDatabase(orcid)
-	defer db.Close()
 	params := core.SearchParameters{
 		Query: "prochlorococcus",
 		Pagination: struct {
@@ -89,7 +87,6 @@ func TestResources(t *testing.T) {
 	assert := assert.New(t)
 	orcid := os.Getenv("DTS_KBASE_TEST_ORCID")
 	db, _ := NewDatabase(orcid)
-	defer db.Close()
 	params := core.SearchParameters{
 		Query: "prochlorococcus",
 	}
@@ -122,7 +119,6 @@ func TestEndpoint(t *testing.T) {
 	assert := assert.New(t)
 	orcid := os.Getenv("DTS_KBASE_TEST_ORCID")
 	db, _ := NewDatabase(orcid)
-	defer db.Close()
 	endpoint := db.Endpoint()
 	assert.NotNil(endpoint, "JDP database has no endpoint")
 }

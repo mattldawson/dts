@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"dts/core"
+	"github.com/kbase/dts/core"
 )
 
 // This package-specific helper function writes a JSON payload to an

@@ -28,16 +28,16 @@
 package auth
 
 import (
-	//	"fmt"
-	"github.com/stretchr/testify/assert"
 	"os"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // tests whether a proxy for the KBase authentication server can be
 // constructed
 func TestNewKBaseAuthServer(t *testing.T) {
-	assert := assert.New(t) // binds assert to t
+	assert := assert.New(t)
 	devToken := os.Getenv("DTS_KBASE_DEV_TOKEN")
 	server, err := NewKBaseAuthServer(devToken)
 	assert.NotNil(server, "Authentication server not created")
@@ -47,7 +47,7 @@ func TestNewKBaseAuthServer(t *testing.T) {
 // tests whether the authentication server can return the proper credentials
 // for the owner of the developer token
 func TestOrchids(t *testing.T) {
-	assert := assert.New(t) // binds assert to t
+	assert := assert.New(t)
 	devToken := os.Getenv("DTS_KBASE_DEV_TOKEN")
 	orcid := os.Getenv("DTS_KBASE_TEST_ORCID")
 	assert.False(orcid == "")

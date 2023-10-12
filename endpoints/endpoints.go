@@ -24,9 +24,9 @@ package endpoints
 import (
 	"fmt"
 
-	"dts/config"
-	"dts/core"
-	"dts/endpoints/globus"
+	"github.com/kbase/dts/config"
+	"github.com/kbase/dts/core"
+	"github.com/kbase/dts/endpoints/globus"
 )
 
 // we maintain a table of endpoint instances, identified by their names

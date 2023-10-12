@@ -17,10 +17,10 @@ import (
 	"github.com/gorilla/mux"
 	"golang.org/x/net/netutil"
 
-	"dts/auth"
-	"dts/config"
-	"dts/core"
-	"dts/databases"
+	"github.com/kbase/dts/auth"
+	"github.com/kbase/dts/config"
+	"github.com/kbase/dts/core"
+	"github.com/kbase/dts/databases"
 )
 
 // This type implements the TransferService interface, allowing file transfers

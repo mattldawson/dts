@@ -26,8 +26,6 @@ import (
 	"log"
 	"os"
 
-	//	"github.com/confluentinc/confluent-kafka-go/kafka"
-	//	"github.com/rabbitmq/amqp091-go"
 	"gopkg.in/yaml.v3"
 )
 

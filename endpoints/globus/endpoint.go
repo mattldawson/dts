@@ -34,8 +34,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"dts/config"
-	"dts/core"
+	"github.com/kbase/dts/config"
+	"github.com/kbase/dts/core"
 )
 
 // This file implements a Globus endpoint. It uses the Globus Transfer API

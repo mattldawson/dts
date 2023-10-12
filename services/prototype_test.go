@@ -21,10 +21,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 
-	"dts/config"
-	"dts/core"
-	"dts/databases"
-	"dts/endpoints/globus"
+	"github.com/kbase/dts/config"
+	"github.com/kbase/dts/core"
+	"github.com/kbase/dts/databases"
+	"github.com/kbase/dts/endpoints/globus"
 )
 
 // working directory from which the tests were invoked

@@ -6,8 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"dts/config"
-	"dts/core"
+	"github.com/kbase/dts/config"
+	"github.com/kbase/dts/core"
 )
 
 const jdpConfig string = `

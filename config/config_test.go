@@ -26,9 +26,9 @@ package config
 import (
 	"fmt"
 	"os"
+	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 // a valid service config entry

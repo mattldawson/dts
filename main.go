@@ -32,8 +32,8 @@ import (
 	"syscall"
 	"time"
 
-	"dts/config"
-	"dts/services"
+	"github.com/kbase/dts/config"
+	"github.com/kbase/dts/services"
 )
 
 //go:generate mkdir -p services/docs

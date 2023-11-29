@@ -92,7 +92,7 @@ var formatToMimeType = map[string]string{
 	"bz":    "application/x-bzip",
 	"bz2":   "application/x-bzip2",
 	"tar":   "application/x-tar",
-	"txt":   "text/plain",
+	"text":  "text/plain",
 }
 
 // a mapping from the JDP's reported file types to mime types
@@ -216,6 +216,16 @@ func creditFromIdAndMetadata(id string, md Metadata) credit.CreditMetadata {
 	return crd
 }
 
+func trimFileSuffix(filename string) string {
+	for _, suffix := range supportedSuffixes {
+		index := strings.LastIndex(filename, suffix)
+		if index > 0 {
+			return filename[:index-1]
+		}
+	}
+	return filename
+}
+
 // creates a DataResource from a File
 func dataResourceFromFile(file File) core.DataResource {
 	id := "JDP:" + file.Id
@@ -224,18 +234,11 @@ func dataResourceFromFile(file File) core.DataResource {
 	sources := sourcesFromMetadata(file.Metadata)
 
 	// the resource name is the filename with any suffix stripped off
-	name := file.Name
-	for _, suffix := range supportedSuffixes {
-		index := strings.LastIndex(name, suffix)
-		if index > 0 {
-			name = name[:index-1]
-			break
-		}
-	}
+	name := trimFileSuffix(file.Name)
 
 	// we use relative file paths in accordance with the Frictionless
 	// Data Resource specification
-	filePath := filepath.Join(strings.ReplaceAll(file.Path, filePathPrefix, ""), file.Name)
+	filePath := filepath.Join(strings.TrimPrefix(file.Path, filePathPrefix), file.Name)
 
 	return core.DataResource{
 		Id:        id,
@@ -407,9 +410,45 @@ func (db *Database) Search(params core.SearchParameters) (core.SearchResults, er
 	return db.filesFromSearch(p)
 }
 
-// this method needs a feature implemented by the JDP team.
 func (db *Database) Resources(fileIds []string) ([]core.DataResource, error) {
-	return nil, fmt.Errorf("Not yet implemented!")
+	// For the moment, this implementation is a stopgap to save the JDP team
+	// from implementing additional functionality for the DTS. Here we query JAMO
+	// directly for information about files that correspond to the given set of
+	// file IDs.
+	strippedFileIds := make([]string, len(fileIds))
+	for i, fileId := range fileIds {
+		strippedFileIds[i] = strings.TrimPrefix(fileId, "JDP:")
+	}
+	jamoFiles, err := queryJamo(strippedFileIds)
+	if err != nil {
+		return nil, err
+	}
+
+	// translate from JAMOese to Frictionless-ese
+	resources := make([]core.DataResource, len(jamoFiles))
+	for i, jamoFile := range jamoFiles {
+		resources[i] = core.DataResource{
+			Id:     "JDP:" + jamoFile.Id,
+			Name:   trimFileSuffix(jamoFile.FileName),
+			Path:   filepath.Join(strings.TrimPrefix(jamoFile.FilePath, filePathPrefix), jamoFile.FileName),
+			Format: jamoFile.Metadata.FileFormat,
+			Bytes:  jamoFile.FileSize,
+			Hash:   jamoFile.MD5Sum,
+		}
+		// fill in holes where we can and patch up discrepancies
+		if resources[i].Format == "" {
+			resources[i].Format = formatFromFileName(resources[i].Path)
+		} else if resources[i].Format == "txt" {
+			resources[i].Format = "text"
+		}
+		resources[i].MediaType = mimeTypeFromFormatAndTypes(resources[i].Format, []string{})
+		// fill in credit metadata
+		resources[i].Credit = credit.CreditMetadata{
+			Identifier:   resources[i].Id,
+			ResourceType: "dataset",
+		}
+	}
+	return resources, err
 }
 
 func (db *Database) StageFiles(fileIds []string) (uuid.UUID, error) {

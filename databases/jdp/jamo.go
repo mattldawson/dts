@@ -1,0 +1,180 @@
+package jdp
+
+// The types and functions in this file allow the JDP database implementation
+// to interact with JAMO to fill in some holes in required features.
+// For information about JAMO, see
+// https://docs.jgi.doe.gov/pages/viewpage.action?pageId=65897565
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"time"
+
+	"gopkg.in/dnaeon/go-vcr.v3/recorder"
+)
+
+// this type represents a request to JAMO's pagequery endpoint
+type jamoPageQuery struct {
+	Query     string `json:"query"`
+	Requestor string `json:"requestor"`
+}
+
+// this type represents an individual JAMO file record returned within a
+// page query response
+type jamoFileRecord struct {
+	Id              string   `json:"_id"`
+	Inputs          []string `json:"inputs"`
+	FileType        []string `json:"file_type"`
+	AddedDate       string   `json:"added_date"`
+	FilePermissions string   `json:"file_permissions"`
+	FileStatus      string   `json:"file_status"`
+	FileId          int      `json:"file_id"`
+	FileSize        int      `json:"file_size"`
+	PurgeDate       string   `json:"dt_to_purge"`
+	FileGroup       string   `json:"file_group"`
+	FileOwner       string   `json:"file_owner"`
+	Group           string   `json:"group"`
+	FileStatusId    int      `json:"file_status_id"`
+	FileDate        string   `json:"file_date"`
+	Metadata        struct {
+		JatLabel string `json:"jat_label"`
+		Portal   struct {
+			DisplayLocation []string `json:"display_location"`
+		} `json:"portal"`
+		Compression      string `json:"compression"`
+		FileFormat       string `json:"file_format"`
+		TemplateName     string `json:"template_name"`
+		MycocosmPortalId string `json:"mycocosm_portal_id"`
+		PublishTo        string `json:"publish_to"`
+		JatKey           string `json:"jat_key"`
+		JatPublishFlag   bool   `json:"jat_publish_flag"`
+	} `json:"metadata"`
+	FileName             string `json:"file_name"`
+	FilePath             string `json:"file_path"`
+	User                 string `json:"user"`
+	MD5Sum               string `json:"md5_sum"`
+	ModifiedDate         string `json:"modified_date"`
+	MetadataModifiedData string `json:"metadata_modified_date"`
+	GCS                  struct {
+		ModifiedDate string `json:"modified_date"`
+		UploadDate   string `json:"upload_date"`
+	} `json:"gcs"`
+}
+
+// here's the type representing the pagequery response itself
+type jamoPageQueryResponse struct {
+	CursorId    string           `json:"cursor_id"`
+	Timeout     int              `json:"timeout"`
+	Start       int              `json:"start"`
+	End         int              `json:"end"`
+	RecordCount int              `json:"record_count"`
+	Records     []jamoFileRecord `json:"records"`
+}
+
+// This function gathers and returns all jamo file records that correspond to
+// the given list of file IDs. The list of files is returned in the same order
+// as the list of file IDs.
+func queryJamo(fileIds []string) ([]jamoFileRecord, error) {
+	// fire up a recorder based on our testing needs (since we rely on JAMO
+	// for fetching file paths, and since JAMO only works within LBL's VPN)
+	var recordingMode recorder.Mode
+	if _, onVPN := os.LookupEnv("DTS_ON_LBL_VPN"); onVPN {
+		recordingMode = recorder.ModeRecordOnce
+	} else {
+		recordingMode = recorder.ModeReplayOnly
+	}
+	r, err := recorder.NewWithOptions(&recorder.Options{
+		CassetteName: "fixtures/dts-jamo-cassette",
+		Mode:         recordingMode,
+	})
+	defer r.Stop()
+	client := r.GetDefaultClient()
+
+	// prepare a JAMO query with the desired file IDs
+	// (also record the indices of each file ID so we can preserve their order)
+	fileIdsString := "( "
+	indexForFileId := make(map[string]int)
+	for i, fileId := range fileIds {
+		if i == len(fileIds)-1 {
+			fileIdsString += fmt.Sprintf("%s )", fileId)
+		} else {
+			fileIdsString += fmt.Sprintf("%s, ", fileId)
+		}
+		indexForFileId[fileId] = i
+	}
+	payload, err := json.Marshal(jamoPageQuery{
+		Query: fmt.Sprintf("select "+
+			"_id, file_name, file_path, metadata.file_format, file_size, md5_sum "+
+			"where _id in %s", fileIdsString),
+		Requestor: "dts@kbase.us",
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// do the initial POST to JAMO and fetch results
+	var results jamoPageQueryResponse
+	const jamoBaseURL = "https://jamo-dev.jgi.doe.gov/api/metadata/"
+
+	const jamoPageQueryURL = jamoBaseURL + "pagequery"
+	req, err := http.NewRequest(http.MethodPost, jamoPageQueryURL, bytes.NewReader(payload))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Add("Content-type", "application/json; charset=utf-8")
+	resp, err := client.Do(req)
+	if err == nil {
+		defer resp.Body.Close()
+		var body []byte
+		body, err = io.ReadAll(resp.Body)
+		if err == nil {
+			err = json.Unmarshal(body, &results)
+		}
+	}
+
+	// sift file results into place and fetch remaining records
+	records := make([]jamoFileRecord, len(fileIds))
+	for err == nil {
+		for i := results.Start - 1; i < results.End; i++ {
+			if index, found := indexForFileId[results.Records[i].Id]; found {
+				records[index] = results.Records[i]
+			} else {
+				err = fmt.Errorf("Unrequested record for file ID %s returned!",
+					results.Records[i].Id)
+				break
+			}
+		}
+		if err != nil {
+			break
+		}
+
+		// go back for more records
+		if results.End < results.RecordCount {
+			jamoNextPageURL := fmt.Sprintf("%snextpage/%s", jamoBaseURL, results.CursorId)
+			req, err = http.NewRequest(http.MethodGet, jamoNextPageURL, http.NoBody)
+			if err == nil {
+				resp, err = client.Do(req)
+				if err == nil {
+					defer resp.Body.Close()
+					var body []byte
+					body, err = io.ReadAll(resp.Body)
+					if err == nil {
+						err = json.Unmarshal(body, &results)
+						if err == nil {
+						}
+					}
+				}
+				// give the ape some time to respond
+				time.Sleep(1 * time.Second)
+			}
+		} else {
+			break
+		}
+	}
+
+	return records, err
+}

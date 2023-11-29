@@ -96,6 +96,7 @@ func TestResources(t *testing.T) {
 		fileIds[i] = res.Id
 	}
 	resources, err := db.Resources(fileIds[:10])
+	assert.Nil(err, "JDP resource query encountered an error")
 	assert.Equal(10, len(resources),
 		"JDP resource query didn't return requested number of results")
 	// JAMO doesn't return source/credit metadata, and sometimes doesn't
@@ -112,7 +113,6 @@ func TestResources(t *testing.T) {
 		assert.Equal(jdpSearchResult.Credit.Identifier, resource.Credit.Identifier, "Resource credit ID mismatch")
 		assert.Equal(jdpSearchResult.Credit.ResourceType, resource.Credit.ResourceType, "Resource credit resource type mismatch")
 	}
-	assert.Nil(err, "JDP resource query encountered an error")
 }
 
 func TestEndpoint(t *testing.T) {

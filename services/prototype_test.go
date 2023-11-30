@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
 	"slices"
@@ -85,7 +86,7 @@ type testDatabase struct {
 	fileDir  string // directory housing files
 }
 
-func NewSourceTestDatabase(orcid string) (core.Database, error) {
+func newSourceTestDatabase(orcid string) (core.Database, error) {
 	ep, err := globus.NewEndpoint("source-endpoint")
 	return &testDatabase{
 		endpoint: ep,
@@ -93,11 +94,23 @@ func NewSourceTestDatabase(orcid string) (core.Database, error) {
 	}, err
 }
 
-func NewDestinationTestDatabase(orcid string) (core.Database, error) {
+// This function generates a unique name for a directory on the destination
+// endpoint to receive files
+var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+func destDirName(n int) string {
+	b := make([]rune, n)
+	for i := range b {
+		b[i] = letters[rand.Intn(len(letters))]
+	}
+	return string(b)
+}
+
+func newDestinationTestDatabase(orcid string) (core.Database, error) {
 	ep, err := globus.NewEndpoint("destination-endpoint")
 	return &testDatabase{
 		endpoint: ep,
-		fileDir:  "copied",
+		fileDir:  destDirName(16),
 	}, err
 }
 
@@ -183,8 +196,8 @@ func setup() {
 		if err != nil {
 			log.Panicf("Couldn't construct the service: %s", err.Error())
 		}
-		databases.RegisterDatabase("source", NewSourceTestDatabase)
-		databases.RegisterDatabase("destination", NewDestinationTestDatabase)
+		databases.RegisterDatabase("source", newSourceTestDatabase)
+		databases.RegisterDatabase("destination", newDestinationTestDatabase)
 		err = service.Start(config.Service.Port)
 		if err != nil {
 			log.Panicf("Couldn't start search service: %s", err.Error())

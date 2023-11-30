@@ -112,8 +112,8 @@ func validateDatabases(databases map[string]databaseConfig) error {
 		return fmt.Errorf("No databases were provided!")
 	}
 	for name, db := range databases {
-		if db.URL == "" {
-			return fmt.Errorf("No URL given for database '%s'", name)
+		if db.Endpoint == "" {
+			return fmt.Errorf("No endpoint given for database '%s'", name)
 		}
 	}
 	return nil

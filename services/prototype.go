@@ -133,7 +133,6 @@ func (service *prototype) getDatabases(w http.ResponseWriter,
 			Id:           dbName,
 			Name:         db.Name,
 			Organization: db.Organization,
-			URL:          db.URL,
 		})
 	}
 	// FIXME: sort by name
@@ -166,7 +165,6 @@ func (service *prototype) getDatabase(w http.ResponseWriter,
 			Id:           dbName,
 			Name:         db.Name,
 			Organization: db.Organization,
-			URL:          db.URL,
 		})
 		writeJson(w, data)
 	}

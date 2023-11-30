@@ -29,7 +29,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/google/uuid"
@@ -189,7 +189,7 @@ func (ep *Endpoint) FilesStaged(files []core.DataResource) (bool, error) {
 	// find all the directories in which these files reside
 	filesInDir := make(map[string][]string)
 	for _, resource := range files {
-		dir, file := path.Split(resource.Path)
+		dir, file := filepath.Split(resource.Path)
 		if _, found := filesInDir[dir]; !found {
 			filesInDir[dir] = make([]string, 0)
 		}
@@ -200,9 +200,9 @@ func (ep *Endpoint) FilesStaged(files []core.DataResource) (bool, error) {
 	// (https://docs.globus.org/api/transfer/file_operations/#list_directory_contents)
 	for dir, files := range filesInDir {
 		values := url.Values{}
-		values.Add("path", dir)
+		values.Add("path", "/"+dir)
 		values.Add("orderby", "name ASC")
-		resource := fmt.Sprintf("operation/endpoint/%s", ep.Id)
+		resource := fmt.Sprintf("operation/endpoint/%s/ls", ep.Id)
 
 		resp, err := ep.get(resource, values)
 		defer resp.Body.Close()
@@ -274,13 +274,18 @@ func (ep *Endpoint) Transfers() ([]uuid.UUID, error) {
 }
 
 func (ep *Endpoint) Transfer(dst core.Endpoint, files []core.FileTransfer) (uuid.UUID, error) {
-	gDst := dst.(*Endpoint)
-	var xferId uuid.UUID
-	u, err := url.ParseRequestURI(globusTransferBaseURL)
-	if err == nil {
-		// first, get a submission ID
+	// first, we check that all requested files are staged on this endpoint
+	// (Globus does not perform this check by itself)
+	requestedFiles := make([]core.DataResource, len(files))
+	for i, file := range files {
+		requestedFiles[i].Path = file.SourcePath // only the Path field is required
+	}
+	staged, err := ep.FilesStaged(requestedFiles)
+	if err == nil && staged {
+		// obtain a submission ID
 		// https://docs.globus.org/api/transfer/task_submit/#get_submission_id
-		resp, err := ep.get("submiѕsion_id", url.Values{})
+		var xferId uuid.UUID
+		resp, err := ep.get("submission_id", url.Values{})
 		defer resp.Body.Close()
 		if err == nil {
 			var body []byte
@@ -306,8 +311,8 @@ func (ep *Endpoint) Transfer(dst core.Endpoint, files []core.FileTransfer) (uuid
 				SourcePath        string `json:"source_path"`
 				DestinationPath   string `json:"destination_path"`
 				Recursive         bool   `json:"recursive"`
-				ExternalChecksum  string `json:"external_checksum"`
-				ChecksumAlgorithm string `json:"checksum_algorithm"`
+				ExternalChecksum  string `json:"external_checksum,omitempty"`
+				ChecksumAlgorithm string `json:"checksum_algorithm,omitempty"`
 			}
 			type SubmissionRequest struct {
 				DataType            string         `json:"DATA_TYPE"` // "transfer"
@@ -332,6 +337,7 @@ func (ep *Endpoint) Transfer(dst core.Endpoint, files []core.FileTransfer) (uuid
 				}
 			}
 			var data []byte
+			gDst := dst.(*Endpoint)
 			data, err = json.Marshal(SubmissionRequest{
 				DataType:            "transfer",
 				Id:                  xferId.String(),
@@ -344,31 +350,39 @@ func (ep *Endpoint) Transfer(dst core.Endpoint, files []core.FileTransfer) (uuid
 				FailOnQuotaErrors:   true,
 			})
 			if err == nil {
-				u.Path = "/transfer"
-				request := fmt.Sprintf("%v", u)
 				var resp *http.Response
-				resp, err = http.Post(request, "application/json", bytes.NewReader(data))
+				resp, err = ep.post("transfer", bytes.NewReader(data))
 				if err == nil {
 					defer resp.Body.Close()
 					var body []byte
 					body, err = io.ReadAll(resp.Body)
 					if err == nil {
 						type SubmissionResponse struct {
-							TaskId uuid.UUID `json:"task_id"`
+							TaskId  uuid.UUID `json:"task_id"`
+							Code    string    `json:"code"`
+							Message string    `json:"message"`
 						}
 
 						var gResp SubmissionResponse
 						err = json.Unmarshal(body, &gResp)
 						if err == nil {
 							xferId = gResp.TaskId
+							var zero uuid.UUID
+							if xferId == zero { // trouble!
+								err = fmt.Errorf("%s (%s)", gResp.Message, gResp.Code)
+							}
 						}
 					}
 				}
 			}
 		}
+		return xferId, err
+	} else {
+		if err == nil {
+			err = fmt.Errorf("The files requested for transfer are not yet staged.")
+		}
+		return uuid.UUID{}, err
 	}
-
-	return xferId, err
 }
 
 func (ep *Endpoint) Status(id uuid.UUID) (core.TransferStatus, error) {

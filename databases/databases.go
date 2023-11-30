@@ -29,20 +29,42 @@ import (
 )
 
 // we maintain a table of database instances, identified by their names
-var allDatabases map[string]core.Database = make(map[string]core.Database)
+var allDatabases = make(map[string]core.Database)
+
+// here's a table of database creation functions
+var createDatabaseFuncs = make(map[string]func(name string) (core.Database, error))
+
+// registers a database creation function under the given database name
+// to allow for e.g. test database implementations
+func RegisterDatabase(dbName string, createDb func(orcid string) (core.Database, error)) error {
+	if _, found := createDatabaseFuncs[dbName]; found {
+		return fmt.Errorf("Cannot register database %s (already registered)", dbName)
+	} else {
+		createDatabaseFuncs[dbName] = createDb
+		return nil
+	}
+}
+
+var firstNewDatabaseCall = true
 
 // creates a database proxy associated with the given ORCID ID, based on the
 // configured type, or returns an existing instance
 func NewDatabase(orcid, dbName string) (core.Database, error) {
 	var err error
 
+	// register our built-in databases if this is the first call to this function
+	if firstNewDatabaseCall {
+		RegisterDatabase("jdp", jdp.NewDatabase)
+		firstNewDatabaseCall = false
+	}
+
 	// do we have one of these already?
 	key := fmt.Sprintf("orcid: %s db: %s", orcid, dbName)
 	db, found := allDatabases[key]
 	if !found {
-		// go get one
-		if dbName == "jdp" {
-			db, err = jdp.NewDatabase(orcid)
+		// create the requested database
+		if createDb, valid := createDatabaseFuncs[dbName]; valid {
+			db, err = createDb(orcid)
 		} else {
 			err = fmt.Errorf("Unknown database type for '%s'", dbName)
 		}

@@ -23,7 +23,9 @@ package globus
 
 import (
 	"fmt"
+	"math/rand"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -40,11 +42,6 @@ var sourceFilesById = map[string]string{
 	"1": "share/godata/file1.txt",
 	"2": "share/godata/file2.txt",
 	"3": "share/godata/file3.txt",
-}
-var destinationFilesById = map[string]string{
-	"1": "dts-test-dir/file1.txt",
-	"2": "dts-test-dir/file2.txt",
-	"3": "dts-test-dir/file3.txt",
 }
 
 const globusConfig string = `
@@ -141,6 +138,18 @@ func TestGlobusFilesStaged(t *testing.T) {
 	assert.Nil(err)
 }
 
+// This function generates a unique name for a directory on the destination
+// endpoint to receive files
+var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+func destDirName(n int) string {
+	b := make([]rune, n)
+	for i := range b {
+		b[i] = letters[rand.Intn(len(letters))]
+	}
+	return string(b)
+}
+
 func TestGlobusTransfer(t *testing.T) {
 	assert := assert.New(t)
 	source, _ := NewEndpoint("source")
@@ -149,9 +158,10 @@ func TestGlobusTransfer(t *testing.T) {
 	fileXfers := make([]core.FileTransfer, 0)
 	for i := 1; i <= 3; i++ {
 		id := fmt.Sprintf("%d", i)
+
 		fileXfers = append(fileXfers, core.FileTransfer{
 			SourcePath:      sourceFilesById[id],
-			DestinationPath: destinationFilesById[id],
+			DestinationPath: strings.ReplaceAll(sourceFilesById[id], "share/godata", destDirName(16)),
 		})
 	}
 	_, err := source.Transfer(destination, fileXfers)
@@ -169,7 +179,7 @@ func TestBadGlobusTransfer(t *testing.T) {
 		id := fmt.Sprintf("%d", i)
 		fileXfers = append(fileXfers, core.FileTransfer{
 			SourcePath:      sourceFilesById[id] + "_with_bad_suffix",
-			DestinationPath: destinationFilesById[id],
+			DestinationPath: strings.ReplaceAll(sourceFilesById[id]+"_with_bad_suffix", "share/godata", destDirName(16)),
 		})
 	}
 	_, err := source.Transfer(destination, fileXfers)

@@ -1,4 +1,4 @@
-module dts
+module github.com/kbase/dts
 
 go 1.21.0
 

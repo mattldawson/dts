@@ -36,10 +36,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"dts/config"
-	"dts/core"
-	"dts/credit"
-	"dts/endpoints"
+	"github.com/kbase/dts/config"
+	"github.com/kbase/dts/core"
+	"github.com/kbase/dts/credit"
+	"github.com/kbase/dts/endpoints"
 )
 
 const (

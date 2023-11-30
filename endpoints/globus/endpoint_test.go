@@ -31,8 +31,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 
-	"dts/config"
-	"dts/core"
+	"github.com/kbase/dts/config"
+	"github.com/kbase/dts/core"
 )
 
 // source database files by ID
@@ -87,7 +87,7 @@ func TestGlobusConstructor(t *testing.T) {
 }
 
 func TestBadGlobusConstructor(t *testing.T) {
-	assert := assert.New(t) // binds assert to t
+	assert := assert.New(t)
 
 	endpoint, err := NewEndpoint("not-globus-jdp")
 	assert.Nil(endpoint)

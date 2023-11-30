@@ -24,11 +24,11 @@ package core
 import (
 	"fmt"
 	"os"
+	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 // the interval at which our test task manager polls to update status
@@ -80,7 +80,7 @@ func breakdown() {
 }
 
 func TestNewTaskManager(t *testing.T) {
-	assert := assert.New(t) // binds assert to t
+	assert := assert.New(t)
 
 	mgr, err := NewTaskManager(pollInterval)
 	assert.NotNil(mgr)
@@ -91,7 +91,7 @@ func TestNewTaskManager(t *testing.T) {
 }
 
 func TestAddTask(t *testing.T) {
-	assert := assert.New(t) // binds assert to t
+	assert := assert.New(t)
 
 	mgr, err := NewTaskManager(pollInterval)
 	assert.Nil(err)

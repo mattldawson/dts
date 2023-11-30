@@ -1,11 +1,12 @@
 package endpoints
 
 import (
-	"github.com/stretchr/testify/assert"
 	"os"
 	"testing"
 
-	"dts/config"
+	"github.com/stretchr/testify/assert"
+
+	"github.com/kbase/dts/config"
 )
 
 const globusConfig string = `
@@ -35,21 +36,21 @@ func breakdown() {
 }
 
 func TestNewGlobusEndpoint(t *testing.T) {
-	assert := assert.New(t) // binds assert to t
+	assert := assert.New(t)
 	ep, err := NewEndpoint("globus")
 	assert.NotNil(ep, "Globus endpoint not created")
 	assert.Nil(err, "Globus endpoint creation encountered an error")
 }
 
 func TestInvalidEndpoint(t *testing.T) {
-	assert := assert.New(t) // binds assert to t
+	assert := assert.New(t)
 	ep, err := NewEndpoint("invalid")
 	assert.Nil(ep, "Invalid endpoint somehow created")
 	assert.NotNil(err, "Invalid endpoint creation returned no error")
 }
 
 func TestNonexistentEndpoint(t *testing.T) {
-	assert := assert.New(t) // binds assert to t
+	assert := assert.New(t)
 	ep, err := NewEndpoint("nonexistent")
 	assert.Nil(ep, "Nonexistent endpoint somehow created")
 	assert.NotNil(err, "Nonexistent endpoint creation returned no error")

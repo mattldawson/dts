@@ -22,9 +22,10 @@
 package core
 
 import (
-	"dts/credit"
 	"encoding/json"
 	"strings"
+
+	"github.com/kbase/dts/credit"
 )
 
 // a Frictionless data package describing a set of related resources

@@ -24,8 +24,8 @@ package databases
 import (
 	"fmt"
 
-	"dts/core"
-	"dts/databases/jdp"
+	"github.com/kbase/dts/core"
+	"github.com/kbase/dts/databases/jdp"
 )
 
 // we maintain a table of database instances, identified by their names

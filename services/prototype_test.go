@@ -38,15 +38,6 @@ var (
 	apiPrefix = "api/v1/"
 )
 
-// source database files by ID
-// (these files exist on Globus Tutorial Endpoint 1 (see below) for exactly
-// this sort of testing)
-var sourceFilesById = map[string]string{
-	"1": "share/godata/file1.txt",
-	"2": "share/godata/file2.txt",
-	"3": "share/godata/file3.txt",
-}
-
 // service instance
 var service TransferService
 

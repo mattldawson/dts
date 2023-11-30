@@ -311,8 +311,8 @@ func (ep *Endpoint) Transfer(dst core.Endpoint, files []core.FileTransfer) (uuid
 				SourcePath        string `json:"source_path"`
 				DestinationPath   string `json:"destination_path"`
 				Recursive         bool   `json:"recursive"`
-				ExternalChecksum  string `json:"external_checksum"`
-				ChecksumAlgorithm string `json:"checksum_algorithm"`
+				ExternalChecksum  string `json:"external_checksum,omitempty"`
+				ChecksumAlgorithm string `json:"checksum_algorithm,omitempty"`
 			}
 			type SubmissionRequest struct {
 				DataType            string         `json:"DATA_TYPE"` // "transfer"
@@ -358,13 +358,19 @@ func (ep *Endpoint) Transfer(dst core.Endpoint, files []core.FileTransfer) (uuid
 					body, err = io.ReadAll(resp.Body)
 					if err == nil {
 						type SubmissionResponse struct {
-							TaskId uuid.UUID `json:"task_id"`
+							TaskId  uuid.UUID `json:"task_id"`
+							Code    string    `json:"code"`
+							Message string    `json:"message"`
 						}
 
 						var gResp SubmissionResponse
 						err = json.Unmarshal(body, &gResp)
 						if err == nil {
 							xferId = gResp.TaskId
+							var zero uuid.UUID
+							if xferId == zero { // trouble!
+								err = fmt.Errorf("%s (%s)", gResp.Message, gResp.Code)
+							}
 						}
 					}
 				}

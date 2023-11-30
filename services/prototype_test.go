@@ -82,12 +82,14 @@ endpoints:
 
 type testDatabase struct {
 	endpoint core.Endpoint
+	fileDir  string // directory housing files
 }
 
 func NewSourceTestDatabase(orcid string) (core.Database, error) {
 	ep, err := globus.NewEndpoint("source-endpoint")
 	return &testDatabase{
 		endpoint: ep,
+		fileDir:  "share/godata",
 	}, err
 }
 
@@ -95,6 +97,7 @@ func NewDestinationTestDatabase(orcid string) (core.Database, error) {
 	ep, err := globus.NewEndpoint("destination-endpoint")
 	return &testDatabase{
 		endpoint: ep,
+		fileDir:  "copied",
 	}, err
 }
 
@@ -106,7 +109,7 @@ func (db *testDatabase) Search(params core.SearchParameters) (core.SearchResults
 				core.DataResource{
 					Id:        params.Query,
 					Name:      fmt.Sprintf("file%s", params.Query),
-					Path:      fmt.Sprintf("share/godata/file%s.txt", params.Query),
+					Path:      fmt.Sprintf("%s/file%s.txt", db.fileDir, params.Query),
 					Format:    "text",
 					MediaType: "text/plain",
 					Bytes:     4,
@@ -125,7 +128,7 @@ func (db *testDatabase) Resources(fileIds []string) ([]core.DataResource, error)
 			results = append(results, core.DataResource{
 				Id:        id,
 				Name:      fmt.Sprintf("file%s", id),
-				Path:      fmt.Sprintf("share/godata/file%s.txt", id),
+				Path:      fmt.Sprintf("%s/file%s.txt", db.fileDir, id),
 				Format:    "text",
 				MediaType: "text/plain",
 				Bytes:     4,
@@ -181,7 +184,7 @@ func setup() {
 			log.Panicf("Couldn't construct the service: %s", err.Error())
 		}
 		databases.RegisterDatabase("source", NewSourceTestDatabase)
-		databases.RegisterDatabase("destination", NewSourceTestDatabase)
+		databases.RegisterDatabase("destination", NewDestinationTestDatabase)
 		err = service.Start(config.Service.Port)
 		if err != nil {
 			log.Panicf("Couldn't start search service: %s", err.Error())

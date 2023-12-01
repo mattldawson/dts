@@ -135,13 +135,20 @@ func processTasks(channels channelsType) {
 					if task.Staging.Valid {
 						// are the files staged?
 						staged, err = endpoint.FilesStaged(task.Resources)
-						if staged { // yup -- start the transfer
+						if staged {
 							slog.Info(fmt.Sprintf("File staging for task %s completed successfully.", taskId.String()))
+
+							// generate a manifest for the transfer and send it to the
+							// source endpoint
+							// FIXME: this adds a new stage to the transfer process, so this
+							// FIXME: code needs restructuring.
+
+							// initiate the transfer (including the manifest)
 							fileXfers := make([]FileTransfer, len(task.Resources))
 							for i, resource := range task.Resources {
 								fileXfers[i] = FileTransfer{
 									SourcePath:      resource.Path,
-									DestinationPath: resource.Path,
+									DestinationPath: resource.Path, // FIXME: needs updating to destination dir structure
 									Hash:            resource.Hash,
 								}
 							}

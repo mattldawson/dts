@@ -67,6 +67,8 @@ type Endpoint struct {
 	AccessToken string
 }
 
+// creates a new Globus endpoint using the information supplied in the
+// DTS configuration file under the given endpoint name
 func NewEndpoint(endpointName string) (core.Endpoint, error) {
 	epConfig, found := config.Endpoints[endpointName]
 	if !found {
@@ -85,6 +87,15 @@ func NewEndpoint(endpointName string) (core.Endpoint, error) {
 	err := ep.authenticate(epConfig.Auth.ClientId,
 		epConfig.Auth.ClientSecret)
 
+	return ep, err
+}
+
+// creates a Globus Connect Personal endpoint that the DTS can use to create
+// files (e. g. manifests) and transfer them to other endpoints
+func NewConnectPersonalEndpoint() (core.Endpoint, error) {
+	// FIXME
+	var ep Endpoint
+	var err error
 	return ep, err
 }
 

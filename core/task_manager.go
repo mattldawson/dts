@@ -36,7 +36,8 @@ type taskType struct {
 	FileIds             []string       // IDs of files within Source
 	Resources           []DataResource // Frictionless DataResources for files
 	Staging, Transfer   uuid.NullUUID  // staging and file transfer UUIDs (if any)
-	Finished            bool           // true iff the task has completed
+	// FIXME: need status information here
+	Finished bool // true iff the task has completed
 }
 
 // this type holds various channels used by the TaskManager to communicate
@@ -74,6 +75,10 @@ func processTasks(channels channelsType) {
 	var errorChan chan<- error = channels.Error
 	var pollChan <-chan struct{} = channels.Poll
 	var stopChan <-chan struct{} = channels.Stop
+
+	// set up a local Globus endpoint to handle manifest transfers
+	//var localEndpoint core.Endpoint
+	// FIXME
 
 	// start scurrying around
 	var err error
@@ -137,41 +142,20 @@ func processTasks(channels channelsType) {
 						staged, err = endpoint.FilesStaged(task.Resources)
 						if staged {
 							slog.Info(fmt.Sprintf("File staging for task %s completed successfully.", taskId.String()))
-
-							// generate a manifest for the transfer and send it to the
-							// source endpoint
-							// FIXME: this adds a new stage to the transfer process, so this
-							// FIXME: code needs restructuring.
-
-							// initiate the transfer (including the manifest)
-							fileXfers := make([]FileTransfer, len(task.Resources))
-							for i, resource := range task.Resources {
-								fileXfers[i] = FileTransfer{
-									SourcePath:      resource.Path,
-									DestinationPath: resource.Path, // FIXME: needs updating to destination dir structure
-									Hash:            resource.Hash,
-								}
-							}
-							task.Transfer.UUID, err = endpoint.Transfer(task.Destination.Endpoint(), fileXfers)
-							if err == nil {
-								task.Staging.Valid = false
-								task.Transfer.Valid = true
-								slog.Info(fmt.Sprintf("Beginning transfer for task %s.", taskId.String()))
-								tasks[taskId] = task
-							}
+							err = initiateTransfer(&task)
 						}
 					} else if task.Transfer.Valid {
-						// has the task completed?
-						status, err = endpoint.Status(task.Transfer.UUID)
-						if err == nil && (status.Code == TransferStatusSucceeded || status.Code == TransferStatusFailed) {
-							task.Finished = true
-							tasks[taskId] = task
-							if status.Code == TransferStatusSucceeded {
-								slog.Info(fmt.Sprintf("Transfer task %s completed successfully.", taskId.String()))
-							} else {
-								slog.Info(fmt.Sprintf("Transfer task %s failed.", taskId.String()))
-							}
+						// check to see whether the transfer has completed and make
+						var finished bool
+						err = monitorTransfer(&task)
+						if task.Status.Code == TransferStatusSucceeded {
+							slog.Info(fmt.Sprintf("Transfer task %s completed successfully.", taskId.String()))
+						} else if task.Status.Code == TransferStatusFailed {
+							slog.Info(fmt.Sprintf("Transfer task %s failed.", taskId.String()))
 						}
+						tasks[taskId] = task
+					} else if task.Manifest.Valid {
+						// has the manifest been successfully transferred?
 					}
 					if err != nil {
 						slog.Error(err.Error())
@@ -182,6 +166,54 @@ func processTasks(channels channelsType) {
 			break
 		}
 	}
+}
+
+func initiateTransfer(task *taskType) error {
+	// initiate the transfer
+	fileXfers := make([]FileTransfer, len(task.Resources))
+	for i, resource := range task.Resources {
+		fileXfers[i] = FileTransfer{
+			SourcePath:      resource.Path,
+			DestinationPath: resource.Path, // FIXME: needs updating to destination dir structure
+			Hash:            resource.Hash,
+		}
+	}
+	task.Transfer.UUID, err = endpoint.Transfer(task.Destination.Endpoint(), fileXfers)
+	if err == nil {
+		task.Staging.Valid = false
+		task.Transfer.Valid = true
+		slog.Info(fmt.Sprintf("Beginning transfer for task %s.", taskId.String()))
+		tasks[taskId] = task
+	}
+}
+
+func monitorTransfer(task *taskType) error {
+	// has the data transfer completed?
+	task.status, err := endpoint.Status(task.Transfer.UUID)
+	if err == nil && (task.Status.Code == TransferStatusSucceeded ||
+		task.Status.Code == TransferStatusFailed) {
+		task.Transfer.Valid = false
+		if status.Code == TransferStatusSucceeded {
+			// generate a manifest for the transfer and send it to the
+			// source endpoint
+			var manifestJson string
+			manifestJson, err = generateManifest(task.Resources)
+			// FIXME
+			task.Finished = true
+		}
+	}
+	return err
+}
+
+// generates a manifest.json file describing the payload for a transfer (which
+// is defined by the given slice of Frictionless DataResources), returning a
+// string containing the location of the generated file and/or any pertinent
+// error
+func generateManifest(payload []DataResource) (string, error) {
+	// FIXME
+	var path string
+	var err error
+	return path, err
 }
 
 // This type manages all the behind-the-scenes work involved in orchestrating

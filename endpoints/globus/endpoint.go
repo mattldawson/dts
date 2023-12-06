@@ -94,7 +94,7 @@ func NewEndpoint(endpointName string) (core.Endpoint, error) {
 // files (e. g. manifests) and transfer them to other endpoints
 func NewConnectPersonalEndpoint() (core.Endpoint, error) {
 	// FIXME
-	var ep Endpoint
+	var ep *Endpoint
 	var err error
 	return ep, err
 }

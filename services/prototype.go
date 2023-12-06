@@ -321,7 +321,7 @@ func (service *prototype) createTransfer(w http.ResponseWriter,
 		return
 	}
 
-	taskId, err := service.Tasks.Add(source, destination, request.FileIds)
+	taskId, err := service.Tasks.Add(request.Orcid, source, destination, request.FileIds)
 	if err == nil {
 		jsonData, _ := json.Marshal(TransferResponse{Id: taskId})
 		writeJson(w, jsonData)

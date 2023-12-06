@@ -24,6 +24,7 @@ package core
 import (
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"time"
 
 	"github.com/google/uuid"
@@ -32,12 +33,82 @@ import (
 // this type holds multiple (possibly null) UUIDs corresponding to different
 // portions of a file transfer
 type taskType struct {
+	Id                  uuid.UUID      // task identifier
+	Orcid               string         // Orcid ID for user requesting transfer
 	Source, Destination Database       // source and destination databases
 	FileIds             []string       // IDs of files within Source
 	Resources           []DataResource // Frictionless DataResources for files
 	Staging, Transfer   uuid.NullUUID  // staging and file transfer UUIDs (if any)
-	// FIXME: need status information here
-	Finished bool // true iff the task has completed
+	Manifest            uuid.NullUUID  // manifest generation UUID (if any)
+	Status              TransferStatus // status of file transfer operation
+}
+
+// checks the status of a task, updating its state accordingly
+func (task *taskType) Update() error {
+	var err error
+	sourceEndpoint := task.Source.Endpoint()
+	destinationEndpoint := task.Destination.Endpoint()
+	if task.Resources == nil { // new task!
+		// resolve file paths using file IDs
+		task.Resources, err = task.Source.Resources(task.FileIds)
+		if err == nil {
+			// tell the source DB to stage the files, stash the task, and return
+			// its new ID
+			task.Staging.UUID, err = task.Source.StageFiles(task.FileIds)
+			task.Staging.Valid = true
+			if err == nil {
+				task.Status = TransferStatus{
+					Code:     TransferStatusStaging,
+					NumFiles: len(task.FileIds),
+				}
+			}
+		}
+	} else if task.Staging.Valid { // we're staging
+		// are the files staged?
+		var staged bool
+		staged, err = sourceEndpoint.FilesStaged(task.Resources)
+		if err == nil && staged {
+			// initiate the transfer
+			fileXfers := make([]FileTransfer, len(task.Resources))
+			username := "user" // FIXME: how do we obtain this from our Orcid ID?
+			for i, resource := range task.Resources {
+				destinationPath := filepath.Join(username, task.Id.String(), resource.Path)
+				fileXfers[i] = FileTransfer{
+					SourcePath:      resource.Path,
+					DestinationPath: destinationPath,
+					Hash:            resource.Hash,
+				}
+			}
+			task.Transfer.UUID, err = sourceEndpoint.Transfer(destinationEndpoint, fileXfers)
+			if err == nil {
+				task.Status = TransferStatus{
+					Code:     TransferStatusActive,
+					NumFiles: len(task.FileIds),
+				}
+				task.Staging.Valid = false
+				task.Transfer.Valid = true
+			}
+		}
+	} else if task.Transfer.Valid { // we're transferring
+		// has the data transfer completed?
+		var xferStatus TransferStatus
+		xferStatus, err = sourceEndpoint.Status(task.Transfer.UUID)
+		if err == nil && (xferStatus.Code == TransferStatusSucceeded ||
+			task.Status.Code == TransferStatusFailed) { // transfer finished
+			task.Transfer.Valid = false
+			if xferStatus.Code == TransferStatusSucceeded {
+				// generate a manifest for the transfer and send it to the
+				// source endpoint
+				// FIXME: do it!
+				if err == nil {
+					task.Manifest.Valid = true
+				}
+			}
+		}
+	} else if task.Manifest.Valid { // we're generating/sending a manifest
+		// FIXME: check status
+	}
+	return err
 }
 
 // this type holds various channels used by the TaskManager to communicate
@@ -76,7 +147,7 @@ func processTasks(channels channelsType) {
 	var pollChan <-chan struct{} = channels.Poll
 	var stopChan <-chan struct{} = channels.Stop
 
-	// set up a local Globus endpoint to handle manifest transfers
+	// set up a local endpoint to handle manifest transfers
 	//var localEndpoint core.Endpoint
 	// FIXME
 
@@ -85,135 +156,48 @@ func processTasks(channels channelsType) {
 	for {
 		select {
 		case newTask := <-taskChan: // Add() called
-			// resolve file paths using file IDs
-			newTask.Resources, err = newTask.Source.Resources(newTask.FileIds)
-			if err == nil {
-				// tell the source DB to stage the files, stash the task, and return
-				// its new ID
-				newTask.Staging.UUID, err = newTask.Source.StageFiles(newTask.FileIds)
-				newTask.Staging.Valid = true
-				if err == nil {
-					taskId := uuid.New()
-					tasks[taskId] = newTask
-					taskIdChan <- taskId
-					slog.Info(fmt.Sprintf("Staging files for new task %s.", taskId.String()))
-				}
-			}
-			if err != nil {
-				slog.Error(err.Error())
-				errorChan <- err
-			}
+			newTask.Id = uuid.New()
+			tasks[newTask.Id] = newTask
+			taskIdChan <- newTask.Id
+			slog.Info(fmt.Sprintf("Added new transfer task %s.", newTask.Id.String()))
 		case taskId := <-taskIdChan: // Status() called
 			if task, found := tasks[taskId]; found {
-				var status TransferStatus
-				if task.Staging.Valid { // files are being staged
-					status = TransferStatus{
-						Code:     TransferStatusStaging,
-						NumFiles: len(task.FileIds),
-					}
-				} else if task.Transfer.Valid {
-					status, err = task.Source.Endpoint().Status(task.Transfer.UUID)
-					if status.Code == TransferStatusSucceeded || status.Code == TransferStatusFailed {
-						task.Finished = true
-						tasks[taskId] = task
-					}
-				} else {
-					err = fmt.Errorf("Task %s status in invalid state!", taskId.String())
-				}
-				if err == nil {
-					statusChan <- status
-				} else {
-					slog.Error(err.Error())
-					errorChan <- err
-				}
+				statusChan <- task.Status
 			} else {
 				err = fmt.Errorf("Task %s not found!", taskId.String())
-				slog.Error(err.Error())
-				errorChan <- err
 			}
 		case <-pollChan: // time to move things along
-			var status TransferStatus
 			for taskId, task := range tasks {
-				var staged bool
-				if !task.Finished {
-					endpoint := task.Source.Endpoint()
-					if task.Staging.Valid {
-						// are the files staged?
-						staged, err = endpoint.FilesStaged(task.Resources)
-						if staged {
-							slog.Info(fmt.Sprintf("File staging for task %s completed successfully.", taskId.String()))
-							err = initiateTransfer(&task)
+				oldStatus := task.Status
+				err := task.Update()
+				if err == nil {
+					if task.Status.Code != oldStatus.Code {
+						switch task.Status.Code {
+						case TransferStatusStaging:
+							slog.Info(fmt.Sprintf("Staging files for task %s.", task.Id.String()))
+						case TransferStatusActive:
+							slog.Info(fmt.Sprintf("Beginning transfer for task %s.", task.Id.String()))
+						case TransferStatusInactive:
+							slog.Info(fmt.Sprintf("Suspended transfer for task %s.", task.Id.String()))
+						case TransferStatusFinalizing:
+							slog.Info(fmt.Sprintf("Finalizing transfer for task %s.", task.Id.String()))
+						case TransferStatusSucceeded:
+							slog.Info(fmt.Sprintf("Transfer task %s completed successfully.", task.Id.String()))
+						case TransferStatusFailed:
+							slog.Info(fmt.Sprintf("Transfer task %s failed.", task.Id.String()))
 						}
-					} else if task.Transfer.Valid {
-						// check to see whether the transfer has completed and make
-						var finished bool
-						err = monitorTransfer(&task)
-						if task.Status.Code == TransferStatusSucceeded {
-							slog.Info(fmt.Sprintf("Transfer task %s completed successfully.", taskId.String()))
-						} else if task.Status.Code == TransferStatusFailed {
-							slog.Info(fmt.Sprintf("Transfer task %s failed.", taskId.String()))
-						}
-						tasks[taskId] = task
-					} else if task.Manifest.Valid {
-						// has the manifest been successfully transferred?
 					}
-					if err != nil {
-						slog.Error(err.Error())
-					}
+					tasks[taskId] = task
 				}
 			}
 		case <-stopChan: // Close() called
 			break
 		}
-	}
-}
-
-func initiateTransfer(task *taskType) error {
-	// initiate the transfer
-	fileXfers := make([]FileTransfer, len(task.Resources))
-	for i, resource := range task.Resources {
-		fileXfers[i] = FileTransfer{
-			SourcePath:      resource.Path,
-			DestinationPath: resource.Path, // FIXME: needs updating to destination dir structure
-			Hash:            resource.Hash,
+		if err != nil {
+			slog.Error(err.Error())
+			errorChan <- err
 		}
 	}
-	task.Transfer.UUID, err = endpoint.Transfer(task.Destination.Endpoint(), fileXfers)
-	if err == nil {
-		task.Staging.Valid = false
-		task.Transfer.Valid = true
-		slog.Info(fmt.Sprintf("Beginning transfer for task %s.", taskId.String()))
-		tasks[taskId] = task
-	}
-}
-
-func monitorTransfer(task *taskType) error {
-	// has the data transfer completed?
-	task.status, err := endpoint.Status(task.Transfer.UUID)
-	if err == nil && (task.Status.Code == TransferStatusSucceeded ||
-		task.Status.Code == TransferStatusFailed) {
-		task.Transfer.Valid = false
-		if status.Code == TransferStatusSucceeded {
-			// generate a manifest for the transfer and send it to the
-			// source endpoint
-			var manifestJson string
-			manifestJson, err = generateManifest(task.Resources)
-			// FIXME
-			task.Finished = true
-		}
-	}
-	return err
-}
-
-// generates a manifest.json file describing the payload for a transfer (which
-// is defined by the given slice of Frictionless DataResources), returning a
-// string containing the location of the generated file and/or any pertinent
-// error
-func generateManifest(payload []DataResource) (string, error) {
-	// FIXME
-	var path string
-	var err error
-	return path, err
 }
 
 // This type manages all the behind-the-scenes work involved in orchestrating
@@ -244,13 +228,15 @@ func NewTaskManager(pollInterval time.Duration) (*TaskManager, error) {
 	return &mgr, nil
 }
 
-// Adds a new transfer task to the manager's set, returning a UUID
-// for the task. The task is defined by specifying source and destination
-// databases and a set of file IDs associated with the source.
-func (mgr *TaskManager) Add(source, destination Database, fileIDs []string) (uuid.UUID, error) {
+// Adds a new transfer task associated with the user with the specified Orcid ID
+// to the manager's set, returning a UUID for the task. The task is defined by
+// specifying source and destination databases and a set of file IDs associated
+// with the source.
+func (mgr *TaskManager) Add(orcid string, source, destination Database, fileIDs []string) (uuid.UUID, error) {
 	var taskId uuid.UUID
 	var err error
 	mgr.Channels.Task <- taskType{
+		Orcid:       orcid,
 		Source:      source,
 		Destination: destination,
 		FileIds:     fileIDs,

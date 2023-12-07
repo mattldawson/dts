@@ -56,12 +56,12 @@ func TestNonexistentEndpoint(t *testing.T) {
 	assert.NotNil(err, "Nonexistent endpoint creation returned no error")
 }
 
-func TestNewLocalGlobusEndpoint(t *testing.T) {
+func TestLocalEndpoint(t *testing.T) {
 	assert := assert.New(t)
 	destEp, err := NewEndpoint("globus")
 	assert.NotNil(ep, "Globus endpoint not created")
 	assert.Nil(err, "Globus endpoint creation encountered an error")
-	localEp, err := NewLocalEndpoint(destEp)
+	localEp, err := destEp.LocalEndpoint()
 	assert.NotNil(ep, "Local Globus endpoint not created")
 	assert.Nil(err, "Local Globus endpoint creation encountered an error")
 }

@@ -47,9 +47,16 @@ type taskType struct {
 
 // checks the status of a task, updating its state accordingly
 func (task *taskType) Update() error {
-	var err error
+	username := "user" // FIXME: how do we obtain this from our Orcid ID?
 	sourceEndpoint := task.Source.Endpoint()
 	destinationEndpoint := task.Destination.Endpoint()
+
+	// create or fetch a local endpoint compatible with our destination endpoint
+	localEndpoint, err := destinationEndpoint.LocalEndpoint()
+	if err != nil {
+		return err
+	}
+
 	if task.Resources == nil { // new task!
 		// resolve file paths using file IDs
 		task.Resources, err = task.Source.Resources(task.FileIds)
@@ -72,7 +79,6 @@ func (task *taskType) Update() error {
 		if err == nil && staged {
 			// initiate the transfer
 			fileXfers := make([]FileTransfer, len(task.Resources))
-			username := "user" // FIXME: how do we obtain this from our Orcid ID?
 			for i, resource := range task.Resources {
 				destinationPath := filepath.Join(username, task.Id.String(), resource.Path)
 				fileXfers[i] = FileTransfer{
@@ -96,7 +102,7 @@ func (task *taskType) Update() error {
 		var xferStatus TransferStatus
 		xferStatus, err = sourceEndpoint.Status(task.Transfer.UUID)
 		if err == nil && (xferStatus.Code == TransferStatusSucceeded ||
-			task.Status.Code == TransferStatusFailed) { // transfer finished
+			xferStatus.Code == TransferStatusFailed) { // transfer finished
 			task.Transfer.Valid = false
 			if xferStatus.Code == TransferStatusSucceeded {
 				// generate a manifest for the transfer
@@ -119,8 +125,18 @@ func (task *taskType) Update() error {
 							err = manifestFile.Close()
 							if err == nil {
 								// begin the transfer
-								// FIXME
+								fileXfers := []FileTransfer{
+									FileTransfer{
+										SourcePath:      manifestFile.Name(),
+										DestinationPath: filepath.Join(username, task.Id.String(), "manifest.json"),
+									},
+								}
+								task.Manifest.UUID, err = localEndpoint.Transfer(destinationEndpoint, fileXfers)
 								if err == nil {
+									task.Status = TransferStatus{
+										Code:     TransferStatusFinalizing,
+										NumFiles: 1,
+									}
 									task.Manifest.Valid = true
 								}
 							}
@@ -131,7 +147,14 @@ func (task *taskType) Update() error {
 			}
 		}
 	} else if task.Manifest.Valid { // we're generating/sending a manifest
-		// FIXME: check transfer status
+		// has the manifest transfer completed?
+		var xferStatus TransferStatus
+		xferStatus, err = localEndpoint.Status(task.Manifest.UUID)
+		if err == nil && (xferStatus.Code == TransferStatusSucceeded ||
+			xferStatus.Code == TransferStatusFailed) { // transfer finished
+			task.Manifest.Valid = false
+			task.Status.Code = xferStatus.Code
+		}
 	}
 	return err
 }

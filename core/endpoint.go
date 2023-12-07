@@ -59,6 +59,9 @@ type TransferStatus struct {
 
 // This type represents an endpoint for transferring files.
 type Endpoint interface {
+	// returns a local endpoint that the DTS may use to transfer files directly
+	// to this endpoint
+	LocalEndpoint() (Endpoint, error)
 	// returns true if the files associated with the given DataResources are
 	// staged at this endpoint AND are valid, false otherwise
 	FilesStaged(files []DataResource) (bool, error)

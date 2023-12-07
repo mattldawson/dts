@@ -52,8 +52,20 @@ func NewEndpoint(endpointName string) (core.Endpoint, error) {
 		if err == nil {
 			allEndpoints[endpointName] = endpoint
 		}
-	} else {
-		err = fmt.Errorf("Invalid endpoint: %s", endpointName)
 	}
 	return endpoint, err
+}
+
+// creates a "local" endpoint, for use by the DTS itself in transmitting file
+// manifests, based on the type of the given destination endpoint
+func NewLocalEndpoint(destinationEndpoint core.Endpoint) (core.Endpoint, error) {
+	var localEndpoint core.Endpoint
+	var err error
+	switch destinationEndpoint.(type) {
+	case *globus.Endpoint:
+		localEndpoint, err = globus.LocalEndpoint()
+	default:
+		err = fmt.Errorf("Invalid destination endpoint type!")
+	}
+	return localEndpoint, err
 }

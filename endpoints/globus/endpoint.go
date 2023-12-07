@@ -90,13 +90,16 @@ func NewEndpoint(endpointName string) (core.Endpoint, error) {
 	return ep, err
 }
 
-// creates a Globus Connect Personal endpoint that the DTS can use to create
-// files (e. g. manifests) and transfer them to other endpoints
-func NewConnectPersonalEndpoint() (core.Endpoint, error) {
-	// FIXME
-	var ep *Endpoint
+var localEndpoint *Endpoint
+
+// creates or returns the single local Globus endpoint that the DTS uses to
+// create files (e. g. manifests) and transfer them to other endpoints
+func LocalEndpoint() (core.Endpoint, error) {
 	var err error
-	return ep, err
+	if localEndpoint == nil {
+		// FIXME
+	}
+	return localEndpoint, err
 }
 
 // authenticates with Globus using a client ID and secret to obtain an access

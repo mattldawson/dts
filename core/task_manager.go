@@ -22,8 +22,10 @@
 package core
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -97,16 +99,39 @@ func (task *taskType) Update() error {
 			task.Status.Code == TransferStatusFailed) { // transfer finished
 			task.Transfer.Valid = false
 			if xferStatus.Code == TransferStatusSucceeded {
-				// generate a manifest for the transfer and send it to the
-				// source endpoint
-				// FIXME: do it!
+				// generate a manifest for the transfer
+				manifest := DataPackage{
+					Name:      "manifest",
+					Resources: make([]DataResource, len(task.Resources)),
+				}
+				copy(manifest.Resources, task.Resources)
+
+				// write the manifest to disk and begin transferring it to the
+				// destination endpoint
+				var manifestBytes []byte
+				manifestBytes, err = json.Marshal(manifest)
 				if err == nil {
-					task.Manifest.Valid = true
+					var manifestFile *os.File
+					manifestFile, err = os.CreateTemp("", "manifest.json")
+					if err == nil {
+						_, err = manifestFile.Write(manifestBytes)
+						if err == nil {
+							err = manifestFile.Close()
+							if err == nil {
+								// begin the transfer
+								// FIXME
+								if err == nil {
+									task.Manifest.Valid = true
+								}
+							}
+						}
+						os.Remove(manifestFile.Name())
+					}
 				}
 			}
 		}
 	} else if task.Manifest.Valid { // we're generating/sending a manifest
-		// FIXME: check status
+		// FIXME: check transfer status
 	}
 	return err
 }

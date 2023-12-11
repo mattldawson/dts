@@ -83,9 +83,12 @@ func NewEndpoint(endpointName string) (core.Endpoint, error) {
 		Id:   epConfig.Id,
 	}
 
-	// authenticate to obtain a Globus Transfer API access token
-	err := ep.authenticate(epConfig.Auth.ClientId,
-		epConfig.Auth.ClientSecret)
+	// if needed, authenticate to obtain a Globus Transfer API access token
+	var err error
+	var zeroUUID uuid.UUID
+	if epConfig.Auth.ClientId != zeroUUID {
+		err = ep.authenticate(epConfig.Auth.ClientId, epConfig.Auth.ClientSecret)
+	}
 
 	return ep, err
 }
@@ -187,16 +190,6 @@ func (ep *Endpoint) post(resource string, body io.Reader) (*http.Response, error
 	return nil, err
 }
 
-var localEndpoint *Endpoint
-
-func (ep *Endpoint) LocalEndpoint() (core.Endpoint, error) {
-	var err error
-	if localEndpoint == nil {
-		// FIXME
-	}
-	return localEndpoint, err
-}
-
 func (ep *Endpoint) FilesStaged(files []core.DataResource) (bool, error) {
 	// find all the directories in which these files reside
 	filesInDir := make(map[string][]string)
@@ -217,8 +210,8 @@ func (ep *Endpoint) FilesStaged(files []core.DataResource) (bool, error) {
 		resource := fmt.Sprintf("operation/endpoint/%s/ls", ep.Id)
 
 		resp, err := ep.get(resource, values)
-		defer resp.Body.Close()
 		if err == nil {
+			defer resp.Body.Close()
 			var body []byte
 			body, err = io.ReadAll(resp.Body)
 			if err == nil {

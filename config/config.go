@@ -37,6 +37,9 @@ type serviceConfig struct {
 	MaxConnections int `json:"max_connections" yaml:"max_connections"`
 	// polling interval for checking transfer statuses (seconds)
 	PollInterval int `json:"poll_interval" yaml:"poll_interval"`
+	// name of endpoint with access to local filesystem
+	// (for generating and transferring manifests)
+	Endpoint string `json:"endpoint" yaml:"endpoint"`
 }
 
 // global config variables
@@ -87,6 +90,9 @@ func validateServiceParameters(params serviceConfig) error {
 	if params.MaxConnections <= 0 {
 		return fmt.Errorf("Invalid max_connections: %d (must be positive)",
 			params.MaxConnections)
+	}
+	if _, endpointFound := Endpoints[params.Endpoint]; !endpointFound {
+		return fmt.Errorf("Invalid service endpoint: %s", params.Endpoint)
 	}
 	return nil
 }

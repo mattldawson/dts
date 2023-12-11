@@ -37,6 +37,7 @@ service:
   port: 8080
   max_connections: 100
   poll_interval: 60
+  endpoint: my-globus-endpoint
 `
 
 // a valid endpoints config entry

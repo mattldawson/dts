@@ -56,16 +56,6 @@ func TestNonexistentEndpoint(t *testing.T) {
 	assert.NotNil(err, "Nonexistent endpoint creation returned no error")
 }
 
-func TestLocalEndpoint(t *testing.T) {
-	assert := assert.New(t)
-	destEp, err := NewEndpoint("globus")
-	assert.NotNil(ep, "Globus endpoint not created")
-	assert.Nil(err, "Globus endpoint creation encountered an error")
-	localEp, err := destEp.LocalEndpoint()
-	assert.NotNil(ep, "Local Globus endpoint not created")
-	assert.Nil(err, "Local Globus endpoint creation encountered an error")
-}
-
 // this runs setup, runs all tests, and does breakdown
 func TestMain(m *testing.M) {
 	var status int

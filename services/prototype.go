@@ -21,6 +21,7 @@ import (
 	"github.com/kbase/dts/config"
 	"github.com/kbase/dts/core"
 	"github.com/kbase/dts/databases"
+	"github.com/kbase/dts/endpoints"
 )
 
 // This type implements the TransferService interface, allowing file transfers
@@ -444,7 +445,9 @@ func (service *prototype) Start(port int) error {
 	defer listener.Close()
 	listener = netutil.LimitListener(listener, config.Service.MaxConnections)
 
-	service.Tasks, err = core.NewTaskManager(time.Duration(config.Service.PollInterval) * time.Millisecond)
+	localEndpoint, err := endpoints.NewEndpoint(config.Service.Endpoint)
+	service.Tasks, err = core.NewTaskManager(localEndpoint,
+		time.Duration(config.Service.PollInterval)*time.Millisecond)
 	if err != nil {
 		return err
 	}

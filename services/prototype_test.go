@@ -57,6 +57,10 @@ databases:
     organization: Fabulous Destinations, Inc.
     endpoint: destination-endpoint
 endpoints:
+  local-endpoint:
+    name: We need to decide how to support this in testing
+    id: ???
+    provider: globus
   source-endpoint:
     name: Globus Tutorial Endpoint 1
     id: ddb59aef-6d04-11e5-ba46-22000b92c6ec

@@ -38,6 +38,7 @@ type taskType struct {
 	Id                  uuid.UUID      // task identifier
 	Orcid               string         // Orcid ID for user requesting transfer
 	Source, Destination Database       // source and destination databases
+	LocalEndpoint       Endpoint       // local endpoint used for manifest transfers
 	FileIds             []string       // IDs of files within Source
 	Resources           []DataResource // Frictionless DataResources for files
 	Staging, Transfer   uuid.NullUUID  // staging and file transfer UUIDs (if any)
@@ -45,18 +46,16 @@ type taskType struct {
 	Status              TransferStatus // status of file transfer operation
 }
 
-// checks the status of a task, updating its state accordingly
+// This function updates the state of a task, setting its status as necessary.
+// By modern standards, this function may seem long, but I don't think breaking
+// it into disparate pieces makes it any easier to understand, given the state
+// information being managed--that just creates other abstraction problems.
 func (task *taskType) Update() error {
 	username := "user" // FIXME: how do we obtain this from our Orcid ID?
 	sourceEndpoint := task.Source.Endpoint()
 	destinationEndpoint := task.Destination.Endpoint()
 
-	// create or fetch a local endpoint compatible with our destination endpoint
-	localEndpoint, err := destinationEndpoint.LocalEndpoint()
-	if err != nil {
-		return err
-	}
-
+	var err error
 	if task.Resources == nil { // new task!
 		// resolve file paths using file IDs
 		task.Resources, err = task.Source.Resources(task.FileIds)
@@ -131,7 +130,7 @@ func (task *taskType) Update() error {
 										DestinationPath: filepath.Join(username, task.Id.String(), "manifest.json"),
 									},
 								}
-								task.Manifest.UUID, err = localEndpoint.Transfer(destinationEndpoint, fileXfers)
+								task.Manifest.UUID, err = task.LocalEndpoint.Transfer(destinationEndpoint, fileXfers)
 								if err == nil {
 									task.Status = TransferStatus{
 										Code:     TransferStatusFinalizing,
@@ -149,7 +148,7 @@ func (task *taskType) Update() error {
 	} else if task.Manifest.Valid { // we're generating/sending a manifest
 		// has the manifest transfer completed?
 		var xferStatus TransferStatus
-		xferStatus, err = localEndpoint.Status(task.Manifest.UUID)
+		xferStatus, err = task.LocalEndpoint.Status(task.Manifest.UUID)
 		if err == nil && (xferStatus.Code == TransferStatusSucceeded ||
 			xferStatus.Code == TransferStatusFailed) { // transfer finished
 			task.Manifest.Valid = false
@@ -181,8 +180,9 @@ func newChannels() channelsType {
 	}
 }
 
-// this function runs in its own goroutine, using channels to communicate with
-// its TaskManager
+// this function runs in its own goroutine, using the given local endpoint
+// for local file transfers, and the given channels to communicate with
+// the TaskManager
 func processTasks(channels channelsType) {
 	// here's a table of transfer-related tasks
 	tasks := make(map[uuid.UUID]taskType)
@@ -194,10 +194,6 @@ func processTasks(channels channelsType) {
 	var errorChan chan<- error = channels.Error
 	var pollChan <-chan struct{} = channels.Poll
 	var stopChan <-chan struct{} = channels.Stop
-
-	// set up a local endpoint to handle manifest transfers
-	//var localEndpoint core.Endpoint
-	// FIXME
 
 	// start scurrying around
 	var err error
@@ -251,19 +247,21 @@ func processTasks(channels channelsType) {
 // This type manages all the behind-the-scenes work involved in orchestrating
 // the staging and transfer of files.
 type TaskManager struct {
-	PollInterval time.Duration // interval at which task manager checks statuses
-	Channels     channelsType
+	LocalEndpoint Endpoint      // local endpoint used for transferring manifests
+	PollInterval  time.Duration // interval at which task manager checks statuses
+	Channels      channelsType
 }
 
-// creates a new task manager with the given poll interval
-func NewTaskManager(pollInterval time.Duration) (*TaskManager, error) {
+// creates a new task manager with the given local endpoint and poll interval
+func NewTaskManager(localEndpoint Endpoint, pollInterval time.Duration) (*TaskManager, error) {
 	if pollInterval <= 0 {
 		return nil, fmt.Errorf("non-positive poll interval specified!")
 	}
 
 	mgr := TaskManager{
-		PollInterval: pollInterval,
-		Channels:     newChannels(),
+		LocalEndpoint: localEndpoint,
+		PollInterval:  pollInterval,
+		Channels:      newChannels(),
 	}
 
 	go processTasks(mgr.Channels) // start processing tasks
@@ -284,10 +282,11 @@ func (mgr *TaskManager) Add(orcid string, source, destination Database, fileIDs 
 	var taskId uuid.UUID
 	var err error
 	mgr.Channels.Task <- taskType{
-		Orcid:       orcid,
-		Source:      source,
-		Destination: destination,
-		FileIds:     fileIDs,
+		LocalEndpoint: mgr.LocalEndpoint,
+		Orcid:         orcid,
+		Source:        source,
+		Destination:   destination,
+		FileIds:       fileIDs,
 	}
 	select {
 	case taskId = <-mgr.Channels.TaskId:

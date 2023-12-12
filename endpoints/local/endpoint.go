@@ -43,7 +43,7 @@ type Endpoint struct {
 	// endpoint UUID (obtained from config)
 	Id uuid.UUID
 	// root directory for endpoint (default: current working directory)
-	Root string
+	root string
 	// transfers in progress
 	Xfers map[uuid.UUID]core.TransferStatus
 }
@@ -64,7 +64,7 @@ func NewEndpoint(endpointName string) (core.Endpoint, error) {
 		return &Endpoint{
 			Name:  epConfig.Name,
 			Id:    epConfig.Id,
-			Root:  cwd,
+			root:  cwd,
 			Xfers: make(map[uuid.UUID]core.TransferStatus),
 		}, nil
 	} else {
@@ -76,14 +76,18 @@ func NewEndpoint(endpointName string) (core.Endpoint, error) {
 func (ep *Endpoint) SetRoot(dir string) error {
 	_, err := os.Stat(dir)
 	if err == nil {
-		ep.Root = dir
+		ep.root = dir
 	}
 	return err
 }
 
+func (ep *Endpoint) Root() string {
+	return ep.root
+}
+
 func (ep *Endpoint) FilesStaged(files []core.DataResource) (bool, error) {
 	for _, resource := range files {
-		absPath := filepath.Join(ep.Root, resource.Path)
+		absPath := filepath.Join(ep.root, resource.Path)
 		_, err := os.Stat(absPath)
 		if err != nil {
 			return false, nil
@@ -107,8 +111,8 @@ func (ep *Endpoint) Transfers() ([]uuid.UUID, error) {
 // implements asynchronous local file transfers and validation
 func (ep *Endpoint) transferFiles(xferId uuid.UUID, files []core.FileTransfer) {
 	for _, file := range files {
-		sourcePath := filepath.Join(ep.Root, file.SourcePath)
-		destPath := filepath.Join(ep.Root, file.DestinationPath)
+		sourcePath := filepath.Join(ep.root, file.SourcePath)
+		destPath := filepath.Join(ep.root, file.DestinationPath)
 
 		// create the destination directory if needed
 		sourceDir := filepath.Dir(sourcePath)

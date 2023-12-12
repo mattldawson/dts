@@ -13,6 +13,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 	"time"
@@ -39,7 +40,6 @@ var (
 	apiPrefix = "api/v1/"
 )
 
-var tempRoot string
 var sourceRoot string
 var destinationRoot string
 
@@ -178,6 +178,27 @@ func setup() {
 	err = config.Init([]byte(dtsConfig))
 	if err != nil {
 		log.Panic(fmt.Sprintf("Couldn't initialize test configuration: %s", err.Error()))
+	}
+
+	// create source/destination directories and files
+	sourceRoot = filepath.Join(TESTING_DIR, "source")
+	err = os.Mkdir(sourceRoot, 0700)
+	if err == nil {
+		destinationRoot = filepath.Join(TESTING_DIR, "destination")
+		err = os.Mkdir(destinationRoot, 0700)
+		if err == nil {
+			// create source files
+			for i := 1; i <= 3; i++ {
+				err = os.WriteFile(filepath.Join(sourceRoot, fmt.Sprintf("file%d.txt", i)),
+					[]byte(fmt.Sprintf("This is the content of file %d.", i)), 0600)
+				if err != nil {
+					break
+				}
+			}
+		}
+	}
+	if err != nil {
+		panic(err)
 	}
 
 	// Start the service.
@@ -348,7 +369,7 @@ func TestSearchDatabase(t *testing.T) {
 	assert.Equal("file1", results.Resources[0].Name)
 }
 
-// creates a transfer for a single file
+// creates a transfer for our test files
 func TestCreateTransfer(t *testing.T) {
 	assert := assert.New(t)
 
@@ -361,20 +382,43 @@ func TestCreateTransfer(t *testing.T) {
 	resp, err := post(baseUrl+apiPrefix+"transfers", bytes.NewReader(payload))
 	assert.Nil(err)
 	assert.Equal(200, resp.StatusCode)
-	if err == nil {
-		defer resp.Body.Close()
-		var body []byte
-		body, err = io.ReadAll(resp.Body)
-		assert.Nil(err)
-		var xferResp TransferResponse
-		err = json.Unmarshal(body, &xferResp)
-		xferId := xferResp.Id
+	defer resp.Body.Close()
+	var body []byte
+	body, err = io.ReadAll(resp.Body)
+	assert.Nil(err)
+	var xferResp TransferResponse
+	err = json.Unmarshal(body, &xferResp)
+	assert.Nil(err)
+	xferId := xferResp.Id
 
-		// get the transfer status
+	// get the transfer status
+	queryTransfer := func() (TransferStatusResponse, error) {
 		resp, err := get(baseUrl + apiPrefix + fmt.Sprintf("transfers/%s", xferId.String()))
 		assert.Nil(err)
 		assert.Equal(200, resp.StatusCode)
+		var body []byte
+		body, err = io.ReadAll(resp.Body)
+		resp.Body.Close()
+		assert.Nil(err)
+		var statusResp TransferStatusResponse
+		err = json.Unmarshal(body, &statusResp)
+		return statusResp, err
 	}
+
+	status, err := queryTransfer()
+	assert.Nil(err)
+	assert.True(status.Status != "failed")
+
+	// wait a bit for the task to finish (shouldn't take long)
+	time.Sleep(300 * time.Millisecond)
+
+	// query the transfer again
+	status, err = queryTransfer()
+	assert.Nil(err)
+	assert.True(status.Status == "succeeded")
+
+	// check for the presence of the payload
+	// FIXME
 }
 
 // attempts to fetch the status of a nonexistent transfer

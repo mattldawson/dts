@@ -237,6 +237,11 @@ func NewFakeEndpoint() *FakeEndpoint {
 	}
 }
 
+func (ep *FakeEndpoint) Root() string {
+	root, _ := os.Getwd()
+	return root
+}
+
 func (ep *FakeEndpoint) FilesStaged(files []DataResource) (bool, error) {
 	if ep.Database != nil {
 		// are there any unrecognized files?

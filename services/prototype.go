@@ -340,6 +340,8 @@ func statusAsString(statusCode core.TransferStatusCode) string {
 		return "active"
 	case core.TransferStatusInactive:
 		return "inactive"
+	case core.TransferStatusFinalizing:
+		return "finalizing"
 	case core.TransferStatusSucceeded:
 		return "succeeded"
 	case core.TransferStatusFailed:

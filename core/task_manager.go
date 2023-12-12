@@ -43,6 +43,7 @@ type taskType struct {
 	Resources           []DataResource // Frictionless DataResources for files
 	Staging, Transfer   uuid.NullUUID  // staging and file transfer UUIDs (if any)
 	Manifest            uuid.NullUUID  // manifest generation UUID (if any)
+	ManifestFile        string         // name of locally-created manifest file
 	Status              TransferStatus // status of file transfer operation
 }
 
@@ -92,7 +93,7 @@ func (task *taskType) Update() error {
 					Code:     TransferStatusActive,
 					NumFiles: len(task.FileIds),
 				}
-				task.Staging.Valid = false
+				task.Staging = uuid.NullUUID{}
 				task.Transfer.Valid = true
 			}
 		}
@@ -102,7 +103,7 @@ func (task *taskType) Update() error {
 		xferStatus, err = sourceEndpoint.Status(task.Transfer.UUID)
 		if err == nil && (xferStatus.Code == TransferStatusSucceeded ||
 			xferStatus.Code == TransferStatusFailed) { // transfer finished
-			task.Transfer.Valid = false
+			task.Transfer = uuid.NullUUID{}
 			if xferStatus.Code == TransferStatusSucceeded {
 				// generate a manifest for the transfer
 				manifest := DataPackage{
@@ -117,30 +118,29 @@ func (task *taskType) Update() error {
 				manifestBytes, err = json.Marshal(manifest)
 				if err == nil {
 					var manifestFile *os.File
-					manifestFile, err = os.CreateTemp("", "manifest.json")
+					manifestFile, err = os.CreateTemp(task.LocalEndpoint.Root(), "manifest.json")
 					if err == nil {
 						_, err = manifestFile.Write(manifestBytes)
 						if err == nil {
+							task.ManifestFile = manifestFile.Name()
 							err = manifestFile.Close()
 							if err == nil {
 								// begin the transfer
 								fileXfers := []FileTransfer{
 									FileTransfer{
-										SourcePath:      manifestFile.Name(),
+										SourcePath:      filepath.Base(task.ManifestFile), // relative to root!
 										DestinationPath: filepath.Join(username, task.Id.String(), "manifest.json"),
 									},
 								}
 								task.Manifest.UUID, err = task.LocalEndpoint.Transfer(destinationEndpoint, fileXfers)
 								if err == nil {
 									task.Status = TransferStatus{
-										Code:     TransferStatusFinalizing,
-										NumFiles: 1,
+										Code: TransferStatusFinalizing,
 									}
 									task.Manifest.Valid = true
 								}
 							}
 						}
-						os.Remove(manifestFile.Name())
 					}
 				}
 			}
@@ -151,7 +151,9 @@ func (task *taskType) Update() error {
 		xferStatus, err = task.LocalEndpoint.Status(task.Manifest.UUID)
 		if err == nil && (xferStatus.Code == TransferStatusSucceeded ||
 			xferStatus.Code == TransferStatusFailed) { // transfer finished
-			task.Manifest.Valid = false
+			task.Manifest = uuid.NullUUID{}
+			os.Remove(task.ManifestFile)
+			task.ManifestFile = ""
 			task.Status.Code = xferStatus.Code
 		}
 	}
@@ -184,7 +186,7 @@ func newChannels() channelsType {
 // for local file transfers, and the given channels to communicate with
 // the TaskManager
 func processTasks(channels channelsType) {
-	// here's a table of transfer-related tasks
+	// here's a persistent table of transfer-related tasks
 	tasks := make(map[uuid.UUID]taskType)
 
 	// parse the channels into directional types as needed
@@ -196,7 +198,6 @@ func processTasks(channels channelsType) {
 	var stopChan <-chan struct{} = channels.Stop
 
 	// start scurrying around
-	var err error
 	for {
 		select {
 		case newTask := <-taskChan: // Add() called
@@ -208,7 +209,8 @@ func processTasks(channels channelsType) {
 			if task, found := tasks[taskId]; found {
 				statusChan <- task.Status
 			} else {
-				err = fmt.Errorf("Task %s not found!", taskId.String())
+				err := fmt.Errorf("Task %s not found!", taskId.String())
+				errorChan <- err
 			}
 		case <-pollChan: // time to move things along
 			for taskId, task := range tasks {
@@ -232,14 +234,13 @@ func processTasks(channels channelsType) {
 						}
 					}
 					tasks[taskId] = task
+				} else {
+					// we log task update errors but do not propagate them
+					slog.Error(err.Error())
 				}
 			}
 		case <-stopChan: // Close() called
 			break
-		}
-		if err != nil {
-			slog.Error(err.Error())
-			errorChan <- err
 		}
 	}
 }

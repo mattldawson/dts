@@ -61,6 +61,8 @@ type Endpoint struct {
 	Name string
 	// endpoint UUID (obtained from config)
 	Id uuid.UUID
+	// root directory of endpoint (host_root)
+	root string
 	// HTTP client that caches queries
 	Client http.Client
 	// OAuth2 access token
@@ -88,6 +90,30 @@ func NewEndpoint(endpointName string) (core.Endpoint, error) {
 	var zeroUUID uuid.UUID
 	if epConfig.Auth.ClientId != zeroUUID {
 		err = ep.authenticate(epConfig.Auth.ClientId, epConfig.Auth.ClientSecret)
+	}
+
+	// fetch the endpoint's root path
+	if err == nil {
+		resource := fmt.Sprintf("endpoint/%s", ep.Id.String())
+		var resp *http.Response
+		resp, err = ep.get(resource, url.Values{})
+		if err == nil {
+			defer resp.Body.Close()
+			if resp.StatusCode == 200 {
+				var body []byte
+				body, err = io.ReadAll(resp.Body)
+				if err == nil {
+					type EndpointDocument struct {
+						HostRoot string `json:"host_root"`
+					}
+					var endpointResp EndpointDocument
+					err = json.Unmarshal(body, &endpointResp)
+					if err == nil {
+						ep.root = endpointResp.HostRoot
+					}
+				}
+			}
+		}
 	}
 
 	return ep, err
@@ -190,6 +216,10 @@ func (ep *Endpoint) post(resource string, body io.Reader) (*http.Response, error
 	return nil, err
 }
 
+func (ep *Endpoint) Root() string {
+	return ep.root
+}
+
 func (ep *Endpoint) FilesStaged(files []core.DataResource) (bool, error) {
 	// find all the directories in which these files reside
 	filesInDir := make(map[string][]string)
@@ -207,7 +237,7 @@ func (ep *Endpoint) FilesStaged(files []core.DataResource) (bool, error) {
 		values := url.Values{}
 		values.Add("path", "/"+dir)
 		values.Add("orderby", "name ASC")
-		resource := fmt.Sprintf("operation/endpoint/%s/ls", ep.Id)
+		resource := fmt.Sprintf("operation/endpoint/%s/ls", ep.Id.String())
 
 		resp, err := ep.get(resource, values)
 		if err == nil {
@@ -291,8 +321,8 @@ func (ep *Endpoint) Transfer(dst core.Endpoint, files []core.FileTransfer) (uuid
 		// https://docs.globus.org/api/transfer/task_submit/#get_submission_id
 		var xferId uuid.UUID
 		resp, err := ep.get("submission_id", url.Values{})
-		defer resp.Body.Close()
 		if err == nil {
+			defer resp.Body.Close()
 			var body []byte
 			body, err = io.ReadAll(resp.Body)
 			if err == nil {
@@ -393,8 +423,8 @@ func (ep *Endpoint) Transfer(dst core.Endpoint, files []core.FileTransfer) (uuid
 func (ep *Endpoint) Status(id uuid.UUID) (core.TransferStatus, error) {
 	resource := fmt.Sprintf("task/%s", id.String())
 	resp, err := ep.get(resource, url.Values{})
-	defer resp.Body.Close()
 	if err == nil {
+		defer resp.Body.Close()
 		var body []byte
 		body, err = io.ReadAll(resp.Body)
 		if err == nil {
@@ -434,8 +464,8 @@ func (ep *Endpoint) Cancel(id uuid.UUID) error {
 	// https://docs.globus.org/api/transfer/task/#cancel_task_by_id
 	resource := fmt.Sprintf("task/%s/cancel", id.String())
 	resp, err := ep.get(resource, url.Values{})
-	defer resp.Body.Close()
 	if err == nil {
+		defer resp.Body.Close()
 		// FIXME
 		//var body []byte
 		//body, err = io.ReadAll(resp.Body)

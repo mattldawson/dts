@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math/rand"
 	"net/http"
 	"os"
 	"slices"
@@ -24,7 +23,8 @@ import (
 	"github.com/kbase/dts/config"
 	"github.com/kbase/dts/core"
 	"github.com/kbase/dts/databases"
-	"github.com/kbase/dts/endpoints/globus"
+	"github.com/kbase/dts/endpoints"
+	"github.com/kbase/dts/endpoints/local"
 )
 
 // working directory from which the tests were invoked
@@ -39,6 +39,10 @@ var (
 	apiPrefix = "api/v1/"
 )
 
+var tempRoot string
+var sourceRoot string
+var destinationRoot string
+
 // service instance
 var service TransferService
 
@@ -47,6 +51,7 @@ service:
   port: 8080
   max_connections: 100
   poll_interval: 100
+  endpoint: local-endpoint
 databases:
   source:
     name: Source Test Database
@@ -58,63 +63,45 @@ databases:
     endpoint: destination-endpoint
 endpoints:
   local-endpoint:
-    name: We need to decide how to support this in testing
-    id: ???
-    provider: globus
+    name: Local endpoint
+    id: 8816ec2d-4a48-4ded-b68a-5ab46a4417b6
+    provider: local
   source-endpoint:
-    name: Globus Tutorial Endpoint 1
-    id: ddb59aef-6d04-11e5-ba46-22000b92c6ec
-    provider: globus
-    auth:
-      client_id: ${DTS_GLOBUS_CLIENT_ID}
-      client_secret: ${DTS_GLOBUS_CLIENT_SECRET}
+    name: Endpoint 1
+    id: 26d61236-39f6-4742-a374-8ec709347f2f
+    provider: local
   destination-endpoint:
-    name: Globus Tutorial Endpoint 2
-    id: ddb59af0-6d04-11e5-ba46-22000b92c6ec
-    provider: globus
-    auth:
-      client_id: ${DTS_GLOBUS_CLIENT_ID}
-      client_secret: ${DTS_GLOBUS_CLIENT_SECRET}
+    name: Endpoint 2
+    id: f1865b86-2c64-4b8b-99f3-5aaa945ec3d9
+    provider: local
 `
 
 //===============================
 // Test Database Implementations
 //===============================
-// Our source and destination test databases are thin wrappers around a
-// collection of files on a couple of Globus endpoints. These endpoints
-// are used to illustrate a simple file transfer here:
-// https://globus-sdk-python.readthedocs.io/en/stable/examples/minimal_transfer_script/index.html#example-minimal-transfer
 
 type testDatabase struct {
 	endpoint core.Endpoint
-	fileDir  string // directory housing files
+	rootDir  string
 }
 
 func newSourceTestDatabase(orcid string) (core.Database, error) {
-	ep, err := globus.NewEndpoint("source-endpoint")
+	ep, err := endpoints.NewEndpoint("source-endpoint")
+	localEp := ep.(*local.Endpoint)
+	localEp.SetRoot(sourceRoot)
 	return &testDatabase{
 		endpoint: ep,
-		fileDir:  "share/godata",
+		rootDir:  sourceRoot,
 	}, err
 }
 
-// This function generates a unique name for a directory on the destination
-// endpoint to receive files
-var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-
-func destDirName(n int) string {
-	b := make([]rune, n)
-	for i := range b {
-		b[i] = letters[rand.Intn(len(letters))]
-	}
-	return string(b)
-}
-
 func newDestinationTestDatabase(orcid string) (core.Database, error) {
-	ep, err := globus.NewEndpoint("destination-endpoint")
+	ep, err := endpoints.NewEndpoint("destination-endpoint")
+	localEp := ep.(*local.Endpoint)
+	localEp.SetRoot(destinationRoot)
 	return &testDatabase{
 		endpoint: ep,
-		fileDir:  destDirName(16),
+		rootDir:  destinationRoot,
 	}, err
 }
 
@@ -126,7 +113,7 @@ func (db *testDatabase) Search(params core.SearchParameters) (core.SearchResults
 				core.DataResource{
 					Id:        params.Query,
 					Name:      fmt.Sprintf("file%s", params.Query),
-					Path:      fmt.Sprintf("%s/file%s.txt", db.fileDir, params.Query),
+					Path:      fmt.Sprintf("file%s.txt", params.Query),
 					Format:    "text",
 					MediaType: "text/plain",
 					Bytes:     4,
@@ -145,7 +132,7 @@ func (db *testDatabase) Resources(fileIds []string) ([]core.DataResource, error)
 			results = append(results, core.DataResource{
 				Id:        id,
 				Name:      fmt.Sprintf("file%s", id),
-				Path:      fmt.Sprintf("%s/file%s.txt", db.fileDir, id),
+				Path:      fmt.Sprintf("file%s.txt", id),
 				Format:    "text",
 				MediaType: "text/plain",
 				Bytes:     4,

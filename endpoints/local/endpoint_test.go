@@ -1,0 +1,216 @@
+// Copyright (c) 2023 The KBase Project and its Contributors
+// Copyright (c) 2023 Cohere Consulting, LLC
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy of
+// this software and associated documentation files (the "Software"), to deal in
+// the Software without restriction, including without limitation the rights to
+// use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+// of the Software, and to permit persons to whom the Software is furnished to do
+// so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+package local
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+
+	"github.com/kbase/dts/config"
+	"github.com/kbase/dts/core"
+)
+
+var tempRoot string
+var sourceRoot string
+var destinationRoot string
+
+// source database files by ID
+var sourceFilesById = map[string]string{
+	"1": "file1.txt",
+	"2": "file2.txt",
+	"3": "file3.txt",
+}
+
+const localConfig string = `
+endpoints:
+  source:
+    name: Source Endpoint
+    id: 2ee69538-10d5-4d1e-a890-1127b5e42003
+    provider: local
+  destination:
+    name: Destination Endpoint
+    id: b925d96e-7e39-473b-a658-714f8c243b1c
+    provider: local
+`
+
+// this function gets called at the begіnning of a test session
+func setup() {
+	config.Init([]byte(localConfig))
+
+	// create source/destination directories
+	var err error
+	tempRoot, err = os.MkdirTemp(os.TempDir(), "dts-local-endpoints")
+	if err == nil {
+		sourceRoot = filepath.Join(tempRoot, "source")
+		err = os.Mkdir(sourceRoot, 0700)
+		if err == nil {
+			destinationRoot = filepath.Join(tempRoot, "destination")
+			err = os.Mkdir(destinationRoot, 0700)
+			if err == nil {
+				// create source files
+				for i := 1; i <= 3; i++ {
+					err = os.WriteFile(filepath.Join(sourceRoot, fmt.Sprintf("file%d.txt", i)),
+						[]byte(fmt.Sprintf("This is the content of file %d.", i)), 0600)
+					if err != nil {
+						break
+					}
+				}
+			}
+		}
+	}
+	if err != nil {
+		panic(err)
+	}
+}
+
+// this function gets called after all tests have been run
+func breakdown() {
+	os.RemoveAll(tempRoot)
+}
+
+func TestLocalConstructor(t *testing.T) {
+	assert := assert.New(t)
+
+	endpoint, err := NewEndpoint("source")
+	assert.NotNil(endpoint)
+	assert.Nil(err)
+}
+
+func TestBadLocalConstructor(t *testing.T) {
+	assert := assert.New(t)
+
+	endpoint, err := NewEndpoint("nonexistent-endpoint")
+	assert.Nil(endpoint)
+	assert.NotNil(err)
+}
+
+func TestLocalTransfers(t *testing.T) {
+	assert := assert.New(t)
+	endpoint, _ := NewEndpoint("source")
+	// this is just a smoke test--we don't check the contents of the result
+	xfers, err := endpoint.Transfers()
+	assert.NotNil(xfers) // empty or non-empty slice
+	assert.Nil(err)
+}
+
+func TestGlobusFilesStaged(t *testing.T) {
+	assert := assert.New(t)
+	endpoint, _ := NewEndpoint("source")
+	localEp := endpoint.(*Endpoint)
+	localEp.SetRoot(sourceRoot)
+
+	// provide an empty slice of filenames, which should return true
+	staged, err := endpoint.FilesStaged([]core.DataResource{})
+	assert.True(staged)
+	assert.Nil(err)
+
+	// provide files that are known to be on the source endpoint
+	resources := make([]core.DataResource, 0)
+	for i := 1; i <= 3; i++ {
+		id := fmt.Sprintf("%d", i)
+		resources = append(resources, core.DataResource{
+			Id:   id,
+			Path: sourceFilesById[id],
+		})
+	}
+	staged, err = endpoint.FilesStaged(resources)
+	assert.True(staged)
+	assert.Nil(err)
+
+	// provide a nonexistent file, which should return false
+	resources = []core.DataResource{
+		core.DataResource{
+			Id:   "yadda",
+			Path: "yaddayadda/yadda/yaddayadda/yaddayaddayadda.xml",
+		},
+	}
+	staged, err = endpoint.FilesStaged(resources)
+	assert.False(staged)
+	assert.Nil(err)
+}
+
+func TestLocalTransfer(t *testing.T) {
+	assert := assert.New(t)
+
+	source, _ := NewEndpoint("source")
+	localSourceEp := source.(*Endpoint)
+	localSourceEp.SetRoot(sourceRoot)
+
+	destination, _ := NewEndpoint("destination")
+	localDestEp := destination.(*Endpoint)
+	localDestEp.SetRoot(destinationRoot)
+
+	fileXfers := make([]core.FileTransfer, 0)
+	for i := 1; i <= 3; i++ {
+		id := fmt.Sprintf("%d", i)
+
+		fileXfers = append(fileXfers, core.FileTransfer{
+			SourcePath:      sourceFilesById[id],
+			DestinationPath: sourceFilesById[id],
+		})
+	}
+	_, err := source.Transfer(destination, fileXfers)
+	assert.Nil(err)
+}
+
+func TestBadLocalTransfer(t *testing.T) {
+	assert := assert.New(t)
+	source, _ := NewEndpoint("source")
+	destination, _ := NewEndpoint("destination")
+
+	// ask for some nonexistent files
+	fileXfers := make([]core.FileTransfer, 0)
+	for i := 1; i <= 3; i++ {
+		id := fmt.Sprintf("%d", i)
+		fileXfers = append(fileXfers, core.FileTransfer{
+			SourcePath:      sourceFilesById[id] + "_with_bad_suffix",
+			DestinationPath: sourceFilesById[id] + "_with_bad_suffix",
+		})
+	}
+	_, err := source.Transfer(destination, fileXfers)
+	assert.NotNil(err)
+}
+
+func TestUnknownLocalStatus(t *testing.T) {
+	assert := assert.New(t)
+	endpoint, _ := NewEndpoint("source")
+
+	// make up a bogus transfer UUID and check its status
+	taskId := uuid.New()
+	status, err := endpoint.Status(taskId)
+	assert.Equal(core.TransferStatusUnknown, status.Code)
+	assert.NotNil(err)
+}
+
+// this runs setup, runs all tests, and does breakdown
+func TestMain(m *testing.M) {
+	var status int
+	setup()
+	status = m.Run()
+	breakdown()
+	os.Exit(status)
+}

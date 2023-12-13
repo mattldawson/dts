@@ -79,6 +79,9 @@ func NewEndpoint(endpointName string) (core.Endpoint, error) {
 	if epConfig.Provider != "globus" {
 		return nil, fmt.Errorf("'%s' is not a Globus endpoint", endpointName)
 	}
+	if epConfig.Root != "" {
+		return nil, fmt.Errorf("As a Globus endpoint, '%s' cannot have its root directory specified", endpointName)
+	}
 
 	ep := &Endpoint{
 		Name: epConfig.Name,

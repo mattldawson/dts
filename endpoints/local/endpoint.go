@@ -58,22 +58,21 @@ func NewEndpoint(endpointName string) (core.Endpoint, error) {
 	if epConfig.Provider != "local" {
 		return nil, fmt.Errorf("'%s' is not a local endpoint", endpointName)
 	}
-
-	cwd, err := os.Getwd()
-	if err == nil {
-		return &Endpoint{
-			Name:  epConfig.Name,
-			Id:    epConfig.Id,
-			root:  cwd,
-			Xfers: make(map[uuid.UUID]core.TransferStatus),
-		}, nil
-	} else {
-		return nil, err
+	if epConfig.Root == "" {
+		return nil, fmt.Errorf("'%s' requires a root directory to be specified", endpointName)
 	}
+
+	ep := &Endpoint{
+		Name:  epConfig.Name,
+		Id:    epConfig.Id,
+		Xfers: make(map[uuid.UUID]core.TransferStatus),
+	}
+	err := ep.setRoot(epConfig.Root)
+	return ep, err
 }
 
-// sets the root directory for the local endpoint
-func (ep *Endpoint) SetRoot(dir string) error {
+// sets the root directory for the local endpoint after checking that it exists
+func (ep *Endpoint) setRoot(dir string) error {
 	_, err := os.Stat(dir)
 	if err == nil {
 		ep.root = dir

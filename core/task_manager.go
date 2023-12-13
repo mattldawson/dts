@@ -53,10 +53,15 @@ type taskType struct {
 // information being managed--that just creates other abstraction problems.
 func (task *taskType) Update() error {
 	username := "user" // FIXME: how do we obtain this from our Orcid ID?
-	sourceEndpoint := task.Source.Endpoint()
-	destinationEndpoint := task.Destination.Endpoint()
+	sourceEndpoint, err := task.Source.Endpoint()
+	if err != nil {
+		return err
+	}
+	destinationEndpoint, err := task.Destination.Endpoint()
+	if err != nil {
+		return err
+	}
 
-	var err error
 	if task.Resources == nil { // new task!
 		// resolve file paths using file IDs
 		task.Resources, err = task.Source.Resources(task.FileIds)

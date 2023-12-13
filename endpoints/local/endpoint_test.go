@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -51,16 +52,16 @@ endpoints:
     name: Source Endpoint
     id: 2ee69538-10d5-4d1e-a890-1127b5e42003
     provider: local
+    root: SOURCE_ROOT
   destination:
     name: Destination Endpoint
     id: b925d96e-7e39-473b-a658-714f8c243b1c
     provider: local
+    root: DESTINATION_ROOT
 `
 
 // this function gets called at the begіnning of a test session
 func setup() {
-	config.Init([]byte(localConfig))
-
 	// create source/destination directories
 	var err error
 	tempRoot, err = os.MkdirTemp(os.TempDir(), "dts-local-endpoints")
@@ -82,6 +83,15 @@ func setup() {
 			}
 		}
 	}
+
+	if err == nil {
+		// read in the config file with SOURCE_ROOT and DESTINATION_ROOT replaced
+		myConfig := strings.ReplaceAll(localConfig, "SOURCE_ROOT", sourceRoot)
+		myConfig = strings.ReplaceAll(myConfig, "DESTINATION_ROOT", destinationRoot)
+		fmt.Printf(myConfig)
+		err = config.Init([]byte(myConfig))
+	}
+
 	if err != nil {
 		panic(err)
 	}
@@ -120,8 +130,6 @@ func TestLocalTransfers(t *testing.T) {
 func TestGlobusFilesStaged(t *testing.T) {
 	assert := assert.New(t)
 	endpoint, _ := NewEndpoint("source")
-	localEp := endpoint.(*Endpoint)
-	localEp.SetRoot(sourceRoot)
 
 	// provide an empty slice of filenames, which should return true
 	staged, err := endpoint.FilesStaged([]core.DataResource{})
@@ -157,12 +165,7 @@ func TestLocalTransfer(t *testing.T) {
 	assert := assert.New(t)
 
 	source, _ := NewEndpoint("source")
-	localSourceEp := source.(*Endpoint)
-	localSourceEp.SetRoot(sourceRoot)
-
 	destination, _ := NewEndpoint("destination")
-	localDestEp := destination.(*Endpoint)
-	localDestEp.SetRoot(destinationRoot)
 
 	fileXfers := make([]core.FileTransfer, 0)
 	for i := 1; i <= 3; i++ {

@@ -119,7 +119,8 @@ func TestEndpoint(t *testing.T) {
 	assert := assert.New(t)
 	orcid := os.Getenv("DTS_KBASE_TEST_ORCID")
 	db, _ := NewDatabase(orcid)
-	endpoint := db.Endpoint()
+	endpoint, err := db.Endpoint()
+	assert.Nil(err)
 	assert.NotNil(endpoint, "JDP database has no endpoint")
 }
 

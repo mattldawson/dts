@@ -211,8 +211,8 @@ func (db *FakeDatabase) StagingStatus(id uuid.UUID) (StagingStatus, error) {
 	}
 }
 
-func (db *FakeDatabase) Endpoint() Endpoint {
-	return db.Endpt
+func (db *FakeDatabase) Endpoint() (Endpoint, error) {
+	return db.Endpt, nil
 }
 
 type TransferInfo struct {

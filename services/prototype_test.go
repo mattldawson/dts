@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,7 +26,6 @@ import (
 	"github.com/kbase/dts/core"
 	"github.com/kbase/dts/databases"
 	"github.com/kbase/dts/endpoints"
-	"github.com/kbase/dts/endpoints/local"
 )
 
 // working directory from which the tests were invoked
@@ -66,14 +66,17 @@ endpoints:
     name: Local endpoint
     id: 8816ec2d-4a48-4ded-b68a-5ab46a4417b6
     provider: local
+    root: TESTING_DIR
   source-endpoint:
     name: Endpoint 1
     id: 26d61236-39f6-4742-a374-8ec709347f2f
     provider: local
+    root: SOURCE_ROOT
   destination-endpoint:
     name: Endpoint 2
     id: f1865b86-2c64-4b8b-99f3-5aaa945ec3d9
     provider: local
+    root: DESTINATION_ROOT
 `
 
 //===============================
@@ -87,8 +90,6 @@ type testDatabase struct {
 
 func newSourceTestDatabase(orcid string) (core.Database, error) {
 	ep, err := endpoints.NewEndpoint("source-endpoint")
-	localEp := ep.(*local.Endpoint)
-	localEp.SetRoot(sourceRoot)
 	return &testDatabase{
 		endpoint: ep,
 		rootDir:  sourceRoot,
@@ -97,8 +98,6 @@ func newSourceTestDatabase(orcid string) (core.Database, error) {
 
 func newDestinationTestDatabase(orcid string) (core.Database, error) {
 	ep, err := endpoints.NewEndpoint("destination-endpoint")
-	localEp := ep.(*local.Endpoint)
-	localEp.SetRoot(destinationRoot)
 	return &testDatabase{
 		endpoint: ep,
 		rootDir:  destinationRoot,
@@ -155,8 +154,8 @@ func (db *testDatabase) StagingStatus(stagingId uuid.UUID) (core.StagingStatus, 
 	return core.StagingStatusSucceeded, nil
 }
 
-func (db *testDatabase) Endpoint() core.Endpoint {
-	return db.endpoint
+func (db *testDatabase) Endpoint() (core.Endpoint, error) {
+	return db.endpoint, nil
 }
 
 // performs testing setup
@@ -173,12 +172,6 @@ func setup() {
 		log.Panicf("Couldn't create testing directory: %s", err)
 	}
 	os.Chdir(TESTING_DIR)
-
-	// initialize the config environment
-	err = config.Init([]byte(dtsConfig))
-	if err != nil {
-		log.Panic(fmt.Sprintf("Couldn't initialize test configuration: %s", err.Error()))
-	}
 
 	// create source/destination directories and files
 	sourceRoot = filepath.Join(TESTING_DIR, "source")
@@ -197,6 +190,15 @@ func setup() {
 			}
 		}
 	}
+
+	if err == nil {
+		// read in the config file with SOURCE_ROOT and DESTINATION_ROOT replaced
+		myConfig := strings.ReplaceAll(dtsConfig, "SOURCE_ROOT", sourceRoot)
+		myConfig = strings.ReplaceAll(myConfig, "DESTINATION_ROOT", destinationRoot)
+		myConfig = strings.ReplaceAll(myConfig, "TESTING_DIR", TESTING_DIR)
+		err = config.Init([]byte(myConfig))
+	}
+
 	if err != nil {
 		panic(err)
 	}

@@ -397,6 +397,18 @@ func (service *prototype) uptime() float64 {
 
 // constructs a prototype file transfer service given our configuration
 func NewDTSPrototype() (TransferService, error) {
+
+	// validate our configuration
+	if config.Service.Endpoint == "" {
+		return nil, fmt.Errorf("No service endpoint was specified.")
+	}
+	if len(config.Databases) == 0 {
+		return nil, fmt.Errorf("No databases were specified.")
+	}
+	if len(config.Endpoints) == 0 {
+		return nil, fmt.Errorf("No endpoints were specified.")
+	}
+
 	service := new(prototype)
 	service.Name = "DTS prototype"
 	service.Version = core.Version
@@ -448,6 +460,9 @@ func (service *prototype) Start(port int) error {
 	listener = netutil.LimitListener(listener, config.Service.MaxConnections)
 
 	localEndpoint, err := endpoints.NewEndpoint(config.Service.Endpoint)
+	if err != nil {
+		return err
+	}
 	service.Tasks, err = core.NewTaskManager(localEndpoint,
 		time.Duration(config.Service.PollInterval)*time.Millisecond)
 	if err != nil {

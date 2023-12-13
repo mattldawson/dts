@@ -236,7 +236,7 @@ func breakdown() {
 	if TESTING_DIR != "" {
 		// Remove the testing directory and its contents.
 		log.Printf("Deleting testing directory %s...\n", TESTING_DIR)
-		os.RemoveAll(TESTING_DIR)
+		//		os.RemoveAll(TESTING_DIR)
 	}
 }
 
@@ -417,8 +417,14 @@ func TestCreateTransfer(t *testing.T) {
 	assert.Nil(err)
 	assert.True(status.Status == "succeeded")
 
-	// check for the presence of the payload
-	// FIXME
+	// check for the files in the payload
+	// FIXME: the files are written to the destination endpoint's root in a
+	// FIXME: user-specific and task-specific folder. We need to formalize this.
+	username := "user" // FIXME: ???
+	for _, file := range []string{"file1.txt", "file2.txt", "file3.txt", "manifest.json"} {
+		_, err := os.Stat(filepath.Join(destinationRoot, username, xferId.String(), file))
+		assert.Nil(err)
+	}
 }
 
 // attempts to fetch the status of a nonexistent transfer

@@ -109,10 +109,10 @@ func (ep *Endpoint) Transfers() ([]uuid.UUID, error) {
 }
 
 // implements asynchronous local file transfers and validation
-func (ep *Endpoint) transferFiles(xferId uuid.UUID, files []core.FileTransfer) {
+func (ep *Endpoint) transferFiles(xferId uuid.UUID, dest core.Endpoint, files []core.FileTransfer) {
 	for _, file := range files {
-		sourcePath := filepath.Join(ep.root, file.SourcePath)
-		destPath := filepath.Join(ep.root, file.DestinationPath)
+		sourcePath := filepath.Join(ep.Root(), file.SourcePath)
+		destPath := filepath.Join(dest.Root(), file.DestinationPath)
 
 		// create the destination directory if needed
 		sourceDir := filepath.Dir(sourcePath)
@@ -121,7 +121,7 @@ func (ep *Endpoint) transferFiles(xferId uuid.UUID, files []core.FileTransfer) {
 		_, err = os.Stat(destDir)
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
-				os.Mkdir(destDir, sourceDirInfo.Mode())
+				os.MkdirAll(destDir, sourceDirInfo.Mode())
 			} else {
 				status := ep.Xfers[xferId]
 				status.Code = core.TransferStatusFailed
@@ -173,7 +173,7 @@ func (ep *Endpoint) Transfer(dst core.Endpoint, files []core.FileTransfer) (uuid
 			NumFiles:            len(files),
 			NumFilesTransferred: 0,
 		}
-		go ep.transferFiles(xferId, files)
+		go ep.transferFiles(xferId, dst, files)
 		return xferId, nil
 	} else {
 		if err == nil {

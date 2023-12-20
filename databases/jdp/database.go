@@ -535,3 +535,8 @@ func (db *Database) StagingStatus(id uuid.UUID) (core.StagingStatus, error) {
 func (db *Database) Endpoint() (core.Endpoint, error) {
 	return endpoints.NewEndpoint(config.Databases[db.Id].Endpoint)
 }
+
+func (db *Database) LocalUser(orcid string) (string, error) {
+  // no current mechanism for this
+  return "localuser"
+}

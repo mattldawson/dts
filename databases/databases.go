@@ -26,6 +26,7 @@ import (
 
 	"github.com/kbase/dts/core"
 	"github.com/kbase/dts/databases/jdp"
+	"github.com/kbase/dts/databases/kbase"
 )
 
 // we maintain a table of database instances, identified by their names
@@ -55,6 +56,7 @@ func NewDatabase(orcid, dbName string) (core.Database, error) {
 	// register our built-in databases if this is the first call to this function
 	if firstNewDatabaseCall {
 		RegisterDatabase("jdp", jdp.NewDatabase)
+		RegisterDatabase("kbase", kbase.NewDatabase)
 		firstNewDatabaseCall = false
 	}
 

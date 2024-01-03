@@ -22,7 +22,9 @@
 package kbase
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 
 	"github.com/google/uuid"
 
@@ -72,7 +74,29 @@ func (db *Database) Endpoint() (core.Endpoint, error) {
 	return endpoints.NewEndpoint(config.Databases[db.Id].Endpoint)
 }
 
+// FIXME: currently we store a mapping of orcid IDs -> KBase user names
+// FIXME: in a file called "kbase_users.json" in the DTS's working dir.
+var kbaseUsers map[string]string
+
 func (db *Database) LocalUser(orcid string) (string, error) {
-	// no current mechanism for this
-	return "localuser", nil
+	if kbaseUsers == nil {
+		data, err := os.ReadFile("kbase_users.json")
+		if err == nil {
+			err = json.Unmarshal(data, &kbaseUsers)
+		} else {
+			// make an empty map to ѕignify the absence of the file
+			kbaseUsers = make(map[string]string)
+		}
+	}
+	if len(kbaseUsers) > 0 {
+		username, found := kbaseUsers[orcid]
+		if !found {
+			return "", fmt.Errorf("No KBase user found for ORCID %s", orcid)
+		} else {
+			return username, nil
+		}
+	} else {
+		// no current mechanism for this
+		return "localuser", nil
+	}
 }

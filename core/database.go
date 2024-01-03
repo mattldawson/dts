@@ -69,6 +69,6 @@ type Database interface {
 	StagingStatus(id uuid.UUID) (StagingStatus, error)
 	// returns the endpoint associated with this database
 	Endpoint() (Endpoint, error)
-  // returns the local username associated with the given Orcid ID
-  LocalUser(orcid string) (string, error)
+	// returns the local username associated with the given Orcid ID
+	LocalUser(orcid string) (string, error)
 }

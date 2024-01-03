@@ -537,6 +537,6 @@ func (db *Database) Endpoint() (core.Endpoint, error) {
 }
 
 func (db *Database) LocalUser(orcid string) (string, error) {
-  // no current mechanism for this
-  return "localuser"
+	// no current mechanism for this
+	return "localuser", nil
 }

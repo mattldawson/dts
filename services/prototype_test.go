@@ -412,7 +412,7 @@ func TestCreateTransfer(t *testing.T) {
 	assert.True(status.Status != "failed")
 
 	// wait a bit for the task to finish (shouldn't take long)
-	time.Sleep(300 * time.Millisecond)
+	time.Sleep(600 * time.Millisecond)
 
 	// query the transfer again
 	status, err = queryTransfer()

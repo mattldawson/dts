@@ -85,7 +85,7 @@ func queryJamo(fileIds []string) ([]jamoFileRecord, error) {
 	var recordingMode recorder.Mode
 	if _, onVPN := os.LookupEnv("DTS_ON_LBL_VPN"); onVPN {
 		slog.Debug("Querying JAMO for file resource info")
-		recordingMode = recorder.ModeRecordOnce
+		recordingMode = recorder.ModeRecordOnly
 	} else {
 		slog.Debug("Using pre-recorded JAMO results for query")
 		recordingMode = recorder.ModeReplayOnly

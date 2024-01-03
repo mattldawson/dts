@@ -215,6 +215,10 @@ func (db *FakeDatabase) Endpoint() (Endpoint, error) {
 	return db.Endpt, nil
 }
 
+func (db *FakeDatabase) LocalUser(orcid string) (string, error) {
+	return "fakeuser", nil
+}
+
 type TransferInfo struct {
 	Time   time.Time // transfer initiation time
 	Status TransferStatus

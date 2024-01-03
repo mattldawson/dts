@@ -26,7 +26,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -218,9 +218,9 @@ func creditFromIdAndMetadata(id string, md Metadata) credit.CreditMetadata {
 
 func trimFileSuffix(filename string) string {
 	for _, suffix := range supportedSuffixes {
-		index := strings.LastIndex(filename, suffix)
-		if index > 0 {
-			return filename[:index-1]
+		trimmedFilename, trimmed := strings.CutSuffix(filename, suffix)
+		if trimmed {
+			return trimmedFilename
 		}
 	}
 	return filename
@@ -293,6 +293,15 @@ func NewDatabase(orcid string) (core.Database, error) {
 	}, nil
 }
 
+// adds an appropriate authorization header to given HTTP request
+func (db Database) addAuthHeader(request *http.Request) {
+	if len(db.Secret) > 0 { // use shared secret
+		request.Header.Add("Authorization", fmt.Sprintf("Token %s_%s", db.Orcid, db.Secret))
+	} else { // try SSO token
+		request.Header.Add("Authorization", fmt.Sprintf("Bearer %s", db.SsoToken))
+	}
+}
+
 // performs a GET request on the given resource, returning the resulting
 // response and error
 func (db *Database) get(resource string, values url.Values) (*http.Response, error) {
@@ -302,14 +311,10 @@ func (db *Database) get(resource string, values url.Values) (*http.Response, err
 		u.Path = resource
 		u.RawQuery = values.Encode()
 		res := fmt.Sprintf("%v", u)
-		log.Printf("GET: %s", res)
+		slog.Debug(fmt.Sprintf("GET: %s", res))
 		req, err := http.NewRequest(http.MethodGet, res, http.NoBody)
 		if err == nil {
-			if len(db.Secret) > 0 {
-				req.Header.Add("Authorization", fmt.Sprintf("Bearer %s_%s", db.Orcid, db.Secret))
-			} else { // try SSO token
-				req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", db.SsoToken))
-			}
+			db.addAuthHeader(req)
 			return db.Client.Do(req)
 		}
 	}
@@ -323,15 +328,11 @@ func (db *Database) post(resource string, body io.Reader) (*http.Response, error
 	if err == nil {
 		u.Path = resource
 		res := fmt.Sprintf("%v", u)
-		log.Printf("POST: %s", res)
+		slog.Debug(fmt.Sprintf("POST: %s", res))
 		var req *http.Request
 		req, err = http.NewRequest(http.MethodPost, res, body)
 		if err == nil {
-			if len(db.Secret) > 0 {
-				req.Header.Add("Authorization", fmt.Sprintf("Bearer %s_%s", db.Orcid, db.Secret))
-			} else { // try SSO token
-				req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", db.SsoToken))
-			}
+			db.addAuthHeader(req)
 			req.Header.Set("Content-Type", "application/json")
 			return db.Client.Do(req)
 		}

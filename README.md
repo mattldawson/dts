@@ -68,6 +68,11 @@ to do:
   specified by `DTS_GLOBUS_CLIENT_ID`
 * `DTS_GLOBUS_TEST_ENDPOINT`: a Globus endpoint used to test DTS's transfer
   capabilities
-
+* `DTS_JDP_SECRET`: a string containing a shared secret that allows the DTS to
+  authenticate with the JGI Data Portal
+* `DTS_ON_LBL_VPN`: set this environment variable to any value (e.g. "1") to
+  indicate that the DTS is running on Lawrence Berkeley Lab's Virtual Private
+  Network. This enables the DTS to get information about files from JAMO that
+  are not available from the JGI Data Portal itself.
 
 

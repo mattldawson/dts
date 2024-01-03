@@ -40,6 +40,7 @@ var (
 	apiPrefix = "api/v1/"
 )
 
+var testUser string = "testuser"
 var sourceRoot string
 var destinationRoot string
 
@@ -156,6 +157,10 @@ func (db *testDatabase) StagingStatus(stagingId uuid.UUID) (core.StagingStatus, 
 
 func (db *testDatabase) Endpoint() (core.Endpoint, error) {
 	return db.endpoint, nil
+}
+
+func (db *testDatabase) LocalUser(orcid string) (string, error) {
+	return testUser, nil
 }
 
 // performs testing setup
@@ -422,7 +427,7 @@ func TestCreateTransfer(t *testing.T) {
 	// check for the files in the payload
 	// FIXME: the files are written to the destination endpoint's root in a
 	// FIXME: user-specific and task-specific folder. We need to formalize this.
-	username := "user" // FIXME: ???
+	username := testUser
 	for _, file := range []string{"file1.txt", "file2.txt", "file3.txt", "manifest.json"} {
 		_, err := os.Stat(filepath.Join(destinationRoot, username, xferId.String(), file))
 		assert.Nil(err)

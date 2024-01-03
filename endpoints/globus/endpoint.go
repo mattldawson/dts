@@ -26,7 +26,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"path/filepath"
@@ -191,7 +190,6 @@ func (ep *Endpoint) get(resource string, values url.Values) (*http.Response, err
 		u.Path = fmt.Sprintf("%s/%s", globusTransferApiVersion, resource)
 		u.RawQuery = values.Encode()
 		res := fmt.Sprintf("%v", u)
-		log.Printf("GET: %s", res)
 		req, err := http.NewRequest(http.MethodGet, res, http.NoBody)
 		if err == nil {
 			req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", ep.AccessToken))
@@ -208,7 +206,6 @@ func (ep *Endpoint) post(resource string, body io.Reader) (*http.Response, error
 	if err == nil {
 		u.Path = fmt.Sprintf("%s/%s", globusTransferApiVersion, resource)
 		res := fmt.Sprintf("%v", u)
-		log.Printf("POST: %s", res)
 		var req *http.Request
 		req, err = http.NewRequest(http.MethodPost, res, body)
 		if err == nil {

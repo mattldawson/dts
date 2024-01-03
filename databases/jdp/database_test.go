@@ -1,6 +1,7 @@
 package jdp
 
 import (
+	"log/slog"
 	"os"
 	"testing"
 
@@ -32,6 +33,8 @@ endpoints:
 
 // this function gets called at the begіnning of a test session
 func setup() {
+	logLevel := new(slog.LevelVar)
+	logLevel.Set(slog.LevelDebug)
 	config.Init([]byte(jdpConfig))
 }
 

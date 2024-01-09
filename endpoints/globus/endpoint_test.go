@@ -25,7 +25,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
-	"strings"
+	"path"
 	"testing"
 
 	"github.com/google/uuid"
@@ -35,42 +35,54 @@ import (
 	"github.com/kbase/dts/core"
 )
 
-// source database files by ID
-// (these files exist on Globus Tutorial Endpoint 1 (see below) for exactly
-// this sort of testing)
+// we test our Globus endpoint implementation using two endpoints:
+// * Source: A read-only source endpoint provided by Globus for ESnet customers
+//   (https://fasterdata.es.net/performance-testing/DTNs/)
+// * Destination: A test endpoint specified by UUID via the environment variable
+//   DTS_GLOBUS_TEST_ENDPOINT
+
+const (
+	sourceEndpointName = "ESnet Sunnyvalue DTN (Anonymous read-only testing)"
+	sourceEndpointId   = "8409a10b-de09-4670-a886-2c0b33f0fe25"
+)
+
+// source database files by ID (on above read-only source endpoint)
 var sourceFilesById = map[string]string{
-	"1": "share/godata/file1.txt",
-	"2": "share/godata/file2.txt",
-	"3": "share/godata/file3.txt",
+	"1": "5MB-in-tiny-files/a/a/a-a-1KB.dat",
+	"2": "5MB-in-tiny-files/b/b/b-b-1KB.dat",
+	"3": "5MB-in-tiny-files/c/c/c-c-1KB.dat",
 }
 
-const globusConfig string = `
+var globusConfig string = fmt.Sprintf(`
 endpoints:
   source:
-    name: Globus Tutorial Endpoint 1
-    id: ddb59aef-6d04-11e5-ba46-22000b92c6ec
+    name: %s
+    id: %s
     provider: globus
     auth:
       client_id: ${DTS_GLOBUS_CLIENT_ID}
       client_secret: ${DTS_GLOBUS_CLIENT_SECRET}
   destination:
-    name: Globus Tutorial Endpoint 2
-    id: ddb59af0-6d04-11e5-ba46-22000b92c6ec
+    name: DTS Globus Test Endpoint
+    id: ${DTS_GLOBUS_TEST_ENDPOINT}
     provider: globus
     auth:
       client_id: ${DTS_GLOBUS_CLIENT_ID}
       client_secret: ${DTS_GLOBUS_CLIENT_SECRET}
   not-globus-jdp:
-    name: NERSC DTN
-    id: ${DTS_GLOBUS_TEST_ENDPOINT}
+    name: lalala
+    id: aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
     provider: not-globus
     auth:
       client_id: ${DTS_GLOBUS_CLIENT_ID}
       client_secret: ${DTS_GLOBUS_CLIENT_SECRET}
-`
+`, sourceEndpointName, sourceEndpointId)
 
 // this function gets called at the begіnning of a test session
 func setup() {
+	if _, ok := os.LookupEnv("DTS_GLOBUS_TEST_ENDPOINT"); !ok {
+		panic("DTS_GLOBUS_TEST_ENDPOINT environment variable must be set!")
+	}
 	config.Init([]byte(globusConfig))
 }
 
@@ -161,7 +173,7 @@ func TestGlobusTransfer(t *testing.T) {
 
 		fileXfers = append(fileXfers, core.FileTransfer{
 			SourcePath:      sourceFilesById[id],
-			DestinationPath: strings.ReplaceAll(sourceFilesById[id], "share/godata", destDirName(16)),
+			DestinationPath: path.Join(destDirName(16), path.Base(sourceFilesById[id])),
 		})
 	}
 	_, err := source.Transfer(destination, fileXfers)
@@ -179,7 +191,7 @@ func TestBadGlobusTransfer(t *testing.T) {
 		id := fmt.Sprintf("%d", i)
 		fileXfers = append(fileXfers, core.FileTransfer{
 			SourcePath:      sourceFilesById[id] + "_with_bad_suffix",
-			DestinationPath: strings.ReplaceAll(sourceFilesById[id]+"_with_bad_suffix", "share/godata", destDirName(16)),
+			DestinationPath: path.Join(destDirName(16), path.Base(sourceFilesById[id]+"_with_bad_suffix")),
 		})
 	}
 	_, err := source.Transfer(destination, fileXfers)

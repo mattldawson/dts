@@ -61,6 +61,8 @@ to do:
 * `DTS_KBASE_TEST_ORCID`: an [ORCID](https://orcid.org/) identifier that can be
   used to run DTS's unit test. This identifier must match a registered ORCID ID
   associated with a [KBase user account](https://narrative.kbase.us/#signup).
+* `DTS_KBASE_TEST_USER`: the KBase user associated with the ORCID specified
+  by `DTS_KBASE_TEST_ORCID`.
 * `DTS_GLOBUS_CLIENT_ID`: a client ID registered using the
   [Globus Developers](https://docs.globus.org/globus-connect-server/v5/use-client-credentials/#register-application)
   web interface. This ID must be registered specifically for an instance of DTS.

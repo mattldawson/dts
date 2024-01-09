@@ -9,6 +9,7 @@ on:
 env:
   DTS_KBASE_DEV_TOKEN: ${{ secrets.DTS_KBASE_DEV_TOKEN }}
   DTS_KBASE_TEST_ORCID: ${{ secrets.DTS_KBASE_TEST_ORCID }}
+  DTS_KBASE_TEST_USER: ${{ secrets.DTS_KBASE_TEST_USER }}
   DTS_GLOBUS_CLIENT_ID: ${{ secrets.DTS_GLOBUS_CLIENT_ID }}
   DTS_GLOBUS_CLIENT_SECRET: ${{ secrets.DTS_GLOBUS_CLIENT_SECRET }}
   DTS_GLOBUS_TEST_ENDPOINT: ${{ secrets.DTS_GLOBUS_TEST_ENDPOINT }}
@@ -35,6 +36,9 @@ jobs:
 
     - name: Building DTS
       run: go build -v ./...
+
+    - name: Setting up KBase local user federation
+      run: echo "{\"$DTS_KBASE_TEST_ORCID\": \"$DTS_KBASE_TEST_USER\"}" | fmt > kbase_users.json
 
     - name: Testing DTS
       shell: bash

@@ -38,7 +38,13 @@ jobs:
       run: go build -v ./...
 
     - name: Setting up KBase local user federation
-      run: echo "{\"$DTS_KBASE_TEST_ORCID\": \"$DTS_KBASE_TEST_USER\"}" >> kbase_users.json
+      uses: DamianReeves/write-file-action@v1.2
+      with:
+        path: kbase_users.json
+        contents: |
+          {
+            "$DTS_KBASE_TEST_ORCID": "$DTS_KBASE_TEST_USER"
+          }
 
     - name: Testing DTS
       shell: bash

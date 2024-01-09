@@ -333,7 +333,7 @@ func NewTaskManager(localEndpoint Endpoint, pollInterval time.Duration) (*TaskMa
 	go processTasks(mgr.Channels) // start processing tasks
 	go func() {                   // start polling heartbeat
 		for {
-			time.Sleep(mgr.PollInterval)
+			time.Sleep(mgr.PollInterval * time.Millisecond)
 			mgr.Channels.Poll <- struct{}{}
 		}
 	}()

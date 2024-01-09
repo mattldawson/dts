@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -32,14 +33,22 @@ import (
 // a type with service configuration parameters
 type serviceConfig struct {
 	// port on which the service listens
-	Port int `json:"port" yaml:"port"`
+	Port int `json:"port,omitempty" yaml:"port,omitempty"`
 	// maximum number of allowed incoming connections
-	MaxConnections int `json:"max_connections" yaml:"max_connections"`
-	// polling interval for checking transfer statuses (seconds)
-	PollInterval int `json:"poll_interval" yaml:"poll_interval"`
+	// default: 100
+	MaxConnections int `json:"max_connections,omitempty" yaml:"max_connections,omitempty"`
+	// polling interval for checking transfer statuses (milliseconds)
+	// default: 1 minute
+	PollInterval time.Duration `json:"poll_interval" yaml:"poll_interval"`
 	// name of endpoint with access to local filesystem
 	// (for generating and transferring manifests)
 	Endpoint string `json:"endpoint" yaml:"endpoint"`
+	// name of existing directory in which DTS can store persistent data
+	// default: none (persistent storage disabled)
+	DataDir string `json:"data_dir,omitempty" yaml:"data_dir,omitempty"`
+	// time after which information about a completed transfer is deleted (hours)
+	// default: 7 days
+	DeleteAfter time.Duration `json:"delete_after" yaml:"delete_after"`
 }
 
 // global config variables
@@ -67,15 +76,18 @@ func readConfig(bytes []byte) error {
 	var conf configFile
 	conf.Service.Port = 8080
 	conf.Service.MaxConnections = 100
-	conf.Service.PollInterval = 60000
+	conf.Service.PollInterval = time.Minute / time.Millisecond
+	conf.Service.DeleteAfter = 7 * 24
 	err := yaml.Unmarshal(bytes, &conf)
 	if err != nil {
 		log.Printf("Couldn't parse configuration data: %s\n", err)
 		return err
 	}
 
-	// copy the config data into place
+	// copy the config data into place, performing any needed conversions
 	Service = conf.Service
+	Service.PollInterval *= time.Millisecond
+	Service.DeleteAfter *= time.Hour
 	Endpoints = conf.Endpoints
 	Databases = conf.Databases
 	MessageQueues = conf.MessageQueues

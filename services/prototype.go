@@ -489,11 +489,12 @@ func (service *prototype) Start(port int) error {
 
 // gracefully shuts down the service without interrupting active connections
 func (service *prototype) Shutdown(ctx context.Context) error {
-	err := service.Server.Shutdown(ctx)
-	return err
+	service.Tasks.Close()
+	return service.Server.Shutdown(ctx)
 }
 
-// Closes down the service, freeing all resources.
+// closes down the service abruptly, freeing all resources
 func (service *prototype) Close() {
+	service.Tasks.Close()
 	service.Server.Close()
 }

@@ -253,6 +253,7 @@ func newChannels() channelsType {
 // the TaskManager
 func processTasks(channels channelsType) {
 	// here's a persistent table of transfer-related tasks
+	// FIXME: check for file and read in tasks if available... else create a new map
 	tasks := make(map[uuid.UUID]taskType)
 
 	// parse the channels into directional types as needed
@@ -305,6 +306,7 @@ func processTasks(channels channelsType) {
 				tasks[taskId] = task
 			}
 		case <-stopChan: // Close() called
+			// FIXME: write out tasks
 			break
 		}
 	}
@@ -374,7 +376,7 @@ func (mgr *TaskManager) Status(taskId uuid.UUID) (TransferStatus, error) {
 	return status, err
 }
 
-// Halts the task manager
+// shutѕ down the task manager (gracefully or abruptly)
 func (mgr *TaskManager) Close() {
 	mgr.Channels.Stop <- struct{}{}
 }

@@ -3,59 +3,43 @@
 
 # service parameters
 service:
-  port: 8080           # port on which the service listenѕ
-  max_connections: 100 # maximum incoming HTTP connections
-  poll_interval:   60  # interval at which DTS checks transfer statuses
+  port: 8080             # port on which the service listenѕ
+  max_connections: 100   # maximum number of incoming HTTP connections
+  poll_interval:   60000 # interval at which DTS checks transfer statuses (ms)
+  endpoint: globus-local # name of endpoint used for manifest generation
+  data_dir: /path/to/dir # directory DTS uses for data storage
+  delete_after: 168      # period after which info about completed transfers
+                         # is deleted (days)
 
-endpoints: # file transfer endpoints (all names unique)
-  globus: # named globus endpoints
-    globus-jdp:
-      user: dts@example.com
-      url: dtn1.nersc.gov # or wherever it is
-    globus-kbase:
-      user: dts@example.com
-      url: dtn2.nersc.gov # etc
-  # other types of endpoints supported?
+endpoints: # file transfer endpoints
+  globus-local:
+    name: name-of-endpoint                   # usually Globus display name
+    id: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx # Unique globus endpoint ID
+    provider: globus                         # endpoint provider (globus, ???)
+    auth:
+      client_id: <ID of client with authentication secret>
+      client_secret: <secret>
+  globus-jdp:
+    name: name-of-endpoint                   # usually Globus display name
+    id: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx # Unique globus endpoint ID
+    provider: globus                         # endpoint provider (globus, ???)
+    auth:
+      client_id: <ID of client with authentication secret>
+      client_secret: <secret>
+  globus-kbase:
+    name: name-of-endpoint                   # usually Globus display name
+    id: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx # Unique globus endpoint ID
+    provider: globus                         # endpoint provider (globus, ???)
+    auth:
+      client_id: <ID of client with authentication secret>
+      client_secret: <secret>
 
-message_queues: # message queues for notifications
-  kafka:
-    # https://docs.confluent.io/kafka-clients/go/current/overview.html#ak-consumer
-    kbase-mq: # kafka.ConfigMap
-      bootstrap.servers: host1:9092,host2:909
-      group.id: foo
-      auto.offset.reset: smallest
-  rabbitmq:
-    jdp-mq:
-      url: <AMQ URI>
-      queue: <queue name>
-      ...
-
-# databases between which files can be transferred
-databases:
-  jdp:
-    name: JGI Data Portal
-    organization: Joint Genome Institute
-    url: files.jgi.doe.gov
-    endpoint: globus-jdp # local file transfer endpoint
-    notifications: jgi-mq
-    search: # how to search for files (GET)
-      elasticsearch: # elasticsearch method
-        resource: /search
-        query_parameter: q # any other interesting ES-related parameters?
-      # other kinds of search supported?
-    transfer: # how to initiate a transfer (POST)
-      resource: /download_files
-      request: # fields in request body
-        globus_user_name: endpoints.globus.globus-jdp.user
-  kbase: # no search or initiate indicates receive-only
-    name: KBase Workspace Service (KSS)
-    organization: KBase
-    url: kbase.us/services/ws
-    endpoint: globus-kbase
-    notifications: kbase-mq
-    inspect: # how to validate given files on local endpoint (POST)
-      resource: /validation
-      request: # fields in request body
-        param1: etc
-        param2: etc
-
+databases: # databases between which files can be transferred
+  jdp:                                   # JGI data portal configuration
+    name: JGI Data Portal                # descriptive name
+    organization: Joint Genome Institute # Descriptive organization name
+    endpoint: globus-jdp                 # name of associated endpoint
+  kbase:                                 # KBase configuration
+    name: KBase Workspace Service (KSS)  # descriptive name
+    organization: KBase                  # descriptive organization name
+    endpoint: globus-kbase               # name of associated endpoint

@@ -39,7 +39,7 @@ type serviceConfig struct {
 	MaxConnections int `json:"max_connections,omitempty" yaml:"max_connections,omitempty"`
 	// polling interval for checking transfer statuses (milliseconds)
 	// default: 1 minute
-	PollInterval time.Duration `json:"poll_interval" yaml:"poll_interval"`
+	PollInterval int `json:"poll_interval" yaml:"poll_interval"`
 	// name of endpoint with access to local filesystem
 	// (for generating and transferring manifests)
 	Endpoint string `json:"endpoint" yaml:"endpoint"`
@@ -48,7 +48,7 @@ type serviceConfig struct {
 	DataDir string `json:"data_dir,omitempty" yaml:"data_dir,omitempty"`
 	// time after which information about a completed transfer is deleted (hours)
 	// default: 7 days
-	DeleteAfter time.Duration `json:"delete_after" yaml:"delete_after"`
+	DeleteAfter int `json:"delete_after" yaml:"delete_after"`
 }
 
 // global config variables
@@ -76,7 +76,7 @@ func readConfig(bytes []byte) error {
 	var conf configFile
 	conf.Service.Port = 8080
 	conf.Service.MaxConnections = 100
-	conf.Service.PollInterval = time.Minute / time.Millisecond
+	conf.Service.PollInterval = int(time.Minute / time.Millisecond)
 	conf.Service.DeleteAfter = 7 * 24
 	err := yaml.Unmarshal(bytes, &conf)
 	if err != nil {
@@ -86,8 +86,8 @@ func readConfig(bytes []byte) error {
 
 	// copy the config data into place, performing any needed conversions
 	Service = conf.Service
-	Service.PollInterval *= time.Millisecond
-	Service.DeleteAfter *= time.Hour
+	Service.PollInterval *= int(time.Millisecond)
+	Service.DeleteAfter *= int(time.Hour)
 	Endpoints = conf.Endpoints
 	Databases = conf.Databases
 	MessageQueues = conf.MessageQueues

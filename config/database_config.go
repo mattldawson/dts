@@ -29,6 +29,4 @@ type databaseConfig struct {
 	Organization string `yaml:"organization"`
 	// the name of an endpoint for this database
 	Endpoint string `yaml:"endpoint"`
-	// authorization data (client secret passed in headers to authorize requests)
-	Auth authConfig `yaml:"auth"`
 }

@@ -22,6 +22,7 @@
 package core
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -252,7 +253,7 @@ func newChannels() channelsType {
 // for local file transfers, and the given channels to communicate with
 // the TaskManager
 func processTasks(channels channelsType) {
-	// here's a persistent table of transfer-related tasks
+	// create or recreate a persistent table of transfer-related tasks
 	// FIXME: check for file and read in tasks if available... else create a new map
 	tasks := make(map[uuid.UUID]taskType)
 
@@ -317,13 +318,53 @@ func processTasks(channels channelsType) {
 type TaskManager struct {
 	LocalEndpoint Endpoint      // local endpoint used for transferring manifests
 	PollInterval  time.Duration // interval at which task manager checks statuses
+	DataDirectory string        // location of data directory for saving/loading
 	Channels      channelsType
 }
 
+// this function checks for the existence of the data directory and whether it
+// is readable/writeable, returning a non-nil error if any of these conditions
+// are not met
+func testDataDirectory(dir string) error {
+	if dir == "" {
+		return fmt.Errorf("no data directory was specified!")
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("Given data directory is not a directory!")
+	}
+
+	// can we write a file and read it?
+	testFile := filepath.Join(dir, "test.txt")
+	writtenTestData := []byte("test")
+	err = os.WriteFile(testFile, writtenTestData, 0644)
+	if err != nil {
+		return fmt.Errorf("Could not write to given data directory!")
+	}
+	readTestData, err := os.ReadFile(testFile)
+	if err == nil {
+		os.Remove(testFile)
+	}
+	if err != nil || !bytes.Equal(readTestData, writtenTestData) {
+		return fmt.Errorf("Could not read from given data directory!")
+	}
+	return nil
+}
+
 // creates a new task manager with the given local endpoint and poll interval
-func NewTaskManager(localEndpoint Endpoint, pollInterval time.Duration) (*TaskManager, error) {
+func NewTaskManager(localEndpoint Endpoint, pollInterval time.Duration,
+	dataDirectory string) (*TaskManager, error) {
 	if pollInterval <= 0 {
 		return nil, fmt.Errorf("non-positive poll interval specified!")
+	}
+
+	// does the directory exist and is it writable/readable?
+	err := testDataDirectory(dataDirectory)
+	if err != nil {
+		return nil, err
 	}
 
 	mgr := TaskManager{

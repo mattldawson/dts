@@ -313,7 +313,7 @@ func (db *Database) get(resource string, values url.Values) (*http.Response, err
 	u.Path = resource
 	u.RawQuery = values.Encode()
 	res := fmt.Sprintf("%v", u)
-	slog.Debug("GET: %s", res)
+	slog.Debug(fmt.Sprintf("GET: %s", res))
 	req, err := http.NewRequest(http.MethodGet, res, http.NoBody)
 	if err != nil {
 		return nil, err
@@ -331,7 +331,7 @@ func (db *Database) post(resource string, body io.Reader) (*http.Response, error
 	}
 	u.Path = resource
 	res := fmt.Sprintf("%v", u)
-	slog.Debug("POST: %s", res)
+	slog.Debug(fmt.Sprintf("POST: %s", res))
 	var req *http.Request
 	req, err = http.NewRequest(http.MethodPost, res, body)
 	if err != nil {

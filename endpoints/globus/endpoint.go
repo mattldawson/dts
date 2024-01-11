@@ -198,7 +198,7 @@ func (ep *Endpoint) get(resource string, values url.Values) (*http.Response, err
 	u.Path = fmt.Sprintf("%s/%s", globusTransferApiVersion, resource)
 	u.RawQuery = values.Encode()
 	res := fmt.Sprintf("%v", u)
-	slog.Debug("GET: %s", res)
+	slog.Debug(fmt.Sprintf("GET: %s", res))
 	req, err := http.NewRequest(http.MethodGet, res, http.NoBody)
 	if err != nil {
 		return nil, err
@@ -216,7 +216,7 @@ func (ep *Endpoint) post(resource string, body io.Reader) (*http.Response, error
 	}
 	u.Path = fmt.Sprintf("%s/%s", globusTransferApiVersion, resource)
 	res := fmt.Sprintf("%v", u)
-	slog.Debug("POST: %s", res)
+	slog.Debug(fmt.Sprintf("POST: %s", res))
 	req, err := http.NewRequest(http.MethodPost, res, body)
 	if err != nil {
 		return nil, err

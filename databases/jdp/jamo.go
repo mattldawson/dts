@@ -181,6 +181,8 @@ func queryJamo(fileIds []string) ([]jamoFileRecord, error) {
 			}
 			// give the ape some time to respond
 			time.Sleep(1 * time.Second)
+		} else {
+			break
 		}
 	}
 

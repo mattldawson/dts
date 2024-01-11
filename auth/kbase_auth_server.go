@@ -145,35 +145,38 @@ func (server *KBaseAuthServer) get(resource string) (*http.Response, error) {
 // a user can have 0, 1, or many associated ORCID identifiers
 func (server *KBaseAuthServer) Orcids() ([]string, error) {
 	resp, err := server.get("me")
-	var orcidIds []string
-	if err == nil {
-		if resp.StatusCode != 200 {
-			err = kbaseAuthError(resp)
-		} else {
-			var body []byte
-			body, err = io.ReadAll(resp.Body)
-			if err == nil {
-				var result struct {
-					Idents []struct {
-						Provider string `json:"provider"`
-						UserName string `json:"provusername"`
-					} `json:"idents"`
-				}
-				err = json.Unmarshal(body, &result)
-				if err == nil {
-					if len(result.Idents) < 1 {
-						return nil, fmt.Errorf("No ORCID IDs associated with this user!")
-					}
-					orcidIds = make([]string, 0)
-					for _, pid := range result.Idents {
-						if pid.Provider == "OrcID" {
-							orcidIds = append(orcidIds, pid.UserName)
-						}
-					}
-				}
-			}
-		}
-
+	if err != nil {
+		return nil, err
 	}
-	return orcidIds, err
+	if resp.StatusCode != 200 {
+		err = kbaseAuthError(resp)
+		if err != nil {
+			return nil, err
+		}
+	}
+	var body []byte
+	body, err = io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	var result struct {
+		Idents []struct {
+			Provider string `json:"provider"`
+			UserName string `json:"provusername"`
+		} `json:"idents"`
+	}
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return nil, err
+	}
+	if len(result.Idents) < 1 {
+		return nil, fmt.Errorf("No ORCID IDs associated with this user!")
+	}
+	orcidIds := make([]string, 0)
+	for _, pid := range result.Idents {
+		if pid.Provider == "OrcID" {
+			orcidIds = append(orcidIds, pid.UserName)
+		}
+	}
+	return orcidIds, nil
 }

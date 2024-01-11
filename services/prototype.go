@@ -268,36 +268,39 @@ func getTransferRequest(r *http.Request) (TransferRequest, error) {
 	var err error
 
 	_, orcid, err := getAuthInfo(r.Header)
-	if err == nil {
-		// is this a JSON request?
-		if r.Header.Get("Content-Type") != "application/json" {
-			err = fmt.Errorf("Request content type must be \"application/json\".")
-		} else {
-			// read the request body
-			var rBody []byte
-			rBody, err = io.ReadAll(r.Body)
-			if err == nil {
-				err = json.Unmarshal(rBody, &req)
-				if err == nil {
-					// validate source and destination databases
-					if _, ok := config.Databases[req.Source]; !ok {
-						err = fmt.Errorf("Unknown source database: %s", req.Source)
-					} else if _, ok := config.Databases[req.Destination]; !ok {
-						err = fmt.Errorf("Unknown destination database: %s", req.Destination)
-					}
-
-					// make sure there's at least one file in the request
-					if len(req.FileIds) == 0 {
-						err = fmt.Errorf("No file IDs specified for transfer!")
-					}
-
-					req.Orcid = orcid
-				}
-			}
-		}
+	if err != nil {
+		return req, err
 	}
 
-	return req, err
+	// is this a JSON request?
+	if r.Header.Get("Content-Type") != "application/json" {
+		return req, fmt.Errorf("Request content type must be \"application/json\".")
+	}
+
+	// read the request body
+	rBody, err := io.ReadAll(r.Body)
+	if err != nil {
+		return req, err
+	}
+	err = json.Unmarshal(rBody, &req)
+	if err != nil {
+		return req, err
+	}
+
+	// validate source and destination databases
+	if _, ok := config.Databases[req.Source]; !ok {
+		return req, fmt.Errorf("Unknown source database: %s", req.Source)
+	} else if _, ok := config.Databases[req.Destination]; !ok {
+		return req, fmt.Errorf("Unknown destination database: %s", req.Destination)
+	}
+
+	// make sure there's at least one file in the request
+	if len(req.FileIds) == 0 {
+		return req, fmt.Errorf("No file IDs specified for transfer!")
+	}
+
+	req.Orcid = orcid
+	return req, nil
 }
 
 // handler method for initiating a file transfer operation
@@ -314,21 +317,23 @@ func (service *prototype) createTransfer(w http.ResponseWriter,
 	// fetch source and destination databases
 	var source, destination core.Database
 	source, err = databases.NewDatabase(request.Orcid, request.Source)
-	if err == nil {
-		destination, err = databases.NewDatabase(request.Orcid, request.Destination)
+	if err != nil {
+		writeError(w, err.Error(), 404)
+		return
 	}
+	destination, err = databases.NewDatabase(request.Orcid, request.Destination)
 	if err != nil {
 		writeError(w, err.Error(), 404)
 		return
 	}
 
 	taskId, err := service.Tasks.Add(request.Orcid, source, destination, request.FileIds)
-	if err == nil {
-		jsonData, _ := json.Marshal(TransferResponse{Id: taskId})
-		writeJson(w, jsonData)
-	} else {
+	if err != nil {
 		writeError(w, err.Error(), 500)
+		return
 	}
+	jsonData, _ := json.Marshal(TransferResponse{Id: taskId})
+	writeJson(w, jsonData)
 }
 
 // convert a transfer status code to a nice human-friendly string

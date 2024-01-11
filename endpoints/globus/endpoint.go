@@ -26,6 +26,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"path/filepath"
@@ -88,37 +89,38 @@ func NewEndpoint(endpointName string) (core.Endpoint, error) {
 	}
 
 	// if needed, authenticate to obtain a Globus Transfer API access token
-	var err error
-	var zeroUUID uuid.UUID
-	if epConfig.Auth.ClientId != zeroUUID {
-		err = ep.authenticate(epConfig.Auth.ClientId, epConfig.Auth.ClientSecret)
-	}
-
-	// fetch the endpoint's root path
-	if err == nil {
-		resource := fmt.Sprintf("endpoint/%s", ep.Id.String())
-		var resp *http.Response
-		resp, err = ep.get(resource, url.Values{})
-		if err == nil {
-			defer resp.Body.Close()
-			if resp.StatusCode == 200 {
-				var body []byte
-				body, err = io.ReadAll(resp.Body)
-				if err == nil {
-					type EndpointDocument struct {
-						HostRoot string `json:"host_root"`
-					}
-					var endpointResp EndpointDocument
-					err = json.Unmarshal(body, &endpointResp)
-					if err == nil {
-						ep.root = endpointResp.HostRoot
-					}
-				}
-			}
+	var zeroId uuid.UUID
+	if epConfig.Auth.ClientId != zeroId { // nonzero value
+		err := ep.authenticate(epConfig.Auth.ClientId, epConfig.Auth.ClientSecret)
+		if err != nil {
+			return ep, err
 		}
 	}
 
-	return ep, err
+	// fetch the endpoint's root path
+	resource := fmt.Sprintf("endpoint/%s", ep.Id.String())
+	resp, err := ep.get(resource, url.Values{})
+	if err != nil {
+		return ep, err
+	}
+	if resp.StatusCode != 200 {
+		return ep, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return ep, err
+	}
+	type EndpointDocument struct {
+		HostRoot string `json:"host_root"`
+	}
+	var endpointResp EndpointDocument
+	err = json.Unmarshal(body, &endpointResp)
+	if err != nil {
+		return ep, err
+	}
+	ep.root = endpointResp.HostRoot
+	return ep, nil
 }
 
 // authenticates with Globus using a client ID and secret to obtain an access
@@ -129,40 +131,44 @@ func (ep *Endpoint) authenticate(clientId uuid.UUID, clientSecret string) error 
 	data.Set("scope", "urn:globus:auth:scope:transfer.api.globus.org:all")
 	data.Set("grant_type", "client_credentials")
 	req, err := http.NewRequest(http.MethodPost, authUrl, strings.NewReader(data.Encode()))
-	if err == nil {
-		req.SetBasicAuth(clientId.String(), clientSecret)
-		req.Header.Add("Content-Type", "application-x-www-form-urlencoded")
-
-		// send the request
-		var resp *http.Response
-		resp, err = ep.Client.Do(req)
-		if err == nil {
-			if resp.StatusCode == 200 {
-				// read and unmarshal the response
-				var body []byte
-				body, err = io.ReadAll(resp.Body)
-				if err == nil {
-					type AuthResponse struct {
-						AccessToken    string `json:"access_token"`
-						Scope          string `json:"scope"`
-						ResourceServer string `json:"resource_server"`
-						ExpiresIn      int    `json:"expires_in"`
-						TokenType      string `json:"token_type"`
-					}
-
-					var authResponse AuthResponse
-					err = json.Unmarshal(body, &authResponse)
-					if err == nil {
-						// stash the access token
-						ep.AccessToken = authResponse.AccessToken
-					}
-				}
-			} else {
-				err = fmt.Errorf("Couldn't authenticate via Globus Auth API (%d)", resp.StatusCode)
-			}
-		}
+	if err != nil {
+		return err
 	}
-	return err
+	req.SetBasicAuth(clientId.String(), clientSecret)
+	req.Header.Add("Content-Type", "application-x-www-form-urlencoded")
+
+	// send the request
+	resp, err := ep.Client.Do(req)
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("Couldn't authenticate via Globus Auth API (%d)", resp.StatusCode)
+	}
+
+	// read and unmarshal the response
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	type AuthResponse struct {
+		AccessToken    string `json:"access_token"`
+		Scope          string `json:"scope"`
+		ResourceServer string `json:"resource_server"`
+		ExpiresIn      int    `json:"expires_in"`
+		TokenType      string `json:"token_type"`
+	}
+
+	var authResponse AuthResponse
+	err = json.Unmarshal(body, &authResponse)
+	if err != nil {
+		return err
+	}
+
+	// stash the access token
+	ep.AccessToken = authResponse.AccessToken
+
+	return nil
 }
 
 // constructs a new request to the auth server with the correct headers, etc
@@ -175,45 +181,48 @@ func (ep *Endpoint) newRequest(method, resource string,
 		fmt.Sprintf("%s/%s/%s", globusTransferBaseURL, globusTransferApiVersion, resource),
 		body,
 	)
-	if err == nil {
-		req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", ep.AccessToken))
+	if err != nil {
+		return nil, err
 	}
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", ep.AccessToken))
 	return req, err
 }
 
 // performs a GET request on the given resource, returning the resulting
 // response and error
 func (ep *Endpoint) get(resource string, values url.Values) (*http.Response, error) {
-	var u *url.URL
 	u, err := url.ParseRequestURI(globusTransferBaseURL)
-	if err == nil {
-		u.Path = fmt.Sprintf("%s/%s", globusTransferApiVersion, resource)
-		u.RawQuery = values.Encode()
-		res := fmt.Sprintf("%v", u)
-		req, err := http.NewRequest(http.MethodGet, res, http.NoBody)
-		if err == nil {
-			req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", ep.AccessToken))
-			return ep.Client.Do(req)
-		}
+	if err != nil {
+		return nil, err
 	}
-	return nil, err
+	u.Path = fmt.Sprintf("%s/%s", globusTransferApiVersion, resource)
+	u.RawQuery = values.Encode()
+	res := fmt.Sprintf("%v", u)
+	slog.Debug("GET: %s", res)
+	req, err := http.NewRequest(http.MethodGet, res, http.NoBody)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", ep.AccessToken))
+	return ep.Client.Do(req)
 }
 
 // performs a POST request on the given resource, returning the resulting
 // response and error
 func (ep *Endpoint) post(resource string, body io.Reader) (*http.Response, error) {
 	u, err := url.ParseRequestURI(globusTransferBaseURL)
-	if err == nil {
-		u.Path = fmt.Sprintf("%s/%s", globusTransferApiVersion, resource)
-		res := fmt.Sprintf("%v", u)
-		var req *http.Request
-		req, err = http.NewRequest(http.MethodPost, res, body)
-		if err == nil {
-			req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", ep.AccessToken))
-			return ep.Client.Do(req)
-		}
+	if err != nil {
+		return nil, err
 	}
-	return nil, err
+	u.Path = fmt.Sprintf("%s/%s", globusTransferApiVersion, resource)
+	res := fmt.Sprintf("%v", u)
+	slog.Debug("POST: %s", res)
+	req, err := http.NewRequest(http.MethodPost, res, body)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", ep.AccessToken))
+	return ep.Client.Do(req)
 }
 
 func (ep *Endpoint) Root() string {
@@ -240,34 +249,33 @@ func (ep *Endpoint) FilesStaged(files []core.DataResource) (bool, error) {
 		resource := fmt.Sprintf("operation/endpoint/%s/ls", ep.Id.String())
 
 		resp, err := ep.get(resource, values)
-		if err == nil {
-			defer resp.Body.Close()
-			var body []byte
-			body, err = io.ReadAll(resp.Body)
-			if err == nil {
-				// https://docs.globus.org/api/transfer/file_operations/#dir_listing_response
-				type DirListingResponse struct {
-					Data []struct {
-						Name string `json:"name"`
-					} `json:"DATA"`
-				}
-				var response DirListingResponse
-				err = json.Unmarshal(body, &response)
-				if err == nil {
-					filesPresent := make(map[string]bool)
-					for _, data := range response.Data {
-						filesPresent[data.Name] = true
-					}
-					for _, file := range files {
-						if _, present := filesPresent[file]; !present {
-							return false, nil
-						}
-					}
-				}
-			}
-		}
 		if err != nil {
 			return false, err
+		}
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return false, err
+		}
+		// https://docs.globus.org/api/transfer/file_operations/#dir_listing_response
+		type DirListingResponse struct {
+			Data []struct {
+				Name string `json:"name"`
+			} `json:"DATA"`
+		}
+		var response DirListingResponse
+		err = json.Unmarshal(body, &response)
+		if err != nil {
+			return false, err
+		}
+		filesPresent := make(map[string]bool)
+		for _, data := range response.Data {
+			filesPresent[data.Name] = true
+		}
+		for _, file := range files {
+			if _, present := filesPresent[file]; !present {
+				return false, nil
+			}
 		}
 	}
 	return true, nil
@@ -282,30 +290,31 @@ func (ep *Endpoint) Transfers() ([]uuid.UUID, error) {
 	values.Add("orderby", "name ASC")
 
 	resp, err := ep.get("task_list", url.Values{})
-	if err == nil {
-		defer resp.Body.Close()
-		var body []byte
-		body, err = io.ReadAll(resp.Body)
-		if err == nil {
-			type TaskListResponse struct {
-				Length int `json:"length"`
-				Limit  int `json:"limіt"`
-				Data   []struct {
-					TaskId uuid.UUID `json:"task_id"`
-				} `json:"DATA"`
-			}
-			var response TaskListResponse
-			err = json.Unmarshal(body, &response)
-			if err == nil {
-				taskIds := make([]uuid.UUID, len(response.Data))
-				for i, data := range response.Data {
-					taskIds[i] = data.TaskId
-				}
-				return taskIds, nil
-			}
-		}
+	if err != nil {
+		return nil, err
 	}
-	return nil, err
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	type TaskListResponse struct {
+		Length int `json:"length"`
+		Limit  int `json:"limіt"`
+		Data   []struct {
+			TaskId uuid.UUID `json:"task_id"`
+		} `json:"DATA"`
+	}
+	var response TaskListResponse
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		return nil, err
+	}
+	taskIds := make([]uuid.UUID, len(response.Data))
+	for i, data := range response.Data {
+		taskIds[i] = data.TaskId
+	}
+	return taskIds, nil
 }
 
 func (ep *Endpoint) Transfer(dst core.Endpoint, files []core.FileTransfer) (uuid.UUID, error) {
@@ -316,159 +325,161 @@ func (ep *Endpoint) Transfer(dst core.Endpoint, files []core.FileTransfer) (uuid
 		requestedFiles[i].Path = file.SourcePath // only the Path field is required
 	}
 	staged, err := ep.FilesStaged(requestedFiles)
-	if err == nil && staged {
-		// obtain a submission ID
-		// https://docs.globus.org/api/transfer/task_submit/#get_submission_id
-		var xferId uuid.UUID
-		resp, err := ep.get("submission_id", url.Values{})
-		if err == nil {
-			defer resp.Body.Close()
-			var body []byte
-			body, err = io.ReadAll(resp.Body)
-			if err == nil {
-				type SubmissionIdResponse struct {
-					Value uuid.UUID `json:"value"`
-				}
-				var response SubmissionIdResponse
-				err = json.Unmarshal(body, &response)
-				if err == nil {
-					xferId = response.Value
-				}
-			}
-		}
-
-		if err == nil {
-			// now, submit the transfer task itself
-			// https://docs.globus.org/api/transfer/task_submit/#submit_transfer_task
-			// https://docs.globus.org/api/transfer/task_submit/#transfer_item_fields
-			type TransferItem struct {
-				DataType          string `json:"DATA_TYPE"` // "transfer_item"
-				SourcePath        string `json:"source_path"`
-				DestinationPath   string `json:"destination_path"`
-				Recursive         bool   `json:"recursive"`
-				ExternalChecksum  string `json:"external_checksum,omitempty"`
-				ChecksumAlgorithm string `json:"checksum_algorithm,omitempty"`
-			}
-			type SubmissionRequest struct {
-				DataType            string         `json:"DATA_TYPE"` // "transfer"
-				Id                  string         `json:"submission_id"`
-				Label               string         `json:"label"` // "DTS"
-				Data                []TransferItem `json:"DATA"`
-				DestinationEndpoint string         `json:"destination_endpoint"`
-				SourceEndpoint      string         `json:"source_endpoint"`
-				SyncLevel           int            `json:"sync_level"`
-				VerifyChecksum      bool           `json:"verify_checksum"`
-				FailOnQuotaErrors   bool           `json:"fail_on_quota_errors"`
-			}
-			xferItems := make([]TransferItem, len(files))
-			for i, file := range files {
-				xferItems[i] = TransferItem{
-					DataType:          "transfer_item",
-					SourcePath:        file.SourcePath,
-					DestinationPath:   file.DestinationPath,
-					Recursive:         true,
-					ExternalChecksum:  file.Hash,
-					ChecksumAlgorithm: file.HashAlgorithm,
-				}
-			}
-			var data []byte
-			gDst := dst.(*Endpoint)
-			data, err = json.Marshal(SubmissionRequest{
-				DataType:            "transfer",
-				Id:                  xferId.String(),
-				Label:               "DTS",
-				Data:                xferItems,
-				DestinationEndpoint: gDst.Id.String(),
-				SourceEndpoint:      ep.Id.String(),
-				SyncLevel:           3, // transfer only if checksums don't match
-				VerifyChecksum:      true,
-				FailOnQuotaErrors:   true,
-			})
-			if err == nil {
-				var resp *http.Response
-				resp, err = ep.post("transfer", bytes.NewReader(data))
-				if err == nil {
-					defer resp.Body.Close()
-					var body []byte
-					body, err = io.ReadAll(resp.Body)
-					if err == nil {
-						type SubmissionResponse struct {
-							TaskId  uuid.UUID `json:"task_id"`
-							Code    string    `json:"code"`
-							Message string    `json:"message"`
-						}
-
-						var gResp SubmissionResponse
-						err = json.Unmarshal(body, &gResp)
-						if err == nil {
-							xferId = gResp.TaskId
-							var zero uuid.UUID
-							if xferId == zero { // trouble!
-								err = fmt.Errorf("%s (%s)", gResp.Message, gResp.Code)
-							}
-						}
-					}
-				}
-			}
-		}
-		return xferId, err
-	} else {
-		if err == nil {
-			err = fmt.Errorf("The files requested for transfer are not yet staged.")
-		}
+	if err != nil {
 		return uuid.UUID{}, err
 	}
+	if !staged {
+		return uuid.UUID{}, fmt.Errorf("The files requested for transfer are not yet staged.")
+	}
+
+	// obtain a submission ID
+	// https://docs.globus.org/api/transfer/task_submit/#get_submission_id
+	var xferId uuid.UUID
+	resp, err := ep.get("submission_id", url.Values{})
+	if err != nil {
+		return xferId, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return xferId, err
+	}
+	type SubmissionIdResponse struct {
+		Value uuid.UUID `json:"value"`
+	}
+	var response SubmissionIdResponse
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		return xferId, err
+	}
+	xferId = response.Value
+
+	// now, submit the transfer task itself
+	// https://docs.globus.org/api/transfer/task_submit/#submit_transfer_task
+	// https://docs.globus.org/api/transfer/task_submit/#transfer_item_fields
+	type TransferItem struct {
+		DataType          string `json:"DATA_TYPE"` // "transfer_item"
+		SourcePath        string `json:"source_path"`
+		DestinationPath   string `json:"destination_path"`
+		Recursive         bool   `json:"recursive"`
+		ExternalChecksum  string `json:"external_checksum,omitempty"`
+		ChecksumAlgorithm string `json:"checksum_algorithm,omitempty"`
+	}
+	type SubmissionRequest struct {
+		DataType            string         `json:"DATA_TYPE"` // "transfer"
+		Id                  string         `json:"submission_id"`
+		Label               string         `json:"label"` // "DTS"
+		Data                []TransferItem `json:"DATA"`
+		DestinationEndpoint string         `json:"destination_endpoint"`
+		SourceEndpoint      string         `json:"source_endpoint"`
+		SyncLevel           int            `json:"sync_level"`
+		VerifyChecksum      bool           `json:"verify_checksum"`
+		FailOnQuotaErrors   bool           `json:"fail_on_quota_errors"`
+	}
+	xferItems := make([]TransferItem, len(files))
+	for i, file := range files {
+		xferItems[i] = TransferItem{
+			DataType:          "transfer_item",
+			SourcePath:        file.SourcePath,
+			DestinationPath:   file.DestinationPath,
+			Recursive:         true,
+			ExternalChecksum:  file.Hash,
+			ChecksumAlgorithm: file.HashAlgorithm,
+		}
+	}
+	gDst := dst.(*Endpoint)
+	data, err := json.Marshal(SubmissionRequest{
+		DataType:            "transfer",
+		Id:                  xferId.String(),
+		Label:               "DTS",
+		Data:                xferItems,
+		DestinationEndpoint: gDst.Id.String(),
+		SourceEndpoint:      ep.Id.String(),
+		SyncLevel:           3, // transfer only if checksums don't match
+		VerifyChecksum:      true,
+		FailOnQuotaErrors:   true,
+	})
+	if err == nil {
+		return xferId, err
+	}
+	resp, err = ep.post("transfer", bytes.NewReader(data))
+	if err != nil {
+		return xferId, err
+	}
+	defer resp.Body.Close()
+	body, err = io.ReadAll(resp.Body)
+	if err != nil {
+		return xferId, err
+	}
+	type SubmissionResponse struct {
+		TaskId  uuid.UUID `json:"task_id"`
+		Code    string    `json:"code"`
+		Message string    `json:"message"`
+	}
+
+	var gResp SubmissionResponse
+	err = json.Unmarshal(body, &gResp)
+	if err != nil {
+		return xferId, err
+	}
+	xferId = gResp.TaskId
+	var zeroId uuid.UUID
+	if xferId == zeroId { // trouble!
+		return xferId, fmt.Errorf("%s (%s)", gResp.Message, gResp.Code)
+	}
+	return xferId, nil
 }
 
 func (ep *Endpoint) Status(id uuid.UUID) (core.TransferStatus, error) {
 	resource := fmt.Sprintf("task/%s", id.String())
 	resp, err := ep.get(resource, url.Values{})
-	if err == nil {
-		defer resp.Body.Close()
-		var body []byte
-		body, err = io.ReadAll(resp.Body)
-		if err == nil {
-			type TaskResponse struct {
-				Files            int    `json:"files"`
-				FilesTransferred int    `json:"files_transferred"`
-				IsPaused         bool   `json:"is_paused"`
-				Status           string `json:"status"`
-				Code             string `json:"code"`
-				Message          string `json:"message"`
-			}
-			var response TaskResponse
-			err = json.Unmarshal(body, &response)
-			if err == nil {
-				if strings.Contains(response.Code, "ClientError") {
-					return core.TransferStatus{}, fmt.Errorf(response.Message)
-				} else {
-					codes := map[string]core.TransferStatusCode{
-						"Active":    core.TransferStatusActive,
-						"Inactive":  core.TransferStatusInactive,
-						"Succeeded": core.TransferStatusSucceeded,
-						"Failed":    core.TransferStatusFailed,
-					}
-					return core.TransferStatus{
-						Code:                codes[response.Status],
-						NumFiles:            response.Files,
-						NumFilesTransferred: response.FilesTransferred,
-					}, nil
-				}
-			}
-		}
+	if err != nil {
+		return core.TransferStatus{}, err
 	}
-	return core.TransferStatus{}, err
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return core.TransferStatus{}, err
+	}
+	type TaskResponse struct {
+		Files            int    `json:"files"`
+		FilesTransferred int    `json:"files_transferred"`
+		IsPaused         bool   `json:"is_paused"`
+		Status           string `json:"status"`
+		Code             string `json:"code"`
+		Message          string `json:"message"`
+	}
+	var response TaskResponse
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		return core.TransferStatus{}, err
+	}
+	if strings.Contains(response.Code, "ClientError") {
+		return core.TransferStatus{}, fmt.Errorf(response.Message)
+	} else {
+		codes := map[string]core.TransferStatusCode{
+			"Active":    core.TransferStatusActive,
+			"Inactive":  core.TransferStatusInactive,
+			"Succeeded": core.TransferStatusSucceeded,
+			"Failed":    core.TransferStatusFailed,
+		}
+		return core.TransferStatus{
+			Code:                codes[response.Status],
+			NumFiles:            response.Files,
+			NumFilesTransferred: response.FilesTransferred,
+		}, nil
+	}
 }
 
 func (ep *Endpoint) Cancel(id uuid.UUID) error {
 	// https://docs.globus.org/api/transfer/task/#cancel_task_by_id
 	resource := fmt.Sprintf("task/%s/cancel", id.String())
 	resp, err := ep.get(resource, url.Values{})
-	if err == nil {
-		defer resp.Body.Close()
-		// FIXME
-		//var body []byte
-		//body, err = io.ReadAll(resp.Body)
+	if err != nil {
+		return err
 	}
+	defer resp.Body.Close()
+	// FIXME
+	//body, err := io.ReadAll(resp.Body)
 	return err
 }

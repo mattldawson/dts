@@ -123,13 +123,14 @@ func validateDatabases(databases map[string]databaseConfig) error {
 // success or failure.
 func validateConfig() error {
 	err := validateServiceParameters(Service)
-	if err == nil {
-		err = validateEndpoints(Endpoints)
-		if err == nil {
-			err = validateDatabases(Databases)
-		}
+	if err != nil {
+		return err
 	}
-
+	err = validateEndpoints(Endpoints)
+	if err != nil {
+		return err
+	}
+	err = validateDatabases(Databases)
 	return err
 }
 
@@ -137,8 +138,9 @@ func validateConfig() error {
 // data.
 func Init(yamlData []byte) error {
 	err := readConfig(yamlData)
-	if err == nil {
-		err = validateConfig()
+	if err != nil {
+		return err
 	}
+	err = validateConfig()
 	return err
 }

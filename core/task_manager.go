@@ -68,23 +68,28 @@ func (task *taskType) Update() error {
 	if task.Resources == nil { // new task!
 		// resolve file paths using file IDs
 		task.Resources, err = task.Source.Resources(task.FileIds)
-		if err == nil {
-			// tell the source DB to stage the files, stash the task, and return
-			// its new ID
-			task.Staging.UUID, err = task.Source.StageFiles(task.FileIds)
-			task.Staging.Valid = true
-			if err == nil {
-				task.Status = TransferStatus{
-					Code:     TransferStatusStaging,
-					NumFiles: len(task.FileIds),
-				}
-			}
+		if err != nil {
+			return err
+		}
+		// tell the source DB to stage the files, stash the task, and return
+		// its new ID
+		task.Staging.UUID, err = task.Source.StageFiles(task.FileIds)
+		task.Staging.Valid = true
+		if err != nil {
+			return err
+		}
+		task.Status = TransferStatus{
+			Code:     TransferStatusStaging,
+			NumFiles: len(task.FileIds),
 		}
 	} else if task.Staging.Valid { // we're staging
 		// are the files staged?
 		var staged bool
 		staged, err = sourceEndpoint.FilesStaged(task.Resources)
-		if err == nil && staged {
+		if err != nil {
+			return err
+		}
+		if staged {
 			// initiate the transfer
 			fileXfers := make([]FileTransfer, len(task.Resources))
 			for i, resource := range task.Resources {
@@ -96,21 +101,25 @@ func (task *taskType) Update() error {
 				}
 			}
 			task.Transfer.UUID, err = sourceEndpoint.Transfer(destinationEndpoint, fileXfers)
-			if err == nil {
-				task.Status = TransferStatus{
-					Code:     TransferStatusActive,
-					NumFiles: len(task.FileIds),
-				}
-				task.Staging = uuid.NullUUID{}
-				task.Transfer.Valid = true
+			if err != nil {
+				return err
 			}
+			task.Status = TransferStatus{
+				Code:     TransferStatusActive,
+				NumFiles: len(task.FileIds),
+			}
+			task.Staging = uuid.NullUUID{}
+			task.Transfer.Valid = true
 		}
 	} else if task.Transfer.Valid { // we're transferring
 		// has the data transfer completed?
 		var xferStatus TransferStatus
 		xferStatus, err = sourceEndpoint.Status(task.Transfer.UUID)
-		if err == nil && (xferStatus.Code == TransferStatusSucceeded ||
-			xferStatus.Code == TransferStatusFailed) { // transfer finished
+		if err != nil {
+			return err
+		}
+		if xferStatus.Code == TransferStatusSucceeded ||
+			xferStatus.Code == TransferStatusFailed { // transfer finished
 			task.Transfer = uuid.NullUUID{}
 			if xferStatus.Code == TransferStatusSucceeded {
 				// generate a manifest for the transfer
@@ -124,48 +133,56 @@ func (task *taskType) Update() error {
 				// destination endpoint
 				var manifestBytes []byte
 				manifestBytes, err = json.Marshal(manifest)
-				if err == nil {
-					var manifestFile *os.File
-					manifestFile, err = os.CreateTemp(task.LocalEndpoint.Root(), "manifest.json")
-					if err == nil {
-						_, err = manifestFile.Write(manifestBytes)
-						if err == nil {
-							task.ManifestFile = manifestFile.Name()
-							err = manifestFile.Close()
-							if err == nil {
-								// begin the transfer
-								fileXfers := []FileTransfer{
-									FileTransfer{
-										SourcePath:      filepath.Base(task.ManifestFile), // relative to root!
-										DestinationPath: filepath.Join(username, task.Id.String(), "manifest.json"),
-									},
-								}
-								task.Manifest.UUID, err = task.LocalEndpoint.Transfer(destinationEndpoint, fileXfers)
-								if err == nil {
-									task.Status = TransferStatus{
-										Code: TransferStatusFinalizing,
-									}
-									task.Manifest.Valid = true
-								}
-							}
-						}
-					}
+				if err != nil {
+					return err
 				}
+				var manifestFile *os.File
+				manifestFile, err = os.CreateTemp(task.LocalEndpoint.Root(), "manifest.json")
+				if err != nil {
+					return err
+				}
+				_, err = manifestFile.Write(manifestBytes)
+				if err != nil {
+					return err
+				}
+				task.ManifestFile = manifestFile.Name()
+				err = manifestFile.Close()
+				if err != nil {
+					return err
+				}
+				// begin the transfer
+				fileXfers := []FileTransfer{
+					FileTransfer{
+						SourcePath:      filepath.Base(task.ManifestFile), // relative to root!
+						DestinationPath: filepath.Join(username, task.Id.String(), "manifest.json"),
+					},
+				}
+				task.Manifest.UUID, err = task.LocalEndpoint.Transfer(destinationEndpoint, fileXfers)
+				if err != nil {
+					return err
+				}
+				task.Status = TransferStatus{
+					Code: TransferStatusFinalizing,
+				}
+				task.Manifest.Valid = true
 			}
 		}
 	} else if task.Manifest.Valid { // we're generating/sending a manifest
 		// has the manifest transfer completed?
 		var xferStatus TransferStatus
 		xferStatus, err = task.LocalEndpoint.Status(task.Manifest.UUID)
-		if err == nil && (xferStatus.Code == TransferStatusSucceeded ||
-			xferStatus.Code == TransferStatusFailed) { // transfer finished
+		if err != nil {
+			return err
+		}
+		if xferStatus.Code == TransferStatusSucceeded ||
+			xferStatus.Code == TransferStatusFailed { // transfer finished
 			task.Manifest = uuid.NullUUID{}
 			os.Remove(task.ManifestFile)
 			task.ManifestFile = ""
 			task.Status.Code = xferStatus.Code
 		}
 	}
-	return err
+	return nil
 }
 
 // this type holds various channels used by the TaskManager to communicate
@@ -224,28 +241,27 @@ func processTasks(channels channelsType) {
 			for taskId, task := range tasks {
 				oldStatus := task.Status
 				err := task.Update()
-				if err == nil {
-					if task.Status.Code != oldStatus.Code {
-						switch task.Status.Code {
-						case TransferStatusStaging:
-							slog.Info(fmt.Sprintf("Staging files for task %s.", task.Id.String()))
-						case TransferStatusActive:
-							slog.Info(fmt.Sprintf("Beginning transfer for task %s.", task.Id.String()))
-						case TransferStatusInactive:
-							slog.Info(fmt.Sprintf("Suspended transfer for task %s.", task.Id.String()))
-						case TransferStatusFinalizing:
-							slog.Info(fmt.Sprintf("Finalizing transfer for task %s.", task.Id.String()))
-						case TransferStatusSucceeded:
-							slog.Info(fmt.Sprintf("Transfer task %s completed successfully.", task.Id.String()))
-						case TransferStatusFailed:
-							slog.Info(fmt.Sprintf("Transfer task %s failed.", task.Id.String()))
-						}
-					}
-					tasks[taskId] = task
-				} else {
+				if err != nil {
 					// we log task update errors but do not propagate them
 					slog.Error(err.Error())
 				}
+				if task.Status.Code != oldStatus.Code {
+					switch task.Status.Code {
+					case TransferStatusStaging:
+						slog.Info(fmt.Sprintf("Staging files for task %s.", task.Id.String()))
+					case TransferStatusActive:
+						slog.Info(fmt.Sprintf("Beginning transfer for task %s.", task.Id.String()))
+					case TransferStatusInactive:
+						slog.Info(fmt.Sprintf("Suspended transfer for task %s.", task.Id.String()))
+					case TransferStatusFinalizing:
+						slog.Info(fmt.Sprintf("Finalizing transfer for task %s.", task.Id.String()))
+					case TransferStatusSucceeded:
+						slog.Info(fmt.Sprintf("Transfer task %s completed successfully.", task.Id.String()))
+					case TransferStatusFailed:
+						slog.Info(fmt.Sprintf("Transfer task %s failed.", task.Id.String()))
+					}
+				}
+				tasks[taskId] = task
 			}
 		case <-stopChan: // Close() called
 			break

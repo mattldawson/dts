@@ -181,31 +181,31 @@ func setup() {
 	// create source/destination directories and files
 	sourceRoot = filepath.Join(TESTING_DIR, "source")
 	err = os.Mkdir(sourceRoot, 0700)
-	if err == nil {
-		destinationRoot = filepath.Join(TESTING_DIR, "destination")
-		err = os.Mkdir(destinationRoot, 0700)
-		if err == nil {
-			// create source files
-			for i := 1; i <= 3; i++ {
-				err = os.WriteFile(filepath.Join(sourceRoot, fmt.Sprintf("file%d.txt", i)),
-					[]byte(fmt.Sprintf("This is the content of file %d.", i)), 0600)
-				if err != nil {
-					break
-				}
-			}
+	if err != nil {
+		log.Panicf("Couldn't create source directory: %s", err)
+	}
+	destinationRoot = filepath.Join(TESTING_DIR, "destination")
+	err = os.Mkdir(destinationRoot, 0700)
+	if err != nil {
+		log.Panicf("Couldn't create destination directory: %s", err)
+	}
+	// create source files
+	for i := 1; i <= 3; i++ {
+		err = os.WriteFile(filepath.Join(sourceRoot, fmt.Sprintf("file%d.txt", i)),
+			[]byte(fmt.Sprintf("This is the content of file %d.", i)), 0600)
+		if err != nil {
+			log.Panicf("Couldn't create source file: %s", err)
+			break
 		}
 	}
 
-	if err == nil {
-		// read in the config file with SOURCE_ROOT and DESTINATION_ROOT replaced
-		myConfig := strings.ReplaceAll(dtsConfig, "SOURCE_ROOT", sourceRoot)
-		myConfig = strings.ReplaceAll(myConfig, "DESTINATION_ROOT", destinationRoot)
-		myConfig = strings.ReplaceAll(myConfig, "TESTING_DIR", TESTING_DIR)
-		err = config.Init([]byte(myConfig))
-	}
-
+	// read in the config file with SOURCE_ROOT and DESTINATION_ROOT replaced
+	myConfig := strings.ReplaceAll(dtsConfig, "SOURCE_ROOT", sourceRoot)
+	myConfig = strings.ReplaceAll(myConfig, "DESTINATION_ROOT", destinationRoot)
+	myConfig = strings.ReplaceAll(myConfig, "TESTING_DIR", TESTING_DIR)
+	err = config.Init([]byte(myConfig))
 	if err != nil {
-		panic(err)
+		log.Panicf("Couldn't initialize configuration: %s", err)
 	}
 
 	// Start the service.
@@ -250,28 +250,26 @@ func breakdown() {
 // sends a GET query with well-formed headers
 func get(resource string) (*http.Response, error) {
 	req, err := http.NewRequest(http.MethodGet, resource, http.NoBody)
-	if err == nil {
-		accessToken := os.Getenv("DTS_KBASE_DEV_TOKEN")
-		b64Token := base64.StdEncoding.EncodeToString([]byte(accessToken))
-		req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", b64Token))
-		return http.DefaultClient.Do(req)
-	} else {
+	if err != nil {
 		return nil, err
 	}
+	accessToken := os.Getenv("DTS_KBASE_DEV_TOKEN")
+	b64Token := base64.StdEncoding.EncodeToString([]byte(accessToken))
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", b64Token))
+	return http.DefaultClient.Do(req)
 }
 
 // sends a POST query with well-formed headers and a payload
 func post(resource string, body io.Reader) (*http.Response, error) {
 	req, err := http.NewRequest(http.MethodPost, resource, body)
-	if err == nil {
-		accessToken := os.Getenv("DTS_KBASE_DEV_TOKEN")
-		b64Token := base64.StdEncoding.EncodeToString([]byte(accessToken))
-		req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", b64Token))
-		req.Header.Add("Content-Type", "application/json")
-		return http.DefaultClient.Do(req)
-	} else {
+	if err != nil {
 		return nil, err
 	}
+	accessToken := os.Getenv("DTS_KBASE_DEV_TOKEN")
+	b64Token := base64.StdEncoding.EncodeToString([]byte(accessToken))
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", b64Token))
+	req.Header.Add("Content-Type", "application/json")
+	return http.DefaultClient.Do(req)
 }
 
 // queries the service's root endpoint

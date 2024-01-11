@@ -52,7 +52,10 @@ type taskType struct {
 // it into disparate pieces makes it any easier to understand, given the state
 // information being managed--that just creates other abstraction problems.
 func (task *taskType) Update() error {
-	username := "user" // FIXME: how do we obtain this from our Orcid ID?
+	username, err := task.Source.LocalUser(task.Orcid)
+	if err != nil {
+		return err
+	}
 	sourceEndpoint, err := task.Source.Endpoint()
 	if err != nil {
 		return err

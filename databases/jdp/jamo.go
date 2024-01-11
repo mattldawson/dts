@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"time"
@@ -83,8 +84,10 @@ func queryJamo(fileIds []string) ([]jamoFileRecord, error) {
 	// for fetching file paths, and since JAMO only works within LBL's VPN)
 	var recordingMode recorder.Mode
 	if _, onVPN := os.LookupEnv("DTS_ON_LBL_VPN"); onVPN {
+		slog.Debug("Querying JAMO for file resource info")
 		recordingMode = recorder.ModeRecordOnly
 	} else {
+		slog.Debug("Using pre-recorded JAMO results for query")
 		recordingMode = recorder.ModeReplayOnly
 	}
 	r, err := recorder.NewWithOptions(&recorder.Options{

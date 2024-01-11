@@ -536,7 +536,6 @@ func (db *Database) StagingStatus(id uuid.UUID) (core.StagingStatus, error) {
 		} else {
 			return status, fmt.Errorf("Unrecognized staging status string: %s", jdpResult.Status)
 		}
-		return core.StagingStatusUnknown, nil
 	} else {
 		return core.StagingStatusUnknown, nil
 	}

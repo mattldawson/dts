@@ -11,10 +11,11 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math/rand"
 	"net/http"
 	"os"
+	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -24,7 +25,7 @@ import (
 	"github.com/kbase/dts/config"
 	"github.com/kbase/dts/core"
 	"github.com/kbase/dts/databases"
-	"github.com/kbase/dts/endpoints/globus"
+	"github.com/kbase/dts/endpoints"
 )
 
 // working directory from which the tests were invoked
@@ -39,6 +40,9 @@ var (
 	apiPrefix = "api/v1/"
 )
 
+var sourceRoot string
+var destinationRoot string
+
 // service instance
 var service TransferService
 
@@ -47,6 +51,7 @@ service:
   port: 8080
   max_connections: 100
   poll_interval: 100
+  endpoint: local-endpoint
 databases:
   source:
     name: Source Test Database
@@ -57,60 +62,45 @@ databases:
     organization: Fabulous Destinations, Inc.
     endpoint: destination-endpoint
 endpoints:
+  local-endpoint:
+    name: Local endpoint
+    id: 8816ec2d-4a48-4ded-b68a-5ab46a4417b6
+    provider: local
+    root: TESTING_DIR
   source-endpoint:
-    name: Globus Tutorial Endpoint 1
-    id: ddb59aef-6d04-11e5-ba46-22000b92c6ec
-    provider: globus
-    auth:
-      client_id: ${DTS_GLOBUS_CLIENT_ID}
-      client_secret: ${DTS_GLOBUS_CLIENT_SECRET}
+    name: Endpoint 1
+    id: 26d61236-39f6-4742-a374-8ec709347f2f
+    provider: local
+    root: SOURCE_ROOT
   destination-endpoint:
-    name: Globus Tutorial Endpoint 2
-    id: ddb59af0-6d04-11e5-ba46-22000b92c6ec
-    provider: globus
-    auth:
-      client_id: ${DTS_GLOBUS_CLIENT_ID}
-      client_secret: ${DTS_GLOBUS_CLIENT_SECRET}
+    name: Endpoint 2
+    id: f1865b86-2c64-4b8b-99f3-5aaa945ec3d9
+    provider: local
+    root: DESTINATION_ROOT
 `
 
 //===============================
 // Test Database Implementations
 //===============================
-// Our source and destination test databases are thin wrappers around a
-// collection of files on a couple of Globus endpoints. These endpoints
-// are used to illustrate a simple file transfer here:
-// https://globus-sdk-python.readthedocs.io/en/stable/examples/minimal_transfer_script/index.html#example-minimal-transfer
 
 type testDatabase struct {
 	endpoint core.Endpoint
-	fileDir  string // directory housing files
+	rootDir  string
 }
 
 func newSourceTestDatabase(orcid string) (core.Database, error) {
-	ep, err := globus.NewEndpoint("source-endpoint")
+	ep, err := endpoints.NewEndpoint("source-endpoint")
 	return &testDatabase{
 		endpoint: ep,
-		fileDir:  "share/godata",
+		rootDir:  sourceRoot,
 	}, err
 }
 
-// This function generates a unique name for a directory on the destination
-// endpoint to receive files
-var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-
-func destDirName(n int) string {
-	b := make([]rune, n)
-	for i := range b {
-		b[i] = letters[rand.Intn(len(letters))]
-	}
-	return string(b)
-}
-
 func newDestinationTestDatabase(orcid string) (core.Database, error) {
-	ep, err := globus.NewEndpoint("destination-endpoint")
+	ep, err := endpoints.NewEndpoint("destination-endpoint")
 	return &testDatabase{
 		endpoint: ep,
-		fileDir:  destDirName(16),
+		rootDir:  destinationRoot,
 	}, err
 }
 
@@ -122,7 +112,7 @@ func (db *testDatabase) Search(params core.SearchParameters) (core.SearchResults
 				core.DataResource{
 					Id:        params.Query,
 					Name:      fmt.Sprintf("file%s", params.Query),
-					Path:      fmt.Sprintf("%s/file%s.txt", db.fileDir, params.Query),
+					Path:      fmt.Sprintf("file%s.txt", params.Query),
 					Format:    "text",
 					MediaType: "text/plain",
 					Bytes:     4,
@@ -141,7 +131,7 @@ func (db *testDatabase) Resources(fileIds []string) ([]core.DataResource, error)
 			results = append(results, core.DataResource{
 				Id:        id,
 				Name:      fmt.Sprintf("file%s", id),
-				Path:      fmt.Sprintf("%s/file%s.txt", db.fileDir, id),
+				Path:      fmt.Sprintf("file%s.txt", id),
 				Format:    "text",
 				MediaType: "text/plain",
 				Bytes:     4,
@@ -164,8 +154,8 @@ func (db *testDatabase) StagingStatus(stagingId uuid.UUID) (core.StagingStatus, 
 	return core.StagingStatusSucceeded, nil
 }
 
-func (db *testDatabase) Endpoint() core.Endpoint {
-	return db.endpoint
+func (db *testDatabase) Endpoint() (core.Endpoint, error) {
+	return db.endpoint, nil
 }
 
 // performs testing setup
@@ -183,10 +173,34 @@ func setup() {
 	}
 	os.Chdir(TESTING_DIR)
 
-	// initialize the config environment
-	err = config.Init([]byte(dtsConfig))
+	// create source/destination directories and files
+	sourceRoot = filepath.Join(TESTING_DIR, "source")
+	err = os.Mkdir(sourceRoot, 0700)
+	if err == nil {
+		destinationRoot = filepath.Join(TESTING_DIR, "destination")
+		err = os.Mkdir(destinationRoot, 0700)
+		if err == nil {
+			// create source files
+			for i := 1; i <= 3; i++ {
+				err = os.WriteFile(filepath.Join(sourceRoot, fmt.Sprintf("file%d.txt", i)),
+					[]byte(fmt.Sprintf("This is the content of file %d.", i)), 0600)
+				if err != nil {
+					break
+				}
+			}
+		}
+	}
+
+	if err == nil {
+		// read in the config file with SOURCE_ROOT and DESTINATION_ROOT replaced
+		myConfig := strings.ReplaceAll(dtsConfig, "SOURCE_ROOT", sourceRoot)
+		myConfig = strings.ReplaceAll(myConfig, "DESTINATION_ROOT", destinationRoot)
+		myConfig = strings.ReplaceAll(myConfig, "TESTING_DIR", TESTING_DIR)
+		err = config.Init([]byte(myConfig))
+	}
+
 	if err != nil {
-		log.Panic(fmt.Sprintf("Couldn't initialize test configuration: %s", err.Error()))
+		panic(err)
 	}
 
 	// Start the service.
@@ -357,7 +371,7 @@ func TestSearchDatabase(t *testing.T) {
 	assert.Equal("file1", results.Resources[0].Name)
 }
 
-// creates a transfer for a single file
+// creates a transfer for our test files
 func TestCreateTransfer(t *testing.T) {
 	assert := assert.New(t)
 
@@ -370,19 +384,48 @@ func TestCreateTransfer(t *testing.T) {
 	resp, err := post(baseUrl+apiPrefix+"transfers", bytes.NewReader(payload))
 	assert.Nil(err)
 	assert.Equal(200, resp.StatusCode)
-	if err == nil {
-		defer resp.Body.Close()
-		var body []byte
-		body, err = io.ReadAll(resp.Body)
-		assert.Nil(err)
-		var xferResp TransferResponse
-		err = json.Unmarshal(body, &xferResp)
-		xferId := xferResp.Id
+	defer resp.Body.Close()
+	var body []byte
+	body, err = io.ReadAll(resp.Body)
+	assert.Nil(err)
+	var xferResp TransferResponse
+	err = json.Unmarshal(body, &xferResp)
+	assert.Nil(err)
+	xferId := xferResp.Id
 
-		// get the transfer status
+	// get the transfer status
+	queryTransfer := func() (TransferStatusResponse, error) {
 		resp, err := get(baseUrl + apiPrefix + fmt.Sprintf("transfers/%s", xferId.String()))
 		assert.Nil(err)
 		assert.Equal(200, resp.StatusCode)
+		var body []byte
+		body, err = io.ReadAll(resp.Body)
+		resp.Body.Close()
+		assert.Nil(err)
+		var statusResp TransferStatusResponse
+		err = json.Unmarshal(body, &statusResp)
+		return statusResp, err
+	}
+
+	status, err := queryTransfer()
+	assert.Nil(err)
+	assert.True(status.Status != "failed")
+
+	// wait a bit for the task to finish (shouldn't take long)
+	time.Sleep(600 * time.Millisecond)
+
+	// query the transfer again
+	status, err = queryTransfer()
+	assert.Nil(err)
+	assert.True(status.Status == "succeeded")
+
+	// check for the files in the payload
+	// FIXME: the files are written to the destination endpoint's root in a
+	// FIXME: user-specific and task-specific folder. We need to formalize this.
+	username := "user" // FIXME: ???
+	for _, file := range []string{"file1.txt", "file2.txt", "file3.txt", "manifest.json"} {
+		_, err := os.Stat(filepath.Join(destinationRoot, username, xferId.String(), file))
+		assert.Nil(err)
 	}
 }
 

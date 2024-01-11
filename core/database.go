@@ -68,5 +68,5 @@ type Database interface {
 	// returns the status of a given staging operation
 	StagingStatus(id uuid.UUID) (StagingStatus, error)
 	// returns the endpoint associated with this database
-	Endpoint() Endpoint
+	Endpoint() (Endpoint, error)
 }

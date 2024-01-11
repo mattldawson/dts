@@ -37,6 +37,7 @@ service:
   port: 8080
   max_connections: 100
   poll_interval: 60
+  endpoint: my-globus-endpoint
 `
 
 // a valid endpoints config entry
@@ -61,13 +62,6 @@ databases:
     endpoint: globus-jdp # local file transfer endpoint
 `
 
-// tests whether config.Init reports an error for blank input
-func TestInitRejectsBlankInput(t *testing.T) {
-	b := []byte("")
-	err := Init(b)
-	assert.NotNil(t, err, "Blank config didn't trigger an error.")
-}
-
 // tests whether config.Init reports an error for an invalid max number of
 // processes
 func TestInitRejectsBadPort(t *testing.T) {
@@ -90,14 +84,6 @@ func TestInitRejectsBadMaxConnections(t *testing.T) {
 	assert.NotNil(t, err, "Config with bad maxConnections didn't trigger an error.")
 }
 
-// tests whether config.Init rejects a configuration with no endpoints
-func TestInitRejectsNoEndpointsDefined(t *testing.T) {
-	yaml := VALID_SERVICE + VALID_DATABASES
-	b := []byte(yaml)
-	err := Init(b)
-	assert.NotNil(t, err, "Config with no endpoints didn't trigger an error.")
-}
-
 // tests whether config.Init rejects a configuration with invalid endpoints
 func TestInitRejectsInvalidEndpointType(t *testing.T) {
 	yaml := VALID_SERVICE + VALID_DATABASES +
@@ -105,14 +91,6 @@ func TestInitRejectsInvalidEndpointType(t *testing.T) {
 	b := []byte(yaml)
 	err := Init(b)
 	assert.NotNil(t, err, "Config with invalid endpoint didn't trigger an error.")
-}
-
-// tests whether config.Init rejects a configuration with no databases
-func TestInitRejectsNoDatabasesDefined(t *testing.T) {
-	yaml := VALID_SERVICE + VALID_ENDPOINTS
-	b := []byte(yaml)
-	err := Init(b)
-	assert.NotNil(t, err, "Config with no databases didn't trigger an error.")
 }
 
 // Tests whether config.Init rejects a database with a bad base URL.

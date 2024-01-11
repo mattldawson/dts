@@ -21,6 +21,7 @@ import (
 	"github.com/kbase/dts/config"
 	"github.com/kbase/dts/core"
 	"github.com/kbase/dts/databases"
+	"github.com/kbase/dts/endpoints"
 )
 
 // This type implements the TransferService interface, allowing file transfers
@@ -321,7 +322,7 @@ func (service *prototype) createTransfer(w http.ResponseWriter,
 		return
 	}
 
-	taskId, err := service.Tasks.Add(source, destination, request.FileIds)
+	taskId, err := service.Tasks.Add(request.Orcid, source, destination, request.FileIds)
 	if err == nil {
 		jsonData, _ := json.Marshal(TransferResponse{Id: taskId})
 		writeJson(w, jsonData)
@@ -339,6 +340,8 @@ func statusAsString(statusCode core.TransferStatusCode) string {
 		return "active"
 	case core.TransferStatusInactive:
 		return "inactive"
+	case core.TransferStatusFinalizing:
+		return "finalizing"
 	case core.TransferStatusSucceeded:
 		return "succeeded"
 	case core.TransferStatusFailed:
@@ -394,6 +397,18 @@ func (service *prototype) uptime() float64 {
 
 // constructs a prototype file transfer service given our configuration
 func NewDTSPrototype() (TransferService, error) {
+
+	// validate our configuration
+	if config.Service.Endpoint == "" {
+		return nil, fmt.Errorf("No service endpoint was specified.")
+	}
+	if len(config.Databases) == 0 {
+		return nil, fmt.Errorf("No databases were specified.")
+	}
+	if len(config.Endpoints) == 0 {
+		return nil, fmt.Errorf("No endpoints were specified.")
+	}
+
 	service := new(prototype)
 	service.Name = "DTS prototype"
 	service.Version = core.Version
@@ -444,7 +459,12 @@ func (service *prototype) Start(port int) error {
 	defer listener.Close()
 	listener = netutil.LimitListener(listener, config.Service.MaxConnections)
 
-	service.Tasks, err = core.NewTaskManager(time.Duration(config.Service.PollInterval) * time.Millisecond)
+	localEndpoint, err := endpoints.NewEndpoint(config.Service.Endpoint)
+	if err != nil {
+		return err
+	}
+	service.Tasks, err = core.NewTaskManager(localEndpoint,
+		time.Duration(config.Service.PollInterval)*time.Millisecond)
 	if err != nil {
 		return err
 	}

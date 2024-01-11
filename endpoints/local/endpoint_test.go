@@ -19,13 +19,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package globus
+package local
 
 import (
 	"fmt"
-	"math/rand"
 	"os"
-	"path"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -35,62 +35,74 @@ import (
 	"github.com/kbase/dts/core"
 )
 
-// we test our Globus endpoint implementation using two endpoints:
-// * Source: A read-only source endpoint provided by Globus for ESnet customers
-//   (https://fasterdata.es.net/performance-testing/DTNs/)
-// * Destination: A test endpoint specified by UUID via the environment variable
-//   DTS_GLOBUS_TEST_ENDPOINT
+var tempRoot string
+var sourceRoot string
+var destinationRoot string
 
-const (
-	sourceEndpointName = "ESnet Sunnyvalue DTN (Anonymous read-only testing)"
-	sourceEndpointId   = "8409a10b-de09-4670-a886-2c0b33f0fe25"
-)
-
-// source database files by ID (on above read-only source endpoint)
+// source database files by ID
 var sourceFilesById = map[string]string{
-	"1": "5MB-in-tiny-files/a/a/a-a-1KB.dat",
-	"2": "5MB-in-tiny-files/b/b/b-b-1KB.dat",
-	"3": "5MB-in-tiny-files/c/c/c-c-1KB.dat",
+	"1": "file1.txt",
+	"2": "file2.txt",
+	"3": "file3.txt",
 }
 
-var globusConfig string = fmt.Sprintf(`
+const localConfig string = `
 endpoints:
   source:
-    name: %s
-    id: %s
-    provider: globus
-    auth:
-      client_id: ${DTS_GLOBUS_CLIENT_ID}
-      client_secret: ${DTS_GLOBUS_CLIENT_SECRET}
+    name: Source Endpoint
+    id: 2ee69538-10d5-4d1e-a890-1127b5e42003
+    provider: local
+    root: SOURCE_ROOT
   destination:
-    name: DTS Globus Test Endpoint
-    id: ${DTS_GLOBUS_TEST_ENDPOINT}
-    provider: globus
-    auth:
-      client_id: ${DTS_GLOBUS_CLIENT_ID}
-      client_secret: ${DTS_GLOBUS_CLIENT_SECRET}
-  not-globus-jdp:
-    name: lalala
-    id: aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
-    provider: not-globus
-    auth:
-      client_id: ${DTS_GLOBUS_CLIENT_ID}
-      client_secret: ${DTS_GLOBUS_CLIENT_SECRET}
-`, sourceEndpointName, sourceEndpointId)
+    name: Destination Endpoint
+    id: b925d96e-7e39-473b-a658-714f8c243b1c
+    provider: local
+    root: DESTINATION_ROOT
+`
 
 // this function gets called at the begіnning of a test session
 func setup() {
-	if _, ok := os.LookupEnv("DTS_GLOBUS_TEST_ENDPOINT"); !ok {
-		panic("DTS_GLOBUS_TEST_ENDPOINT environment variable must be set!")
+	// create source/destination directories
+	var err error
+	tempRoot, err = os.MkdirTemp(os.TempDir(), "dts-local-endpoints")
+	if err == nil {
+		sourceRoot = filepath.Join(tempRoot, "source")
+		err = os.Mkdir(sourceRoot, 0700)
+		if err == nil {
+			destinationRoot = filepath.Join(tempRoot, "destination")
+			err = os.Mkdir(destinationRoot, 0700)
+			if err == nil {
+				// create source files
+				for i := 1; i <= 3; i++ {
+					err = os.WriteFile(filepath.Join(sourceRoot, fmt.Sprintf("file%d.txt", i)),
+						[]byte(fmt.Sprintf("This is the content of file %d.", i)), 0600)
+					if err != nil {
+						break
+					}
+				}
+			}
+		}
 	}
-	config.Init([]byte(globusConfig))
+
+	if err == nil {
+		// read in the config file with SOURCE_ROOT and DESTINATION_ROOT replaced
+		myConfig := strings.ReplaceAll(localConfig, "SOURCE_ROOT", sourceRoot)
+		myConfig = strings.ReplaceAll(myConfig, "DESTINATION_ROOT", destinationRoot)
+		fmt.Printf(myConfig)
+		err = config.Init([]byte(myConfig))
+	}
+
+	if err != nil {
+		panic(err)
+	}
 }
 
 // this function gets called after all tests have been run
 func breakdown() {
+	os.RemoveAll(tempRoot)
 }
 
-func TestGlobusConstructor(t *testing.T) {
+func TestLocalConstructor(t *testing.T) {
 	assert := assert.New(t)
 
 	endpoint, err := NewEndpoint("source")
@@ -98,15 +110,15 @@ func TestGlobusConstructor(t *testing.T) {
 	assert.Nil(err)
 }
 
-func TestBadGlobusConstructor(t *testing.T) {
+func TestBadLocalConstructor(t *testing.T) {
 	assert := assert.New(t)
 
-	endpoint, err := NewEndpoint("not-globus-jdp")
+	endpoint, err := NewEndpoint("nonexistent-endpoint")
 	assert.Nil(endpoint)
 	assert.NotNil(err)
 }
 
-func TestGlobusTransfers(t *testing.T) {
+func TestLocalTransfers(t *testing.T) {
 	assert := assert.New(t)
 	endpoint, _ := NewEndpoint("source")
 	// this is just a smoke test--we don't check the contents of the result
@@ -124,8 +136,7 @@ func TestGlobusFilesStaged(t *testing.T) {
 	assert.True(staged)
 	assert.Nil(err)
 
-	// provide a file that's known to be on the source endpoint, which
-	// should return true
+	// provide files that are known to be on the source endpoint
 	resources := make([]core.DataResource, 0)
 	for i := 1; i <= 3; i++ {
 		id := fmt.Sprintf("%d", i)
@@ -150,20 +161,9 @@ func TestGlobusFilesStaged(t *testing.T) {
 	assert.Nil(err)
 }
 
-// This function generates a unique name for a directory on the destination
-// endpoint to receive files
-var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-
-func destDirName(n int) string {
-	b := make([]rune, n)
-	for i := range b {
-		b[i] = letters[rand.Intn(len(letters))]
-	}
-	return string(b)
-}
-
-func TestGlobusTransfer(t *testing.T) {
+func TestLocalTransfer(t *testing.T) {
 	assert := assert.New(t)
+
 	source, _ := NewEndpoint("source")
 	destination, _ := NewEndpoint("destination")
 
@@ -173,14 +173,14 @@ func TestGlobusTransfer(t *testing.T) {
 
 		fileXfers = append(fileXfers, core.FileTransfer{
 			SourcePath:      sourceFilesById[id],
-			DestinationPath: path.Join(destDirName(16), path.Base(sourceFilesById[id])),
+			DestinationPath: sourceFilesById[id],
 		})
 	}
 	_, err := source.Transfer(destination, fileXfers)
 	assert.Nil(err)
 }
 
-func TestBadGlobusTransfer(t *testing.T) {
+func TestBadLocalTransfer(t *testing.T) {
 	assert := assert.New(t)
 	source, _ := NewEndpoint("source")
 	destination, _ := NewEndpoint("destination")
@@ -191,14 +191,14 @@ func TestBadGlobusTransfer(t *testing.T) {
 		id := fmt.Sprintf("%d", i)
 		fileXfers = append(fileXfers, core.FileTransfer{
 			SourcePath:      sourceFilesById[id] + "_with_bad_suffix",
-			DestinationPath: path.Join(destDirName(16), path.Base(sourceFilesById[id]+"_with_bad_suffix")),
+			DestinationPath: sourceFilesById[id] + "_with_bad_suffix",
 		})
 	}
 	_, err := source.Transfer(destination, fileXfers)
 	assert.NotNil(err)
 }
 
-func TestUnknownGlobusStatus(t *testing.T) {
+func TestUnknownLocalStatus(t *testing.T) {
 	assert := assert.New(t)
 	endpoint, _ := NewEndpoint("source")
 

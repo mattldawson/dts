@@ -83,7 +83,7 @@ func queryJamo(fileIds []string) ([]jamoFileRecord, error) {
 	// for fetching file paths, and since JAMO only works within LBL's VPN)
 	var recordingMode recorder.Mode
 	if _, onVPN := os.LookupEnv("DTS_ON_LBL_VPN"); onVPN {
-		recordingMode = recorder.ModeRecordOnce
+		recordingMode = recorder.ModeRecordOnly
 	} else {
 		recordingMode = recorder.ModeReplayOnly
 	}

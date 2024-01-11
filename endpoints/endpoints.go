@@ -27,6 +27,7 @@ import (
 	"github.com/kbase/dts/config"
 	"github.com/kbase/dts/core"
 	"github.com/kbase/dts/endpoints/globus"
+	"github.com/kbase/dts/endpoints/local"
 )
 
 // we maintain a table of endpoint instances, identified by their names
@@ -40,10 +41,12 @@ func NewEndpoint(endpointName string) (core.Endpoint, error) {
 	// do we have one of these already?
 	endpoint, found := allEndpoints[endpointName]
 	if !found {
-		// is it a Globus endpoint?
-		if config.Endpoints[endpointName].Provider == "globus" {
+		switch config.Endpoints[endpointName].Provider {
+		case "globus":
 			endpoint, err = globus.NewEndpoint(endpointName)
-		} else {
+		case "local":
+			endpoint, err = local.NewEndpoint(endpointName)
+		default:
 			err = fmt.Errorf("Invalid provider for endpoint '%s': %s", endpointName,
 				config.Endpoints[endpointName].Provider)
 		}
@@ -52,8 +55,6 @@ func NewEndpoint(endpointName string) (core.Endpoint, error) {
 		if err == nil {
 			allEndpoints[endpointName] = endpoint
 		}
-	} else {
-		err = fmt.Errorf("Invalid endpoint: %s", endpointName)
 	}
 	return endpoint, err
 }

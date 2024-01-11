@@ -24,7 +24,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"log/slog"
 	"os"
@@ -73,7 +73,7 @@ func main() {
 	}
 	defer file.Close()
 
-	b, err := ioutil.ReadAll(file)
+	b, err := io.ReadAll(file)
 	if err != nil {
 		log.Panicf("Couldn't read configuration data: %s\n", err.Error())
 	}

@@ -82,7 +82,7 @@ func breakdown() {
 func TestNewTaskManager(t *testing.T) {
 	assert := assert.New(t)
 
-	mgr, err := NewTaskManager(pollInterval)
+	mgr, err := NewTaskManager(NewFakeEndpoint(), pollInterval)
 	assert.NotNil(mgr)
 	assert.Nil(err)
 	assert.Equal(pollInterval, mgr.PollInterval)
@@ -93,18 +93,25 @@ func TestNewTaskManager(t *testing.T) {
 func TestAddTask(t *testing.T) {
 	assert := assert.New(t)
 
-	mgr, err := NewTaskManager(pollInterval)
+	mgr, err := NewTaskManager(NewFakeEndpoint(), pollInterval)
 	assert.Nil(err)
 
 	// queue up a transfer task between two phony databases
 	src := NewFakeDatabase()
 	dest := NewFakeDatabase()
-	taskId, err := mgr.Add(src, dest, []string{"file1", "file2"})
+	orcid := "1234-5678-9012-3456"
+	taskId, err := mgr.Add(orcid, src, dest, []string{"file1", "file2"})
 	assert.Nil(err)
 	assert.True(taskId != uuid.UUID{})
 
-	// check its status (should be staging)
+	// the initial status of the task should be Unknown
 	status, err := mgr.Status(taskId)
+	assert.Nil(err)
+	assert.Equal(TransferStatusUnknown, status.Code)
+
+	// make sure the status switches to staging
+	time.Sleep(pause + pollInterval)
+	status, err = mgr.Status(taskId)
 	assert.Nil(err)
 	assert.Equal(TransferStatusStaging, status.Code)
 
@@ -116,11 +123,19 @@ func TestAddTask(t *testing.T) {
 	assert.Equal(TransferStatusActive, status.Code)
 
 	// wait again for the transfer to complete and then check its status
-	// (should have successfully completed)
+	// (should be finalizing or have successfully completed)
 	time.Sleep(pause + transferDuration)
 	status, err = mgr.Status(taskId)
 	assert.Nil(err)
-	assert.Equal(TransferStatusSucceeded, status.Code)
+	assert.True(status.Code == TransferStatusFinalizing || status.Code == TransferStatusSucceeded)
+
+	// if the transfer was finalizing, check once more for completion
+	if status.Code != TransferStatusSucceeded {
+		time.Sleep(pause + transferDuration)
+		status, err = mgr.Status(taskId)
+		assert.Nil(err)
+		assert.Equal(TransferStatusSucceeded, status.Code)
+	}
 
 	mgr.Close()
 }
@@ -196,8 +211,8 @@ func (db *FakeDatabase) StagingStatus(id uuid.UUID) (StagingStatus, error) {
 	}
 }
 
-func (db *FakeDatabase) Endpoint() Endpoint {
-	return db.Endpt
+func (db *FakeDatabase) Endpoint() (Endpoint, error) {
+	return db.Endpt, nil
 }
 
 type TransferInfo struct {
@@ -220,6 +235,11 @@ func NewFakeEndpoint() *FakeEndpoint {
 		TransferDuration: transferDuration,
 		Xfers:            make(map[uuid.UUID]TransferInfo),
 	}
+}
+
+func (ep *FakeEndpoint) Root() string {
+	root, _ := os.Getwd()
+	return root
 }
 
 func (ep *FakeEndpoint) FilesStaged(files []DataResource) (bool, error) {

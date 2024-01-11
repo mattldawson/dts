@@ -38,12 +38,13 @@ type FileTransfer struct {
 type TransferStatusCode int
 
 const (
-	TransferStatusUnknown   TransferStatusCode = iota
-	TransferStatusStaging                      // files being staged
-	TransferStatusActive                       // transfer in progress
-	TransferStatusInactive                     // transfer suspended
-	TransferStatusSucceeded                    // transfer completed successfully
-	TransferStatusFailed                       // transfer failed
+	TransferStatusUnknown    TransferStatusCode = iota
+	TransferStatusStaging                       // files being staged
+	TransferStatusActive                        // transfer in progress
+	TransferStatusInactive                      // transfer suspended
+	TransferStatusFinalizing                    // transfer manifest being generated
+	TransferStatusSucceeded                     // transfer completed successfully
+	TransferStatusFailed                        // transfer failed
 )
 
 // this type conveys various information about a file transfer's status
@@ -58,6 +59,8 @@ type TransferStatus struct {
 
 // This type represents an endpoint for transferring files.
 type Endpoint interface {
+	// returns the path on the file system that serves as the endpoint's root
+	Root() string
 	// returns true if the files associated with the given DataResources are
 	// staged at this endpoint AND are valid, false otherwise
 	FilesStaged(files []DataResource) (bool, error)

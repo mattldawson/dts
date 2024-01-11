@@ -37,6 +37,9 @@ type serviceConfig struct {
 	MaxConnections int `json:"max_connections" yaml:"max_connections"`
 	// polling interval for checking transfer statuses (seconds)
 	PollInterval int `json:"poll_interval" yaml:"poll_interval"`
+	// name of endpoint with access to local filesystem
+	// (for generating and transferring manifests)
+	Endpoint string `json:"endpoint" yaml:"endpoint"`
 }
 
 // global config variables
@@ -88,13 +91,15 @@ func validateServiceParameters(params serviceConfig) error {
 		return fmt.Errorf("Invalid max_connections: %d (must be positive)",
 			params.MaxConnections)
 	}
+	if params.Endpoint != "" {
+		if _, endpointFound := Endpoints[params.Endpoint]; !endpointFound {
+			return fmt.Errorf("Invalid service endpoint: %s", params.Endpoint)
+		}
+	}
 	return nil
 }
 
 func validateEndpoints(endpoints map[string]endpointConfig) error {
-	if len(endpoints) == 0 {
-		return fmt.Errorf("No endpoints were provided!")
-	}
 	for label, endpoint := range endpoints {
 		if endpoint.Id.String() == "" { // invalid endpoint UUID
 			return fmt.Errorf("Invalid UUID specified for endpoint '%s'", label)
@@ -106,9 +111,6 @@ func validateEndpoints(endpoints map[string]endpointConfig) error {
 }
 
 func validateDatabases(databases map[string]databaseConfig) error {
-	if len(databases) == 0 {
-		return fmt.Errorf("No databases were provided!")
-	}
 	for name, db := range databases {
 		if db.Endpoint == "" {
 			return fmt.Errorf("No endpoint given for database '%s'", name)

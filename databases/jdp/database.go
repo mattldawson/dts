@@ -532,7 +532,6 @@ func (db *Database) StagingStatus(id uuid.UUID) (core.StagingStatus, error) {
 	}
 }
 
-func (db *Database) Endpoint() core.Endpoint {
-	endpoint, _ := endpoints.NewEndpoint(config.Databases[db.Id].Endpoint)
-	return endpoint
+func (db *Database) Endpoint() (core.Endpoint, error) {
+	return endpoints.NewEndpoint(config.Databases[db.Id].Endpoint)
 }

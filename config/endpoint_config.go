@@ -12,5 +12,7 @@ type endpointConfig struct {
 	// the name of the provider (e.g. "globus")
 	Provider string `yaml:"provider"`
 	// authentication/authorization data (client secret used to request access token)
-	Auth authConfig `yaml:"auth"`
+	Auth authConfig `yaml:"auth,omitempty"`
+	// root directory for filesystem access (optional)
+	Root string `yaml:"root,omitempty"`
 }

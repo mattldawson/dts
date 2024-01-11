@@ -332,8 +332,7 @@ func (db *Database) post(resource string, body io.Reader) (*http.Response, error
 	u.Path = resource
 	res := fmt.Sprintf("%v", u)
 	slog.Debug(fmt.Sprintf("POST: %s", res))
-	var req *http.Request
-	req, err = http.NewRequest(http.MethodPost, res, body)
+	req, err := http.NewRequest(http.MethodPost, res, body)
 	if err != nil {
 		return nil, err
 	}

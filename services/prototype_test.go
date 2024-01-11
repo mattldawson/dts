@@ -238,7 +238,7 @@ func breakdown() {
 	if TESTING_DIR != "" {
 		// Remove the testing directory and its contents.
 		log.Printf("Deleting testing directory %s...\n", TESTING_DIR)
-		//		os.RemoveAll(TESTING_DIR)
+		os.RemoveAll(TESTING_DIR)
 	}
 }
 

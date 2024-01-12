@@ -45,7 +45,7 @@ type serviceConfig struct {
 	Endpoint string `json:"endpoint" yaml:"endpoint"`
 	// name of existing directory in which DTS can store persistent data
 	// default: none (persistent storage disabled)
-	DataDir string `json:"data_dir,omitempty" yaml:"data_dir,omitempty"`
+	DataDirectory string `json:"data_dir,omitempty" yaml:"data_dir,omitempty"`
 	// time after which information about a completed transfer is deleted (hours)
 	// default: 7 days
 	DeleteAfter int `json:"delete_after" yaml:"delete_after"`

@@ -23,6 +23,7 @@ package core
 
 import (
 	"bytes"
+	"encoding/gob"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -249,13 +250,41 @@ func newChannels() channelsType {
 	}
 }
 
+// loads a map of task IDs to tasks from a previously saved file if available,
+// or creates an empty map if no such file is available or valid
+func createOrLoadTasks(dataFile string) map[uuid.UUID]taskType {
+	file, err := os.Open(dataFile)
+	if err != nil {
+		return make(map[uuid.UUID]taskType)
+	}
+	defer file.Close()
+	enc := gob.NewDecoder(file)
+	var tasks map[uuid.UUID]taskType
+	enc.Decode(&tasks)
+	return tasks
+}
+
+// saves a map of task IDs to tasks to the given file
+func saveTasks(tasks map[uuid.UUID]taskType, dataFile string) error {
+	file, err := os.OpenFile(dataFile, os.O_RDWR|os.O_CREATE, 0644)
+	if err != nil {
+		return err
+	}
+	enc := gob.NewEncoder(file)
+	err = enc.Encode(tasks)
+	if err != nil {
+		return err
+	}
+	return file.Close()
+}
+
 // this function runs in its own goroutine, using the given local endpoint
 // for local file transfers, and the given channels to communicate with
 // the TaskManager
-func processTasks(channels channelsType) {
+func processTasks(dataDirectory string, channels channelsType) {
 	// create or recreate a persistent table of transfer-related tasks
-	// FIXME: check for file and read in tasks if available... else create a new map
-	tasks := make(map[uuid.UUID]taskType)
+	dataStore := filepath.Join(dataDirectory, "dts.gob")
+	tasks := createOrLoadTasks(dataStore)
 
 	// parse the channels into directional types as needed
 	var taskIdChan chan uuid.UUID = channels.TaskId
@@ -307,7 +336,7 @@ func processTasks(channels channelsType) {
 				tasks[taskId] = task
 			}
 		case <-stopChan: // Close() called
-			// FIXME: write out tasks
+			saveTasks(tasks, dataStore) // don't forget to save our state!
 			break
 		}
 	}
@@ -316,16 +345,14 @@ func processTasks(channels channelsType) {
 // This type manages all the behind-the-scenes work involved in orchestrating
 // the staging and transfer of files.
 type TaskManager struct {
-	LocalEndpoint Endpoint      // local endpoint used for transferring manifests
-	PollInterval  time.Duration // interval at which task manager checks statuses
-	DataDirectory string        // location of data directory for saving/loading
-	Channels      channelsType
+	LocalEndpoint Endpoint     // local endpoint used for transferring manifests
+	Channels      channelsType // channels for communication with processTasks
 }
 
 // this function checks for the existence of the data directory and whether it
 // is readable/writeable, returning a non-nil error if any of these conditions
 // are not met
-func testDataDirectory(dir string) error {
+func validateDataDirectory(dir string) error {
 	if dir == "" {
 		return fmt.Errorf("no data directory was specified!")
 	}
@@ -362,21 +389,20 @@ func NewTaskManager(localEndpoint Endpoint, pollInterval time.Duration,
 	}
 
 	// does the directory exist and is it writable/readable?
-	err := testDataDirectory(dataDirectory)
+	err := validateDataDirectory(dataDirectory)
 	if err != nil {
 		return nil, err
 	}
 
 	mgr := TaskManager{
 		LocalEndpoint: localEndpoint,
-		PollInterval:  pollInterval,
 		Channels:      newChannels(),
 	}
 
-	go processTasks(mgr.Channels) // start processing tasks
-	go func() {                   // start polling heartbeat
+	go processTasks(dataDirectory, mgr.Channels) // start processing tasks
+	go func() {                                  // start polling heartbeat
 		for {
-			time.Sleep(mgr.PollInterval)
+			time.Sleep(pollInterval)
 			mgr.Channels.Poll <- struct{}{}
 		}
 	}()

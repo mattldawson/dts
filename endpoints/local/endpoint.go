@@ -109,6 +109,7 @@ func (ep *Endpoint) Transfers() ([]uuid.UUID, error) {
 
 // implements asynchronous local file transfers and validation
 func (ep *Endpoint) transferFiles(xferId uuid.UUID, dest core.Endpoint, files []core.FileTransfer) {
+	status := ep.Xfers[xferId]
 	for _, file := range files {
 		sourcePath := filepath.Join(ep.Root(), file.SourcePath)
 		destPath := filepath.Join(dest.Root(), file.DestinationPath)
@@ -130,32 +131,37 @@ func (ep *Endpoint) transferFiles(xferId uuid.UUID, dest core.Endpoint, files []
 		}
 
 		// copy the file into place
+		var data []byte
 		sourceInfo, err := os.Stat(sourcePath)
-		if err == nil {
-			data, err := os.ReadFile(sourcePath)
-			if err == nil {
-				err = os.WriteFile(destPath, data, sourceInfo.Mode())
-			}
+		if err != nil {
+			goto transferFailed
 		}
-		status := ep.Xfers[xferId]
-		if err == nil {
-			status.NumFilesTransferred++
-			ep.Xfers[xferId] = status
-		} else {
-			status.Code = core.TransferStatusFailed
-			ep.Xfers[xferId] = status
-			break
+		data, err = os.ReadFile(sourcePath)
+		if err != nil {
+			goto transferFailed
 		}
+		err = os.WriteFile(destPath, data, sourceInfo.Mode())
+		if err != nil {
+			goto transferFailed
+		}
+		status.NumFilesTransferred++
+		ep.Xfers[xferId] = status
+		continue
+
+	transferFailed: // all transfer failures reroute here
+		status.Code = core.TransferStatusFailed
+		ep.Xfers[xferId] = status
+		break
 	}
-	status := ep.Xfers[xferId]
 	status.Code = core.TransferStatusSucceeded
 	ep.Xfers[xferId] = status
 }
 
 func (ep *Endpoint) Transfer(dst core.Endpoint, files []core.FileTransfer) (uuid.UUID, error) {
+	var xferId uuid.UUID
 	_, ok := dst.(*Endpoint)
 	if !ok {
-		return uuid.UUID{}, fmt.Errorf("Destination endpoint must be local!")
+		return xferId, fmt.Errorf("Destination endpoint must be local!")
 	}
 
 	// first, we check that all requested files are staged on this endpoint
@@ -164,7 +170,10 @@ func (ep *Endpoint) Transfer(dst core.Endpoint, files []core.FileTransfer) (uuid
 		requestedFiles[i].Path = file.SourcePath // only the Path field is required
 	}
 	staged, err := ep.FilesStaged(requestedFiles)
-	if err == nil && staged {
+	if err != nil {
+		return xferId, err
+	}
+	if staged {
 		// assign a UUID to the transfer and set it going
 		xferId := uuid.New()
 		ep.Xfers[xferId] = core.TransferStatus{
@@ -175,10 +184,7 @@ func (ep *Endpoint) Transfer(dst core.Endpoint, files []core.FileTransfer) (uuid
 		go ep.transferFiles(xferId, dst, files)
 		return xferId, nil
 	} else {
-		if err == nil {
-			err = fmt.Errorf("The files requested for transfer are not yet staged.")
-		}
-		return uuid.UUID{}, err
+		return xferId, fmt.Errorf("The files requested for transfer are not yet staged.")
 	}
 }
 

@@ -120,7 +120,6 @@ func queryJamo(fileIds []string) ([]jamoFileRecord, error) {
 	}
 
 	// do the initial POST to JAMO and fetch results
-	var results jamoPageQueryResponse
 	const jamoBaseURL = "https://jamo-dev.jgi.doe.gov/api/metadata/"
 
 	const jamoPageQueryURL = jamoBaseURL + "pagequery"
@@ -130,13 +129,18 @@ func queryJamo(fileIds []string) ([]jamoFileRecord, error) {
 	}
 	req.Header.Add("Content-type", "application/json; charset=utf-8")
 	resp, err := client.Do(req)
-	if err == nil {
-		defer resp.Body.Close()
-		var body []byte
-		body, err = io.ReadAll(resp.Body)
-		if err == nil {
-			err = json.Unmarshal(body, &results)
-		}
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	var results jamoPageQueryResponse
+	err = json.Unmarshal(body, &results)
+	if err != nil {
+		return nil, err
 	}
 
 	// sift file results into place and fetch remaining records
@@ -159,21 +163,24 @@ func queryJamo(fileIds []string) ([]jamoFileRecord, error) {
 		if results.End < results.RecordCount {
 			jamoNextPageURL := fmt.Sprintf("%snextpage/%s", jamoBaseURL, results.CursorId)
 			req, err = http.NewRequest(http.MethodGet, jamoNextPageURL, http.NoBody)
-			if err == nil {
-				resp, err = client.Do(req)
-				if err == nil {
-					defer resp.Body.Close()
-					var body []byte
-					body, err = io.ReadAll(resp.Body)
-					if err == nil {
-						err = json.Unmarshal(body, &results)
-						if err == nil {
-						}
-					}
-				}
-				// give the ape some time to respond
-				time.Sleep(1 * time.Second)
+			if err != nil {
+				break
 			}
+			resp, err = client.Do(req)
+			if err != nil {
+				break
+			}
+			defer resp.Body.Close()
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				break
+			}
+			err = json.Unmarshal(body, &results)
+			if err != nil {
+				break
+			}
+			// give the ape some time to respond
+			time.Sleep(1 * time.Second)
 		} else {
 			break
 		}

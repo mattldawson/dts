@@ -65,33 +65,33 @@ func setup() {
 	// create source/destination directories
 	var err error
 	tempRoot, err = os.MkdirTemp(os.TempDir(), "dts-local-endpoints")
-	if err == nil {
-		sourceRoot = filepath.Join(tempRoot, "source")
-		err = os.Mkdir(sourceRoot, 0700)
-		if err == nil {
-			destinationRoot = filepath.Join(tempRoot, "destination")
-			err = os.Mkdir(destinationRoot, 0700)
-			if err == nil {
-				// create source files
-				for i := 1; i <= 3; i++ {
-					err = os.WriteFile(filepath.Join(sourceRoot, fmt.Sprintf("file%d.txt", i)),
-						[]byte(fmt.Sprintf("This is the content of file %d.", i)), 0600)
-					if err != nil {
-						break
-					}
-				}
-			}
+	if err != nil {
+		panic(err)
+	}
+	sourceRoot = filepath.Join(tempRoot, "source")
+	err = os.Mkdir(sourceRoot, 0700)
+	if err != nil {
+		panic(err)
+	}
+	destinationRoot = filepath.Join(tempRoot, "destination")
+	err = os.Mkdir(destinationRoot, 0700)
+	if err != nil {
+		panic(err)
+	}
+	// create source files
+	for i := 1; i <= 3; i++ {
+		err = os.WriteFile(filepath.Join(sourceRoot, fmt.Sprintf("file%d.txt", i)),
+			[]byte(fmt.Sprintf("This is the content of file %d.", i)), 0600)
+		if err != nil {
+			panic(err)
 		}
 	}
 
-	if err == nil {
-		// read in the config file with SOURCE_ROOT and DESTINATION_ROOT replaced
-		myConfig := strings.ReplaceAll(localConfig, "SOURCE_ROOT", sourceRoot)
-		myConfig = strings.ReplaceAll(myConfig, "DESTINATION_ROOT", destinationRoot)
-		fmt.Printf(myConfig)
-		err = config.Init([]byte(myConfig))
-	}
-
+	// read in the config file with SOURCE_ROOT and DESTINATION_ROOT replaced
+	myConfig := strings.ReplaceAll(localConfig, "SOURCE_ROOT", sourceRoot)
+	myConfig = strings.ReplaceAll(myConfig, "DESTINATION_ROOT", destinationRoot)
+	fmt.Printf(myConfig)
+	err = config.Init([]byte(myConfig))
 	if err != nil {
 		panic(err)
 	}

@@ -47,6 +47,7 @@ type taskType struct {
 	Manifest            uuid.NullUUID  // manifest generation UUID (if any)
 	ManifestFile        string         // name of locally-created manifest file
 	Status              TransferStatus // status of file transfer operation
+	CompletionTime      time.Time      // time at which the transfer completed
 }
 
 // starts a task going, initiating staging
@@ -204,13 +205,24 @@ func (task *taskType) checkManifest() error {
 		return err
 	}
 	if xferStatus.Code == TransferStatusSucceeded ||
-		xferStatus.Code == TransferStatusFailed { // transfer finished
+		xferStatus.Code == TransferStatusFailed { // manifest transferred
 		task.Manifest = uuid.NullUUID{}
 		os.Remove(task.ManifestFile)
 		task.ManifestFile = ""
 		task.Status.Code = xferStatus.Code
 	}
 	return nil
+}
+
+// returns the duration since the task completed (successfully or otherwise),
+// or 0 if the task has not completed
+func (task *taskType) Age() time.Duration {
+	if task.Status.Code == TransferStatusSucceeded ||
+		task.Status.Code == TransferStatusFailed {
+		return time.Since(task.CompletionTime)
+	} else {
+		return time.Duration(0)
+	}
 }
 
 // this function updates the state of a task, setting its status as necessary
@@ -281,7 +293,8 @@ func saveTasks(tasks map[uuid.UUID]taskType, dataFile string) error {
 // this function runs in its own goroutine, using the given local endpoint
 // for local file transfers, and the given channels to communicate with
 // the TaskManager
-func processTasks(dataDirectory string, channels channelsType) {
+func processTasks(dataDirectory string, deleteAfter time.Duration,
+	channels channelsType) {
 	// create or recreate a persistent table of transfer-related tasks
 	dataStore := filepath.Join(dataDirectory, "dts.gob")
 	tasks := createOrLoadTasks(dataStore)
@@ -333,7 +346,13 @@ func processTasks(dataDirectory string, channels channelsType) {
 						slog.Info(fmt.Sprintf("Transfer task %s failed.", task.Id.String()))
 					}
 				}
-				tasks[taskId] = task
+
+				// if the task completed a long enough time go, delete its entry
+				if task.Age() > deleteAfter {
+					delete(tasks, taskId)
+				} else { // update its entry
+					tasks[taskId] = task
+				}
 			}
 		case <-stopChan: // Close() called
 			saveTasks(tasks, dataStore) // don't forget to save our state!
@@ -381,9 +400,10 @@ func validateDataDirectory(dir string) error {
 	return nil
 }
 
-// creates a new task manager with the given local endpoint and poll interval
+// creates a new task manager with the given local endpoint, poll interval,
+// data directory, and task data deletion period
 func NewTaskManager(localEndpoint Endpoint, pollInterval time.Duration,
-	dataDirectory string) (*TaskManager, error) {
+	dataDirectory string, deleteAfter time.Duration) (*TaskManager, error) {
 	if pollInterval <= 0 {
 		return nil, fmt.Errorf("non-positive poll interval specified!")
 	}
@@ -399,8 +419,10 @@ func NewTaskManager(localEndpoint Endpoint, pollInterval time.Duration,
 		Channels:      newChannels(),
 	}
 
-	go processTasks(dataDirectory, mgr.Channels) // start processing tasks
-	go func() {                                  // start polling heartbeat
+	// start processing tasks
+	go processTasks(dataDirectory, deleteAfter, mgr.Channels)
+	// start the polling heartbeat
+	go func() {
 		for {
 			time.Sleep(pollInterval)
 			mgr.Channels.Poll <- struct{}{}

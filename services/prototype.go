@@ -469,7 +469,9 @@ func (service *prototype) Start(port int) error {
 		return err
 	}
 	service.Tasks, err = core.NewTaskManager(localEndpoint,
-		time.Duration(config.Service.PollInterval), config.Service.DataDirectory)
+		time.Duration(config.Service.PollInterval)*time.Millisecond,
+		config.Service.DataDirectory,
+		time.Duration(config.Service.DeleteAfter)*time.Hour)
 	if err != nil {
 		return err
 	}

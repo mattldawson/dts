@@ -86,8 +86,6 @@ func readConfig(bytes []byte) error {
 
 	// copy the config data into place, performing any needed conversions
 	Service = conf.Service
-	Service.PollInterval *= int(time.Millisecond)
-	Service.DeleteAfter *= int(time.Hour)
 	Endpoints = conf.Endpoints
 	Databases = conf.Databases
 	MessageQueues = conf.MessageQueues

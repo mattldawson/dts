@@ -456,19 +456,18 @@ func (ep *Endpoint) Status(id uuid.UUID) (core.TransferStatus, error) {
 	}
 	if strings.Contains(response.Code, "ClientError") {
 		return core.TransferStatus{}, fmt.Errorf(response.Message)
-	} else {
-		codes := map[string]core.TransferStatusCode{
-			"Active":    core.TransferStatusActive,
-			"Inactive":  core.TransferStatusInactive,
-			"Succeeded": core.TransferStatusSucceeded,
-			"Failed":    core.TransferStatusFailed,
-		}
-		return core.TransferStatus{
-			Code:                codes[response.Status],
-			NumFiles:            response.Files,
-			NumFilesTransferred: response.FilesTransferred,
-		}, nil
 	}
+	codes := map[string]core.TransferStatusCode{
+		"Active":    core.TransferStatusActive,
+		"Inactive":  core.TransferStatusInactive,
+		"Succeeded": core.TransferStatusSucceeded,
+		"Failed":    core.TransferStatusFailed,
+	}
+	return core.TransferStatus{
+		Code:                codes[response.Status],
+		NumFiles:            response.Files,
+		NumFilesTransferred: response.FilesTransferred,
+	}, nil
 }
 
 func (ep *Endpoint) Cancel(id uuid.UUID) error {

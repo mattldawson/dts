@@ -272,7 +272,11 @@ func createOrLoadTasks(dataFile string) map[uuid.UUID]taskType {
 	defer file.Close()
 	enc := gob.NewDecoder(file)
 	var tasks map[uuid.UUID]taskType
-	enc.Decode(&tasks)
+	err = enc.Decode(&tasks)
+	if err != nil { // file not readable
+		slog.Error(fmt.Sprintf("Reading task manager file %s: %s", dataFile, err.Error()))
+		return make(map[uuid.UUID]taskType)
+	}
 	return tasks
 }
 

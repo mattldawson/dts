@@ -52,6 +52,8 @@ service:
   port: 8080
   max_connections: 100
   poll_interval: 100
+  data_dir: TESTING_DIR/data
+  delete_after: 24
   endpoint: local-endpoint
 databases:
   source:
@@ -207,6 +209,9 @@ func setup() {
 	if err != nil {
 		log.Panicf("Couldn't initialize configuration: %s", err)
 	}
+
+	// create the DTS data directory
+	os.Mkdir(config.Service.DataDirectory, 0755)
 
 	// Start the service.
 	log.Print("Starting test mapping service...\n")

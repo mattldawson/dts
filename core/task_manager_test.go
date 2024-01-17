@@ -23,7 +23,9 @@ package core
 
 import (
 	"fmt"
+	"log"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -31,8 +33,17 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// temporary testing directory
+var TESTING_DIR string
+
 // the interval at which our test task manager polls to update status
 var pollInterval time.Duration = time.Duration(50) * time.Millisecond
+
+// a directory in which the task manager can read/write files
+var dataDirectory string
+
+// a period of time after which information about a completed task is purged
+var deleteAfter time.Duration = time.Duration(5) * time.Second
 
 // the amount of time it takes a test database to stage files
 var stagingDuration time.Duration = time.Duration(150) * time.Millisecond
@@ -73,19 +84,36 @@ var testResources map[string]DataResource = map[string]DataResource{
 
 // this function gets called at the begіnning of a test session
 func setup() {
+	log.Print("Creating testing directory...\n")
+	var err error
+	TESTING_DIR, err = os.MkdirTemp(os.TempDir(), "data-transfer-service-tests-")
+	if err != nil {
+		log.Panicf("Couldn't create testing directory: %s", err)
+	}
+	dataDirectory = filepath.Join(TESTING_DIR, "data")
+	os.Mkdir(dataDirectory, 0755)
+	os.Chdir(TESTING_DIR)
 }
 
 // this function gets called after all tests have been run
 func breakdown() {
+	if TESTING_DIR != "" {
+		log.Printf("Deleting testing directory %s...\n", TESTING_DIR)
+		os.RemoveAll(TESTING_DIR)
+	}
+}
+
+// call this to create a task manager instance with the appropriate settings
+func createTaskManager() (*TaskManager, error) {
+	return NewTaskManager(NewFakeEndpoint(), pollInterval, dataDirectory, deleteAfter)
 }
 
 func TestNewTaskManager(t *testing.T) {
 	assert := assert.New(t)
 
-	mgr, err := NewTaskManager(NewFakeEndpoint(), pollInterval)
+	mgr, err := createTaskManager()
 	assert.NotNil(mgr)
 	assert.Nil(err)
-	assert.Equal(pollInterval, mgr.PollInterval)
 
 	mgr.Close()
 }
@@ -93,7 +121,7 @@ func TestNewTaskManager(t *testing.T) {
 func TestAddTask(t *testing.T) {
 	assert := assert.New(t)
 
-	mgr, err := NewTaskManager(NewFakeEndpoint(), pollInterval)
+	mgr, err := createTaskManager()
 	assert.Nil(err)
 
 	// queue up a transfer task between two phony databases

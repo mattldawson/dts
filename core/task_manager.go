@@ -210,6 +210,7 @@ func (task *taskType) checkManifest() error {
 		os.Remove(task.ManifestFile)
 		task.ManifestFile = ""
 		task.Status.Code = xferStatus.Code
+		task.CompletionTime = time.Now()
 	}
 	return nil
 }
@@ -269,6 +270,7 @@ func createOrLoadTasks(dataFile string) map[uuid.UUID]taskType {
 	if err != nil {
 		return make(map[uuid.UUID]taskType)
 	}
+	slog.Debug(fmt.Sprintf("Found previous tasks in %s.", dataFile))
 	defer file.Close()
 	enc := gob.NewDecoder(file)
 	var tasks map[uuid.UUID]taskType
@@ -277,21 +279,33 @@ func createOrLoadTasks(dataFile string) map[uuid.UUID]taskType {
 		slog.Error(fmt.Sprintf("Reading task manager file %s: %s", dataFile, err.Error()))
 		return make(map[uuid.UUID]taskType)
 	}
+	slog.Debug(fmt.Sprintf("Restored %d tasks from %s", len(tasks), dataFile))
 	return tasks
 }
 
 // saves a map of task IDs to tasks to the given file
 func saveTasks(tasks map[uuid.UUID]taskType, dataFile string) error {
-	file, err := os.OpenFile(dataFile, os.O_RDWR|os.O_CREATE, 0644)
-	if err != nil {
-		return err
+	if len(tasks) > 0 {
+		slog.Debug(fmt.Sprintf("Saving %d tasks to %s", len(tasks), dataFile))
+		file, err := os.OpenFile(dataFile, os.O_RDWR|os.O_CREATE, 0644)
+		if err != nil {
+			return fmt.Errorf("Opening task manager file %s: %s", dataFile, err.Error())
+		}
+		enc := gob.NewEncoder(file)
+		err = enc.Encode(tasks)
+		if err != nil {
+			file.Close()
+			os.Remove(dataFile)
+			return fmt.Errorf("Saving tasks: %s", err.Error())
+		}
+		err = file.Close()
+		if err != nil {
+			os.Remove(dataFile)
+			return fmt.Errorf("Writing task manager file %s: %s", dataFile, err.Error())
+		}
+		slog.Debug(fmt.Sprintf("Saved %d tasks to %s", len(tasks), dataFile))
 	}
-	enc := gob.NewEncoder(file)
-	err = enc.Encode(tasks)
-	if err != nil {
-		return err
-	}
-	return file.Close()
+	return nil
 }
 
 // this function runs in its own goroutine, using the given local endpoint
@@ -360,7 +374,8 @@ func processTasks(dataDirectory string, deleteAfter time.Duration,
 				}
 			}
 		case <-stopChan: // Close() called
-			saveTasks(tasks, dataStore) // don't forget to save our state!
+			err := saveTasks(tasks, dataStore) // don't forget to save our state!
+			errorChan <- err
 			break
 		}
 	}
@@ -473,4 +488,8 @@ func (mgr *TaskManager) Status(taskId uuid.UUID) (TransferStatus, error) {
 // shutѕ down the task manager (gracefully or abruptly)
 func (mgr *TaskManager) Close() {
 	mgr.Channels.Stop <- struct{}{}
+	err := <-mgr.Channels.Error
+	if err != nil {
+		slog.Error(err.Error())
+	}
 }

@@ -44,7 +44,7 @@ var pollInterval time.Duration = time.Duration(50) * time.Millisecond
 var dataDirectory string
 
 // a period of time after which information about a completed task is purged
-var deleteAfter time.Duration = time.Duration(5) * time.Second
+var deleteAfter time.Duration = time.Duration(2) * time.Second
 
 // the amount of time it takes a test database to stage files
 var stagingDuration time.Duration = time.Duration(150) * time.Millisecond
@@ -172,6 +172,38 @@ func TestAddTask(t *testing.T) {
 		assert.Equal(TransferStatusSucceeded, status.Code)
 	}
 
+	// now wait for the task to age out and make sure it's not found
+	time.Sleep(pause + deleteAfter)
+	status, err = mgr.Status(taskId)
+	assert.NotNil(err)
+
+	mgr.Close()
+}
+
+func TestRestartTaskManager(t *testing.T) {
+	assert := assert.New(t)
+
+	// create a new task manager and add a bunch of tasks, then immediately close
+	mgr, err := createTaskManager()
+	assert.Nil(err)
+	src := NewFakeDatabase()
+	dest := NewFakeDatabase()
+	orcid := "1234-5678-9012-3456"
+	numTasks := 10
+	taskIds := make([]uuid.UUID, numTasks)
+	for i := 0; i < numTasks; i++ {
+		taskId, _ := mgr.Add(orcid, src, dest, []string{"file1", "file2"})
+		taskIds[i] = taskId
+	}
+	mgr.Close()
+
+	// now restart the task manager and make sure all the tasks are there
+	mgr, err = createTaskManager()
+	assert.Nil(err)
+	for i := 0; i < numTasks; i++ {
+		_, err := mgr.Status(taskIds[i])
+		assert.Nil(err)
+	}
 	mgr.Close()
 }
 

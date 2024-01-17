@@ -33,8 +33,12 @@ endpoints:
 
 // this function gets called at the begіnning of a test session
 func setup() {
+	// set up debug-level logging for the JDP database
 	logLevel := new(slog.LevelVar)
 	logLevel.Set(slog.LevelDebug)
+	h := slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel})
+	slog.SetDefault(slog.New(h))
+
 	config.Init([]byte(jdpConfig))
 }
 

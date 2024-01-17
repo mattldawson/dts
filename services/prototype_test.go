@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -167,6 +168,12 @@ func (db *testDatabase) LocalUser(orcid string) (string, error) {
 
 // performs testing setup
 func setup() {
+	// set up debug-level logging for the prototype service
+	logLevel := new(slog.LevelVar)
+	logLevel.Set(slog.LevelDebug)
+	h := slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel})
+	slog.SetDefault(slog.New(h))
+
 	// jot down our CWD, create a temporary directory, and change to it
 	var err error
 	CWD, err = os.Getwd()

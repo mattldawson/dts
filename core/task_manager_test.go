@@ -24,6 +24,7 @@ package core
 import (
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
@@ -84,6 +85,12 @@ var testResources map[string]DataResource = map[string]DataResource{
 
 // this function gets called at the begіnning of a test session
 func setup() {
+	// set up debug-level logging for the task manager
+	logLevel := new(slog.LevelVar)
+	logLevel.Set(slog.LevelDebug)
+	h := slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel})
+	slog.SetDefault(slog.New(h))
+
 	log.Print("Creating testing directory...\n")
 	var err error
 	TESTING_DIR, err = os.MkdirTemp(os.TempDir(), "data-transfer-service-tests-")

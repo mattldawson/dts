@@ -353,6 +353,7 @@ func processTasks(dataDirectory string, deleteAfter time.Duration,
 
 				// if the task completed a long enough time go, delete its entry
 				if task.Age() > deleteAfter {
+					slog.Debug(fmt.Sprintf("Purging task %s.", task.Id.String()))
 					delete(tasks, taskId)
 				} else { // update its entry
 					tasks[taskId] = task

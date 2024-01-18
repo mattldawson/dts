@@ -79,13 +79,16 @@ endpoints:
       client_secret: ${DTS_GLOBUS_CLIENT_SECRET}
 `, sourceEndpointName, sourceEndpointId)
 
-// this function gets called at the begіnning of a test session
-func setup() {
-	// set up debug-level logging for the Globus endpoint
+func enableDebugLogging() {
 	logLevel := new(slog.LevelVar)
 	logLevel.Set(slog.LevelDebug)
 	h := slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel})
 	slog.SetDefault(slog.New(h))
+}
+
+// this function gets called at the begіnning of a test session
+func setup() {
+	enableDebugLogging()
 
 	if _, ok := os.LookupEnv("DTS_GLOBUS_TEST_ENDPOINT"); !ok {
 		panic("DTS_GLOBUS_TEST_ENDPOINT environment variable must be set!")

@@ -166,13 +166,16 @@ func (db *testDatabase) LocalUser(orcid string) (string, error) {
 	return testUser, nil
 }
 
-// performs testing setup
-func setup() {
-	// set up debug-level logging for the prototype service
+func enableDebugLogging() {
 	logLevel := new(slog.LevelVar)
 	logLevel.Set(slog.LevelDebug)
 	h := slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel})
 	slog.SetDefault(slog.New(h))
+}
+
+// performs testing setup
+func setup() {
+	enableDebugLogging()
 
 	// jot down our CWD, create a temporary directory, and change to it
 	var err error

@@ -19,6 +19,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+// These tests must be run serially, since tasks are coordinated by a
+// single instance.
+
 package tasks
 
 import (
@@ -26,12 +29,16 @@ import (
 	"log"
 	"log/slog"
 	"os"
-	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/kbase/dts/config"
+	"github.com/kbase/dts/core"
+	"github.com/kbase/dts/databases"
 )
 
 // temporary testing directory
@@ -54,6 +61,42 @@ var transferDuration time.Duration = time.Duration(500) * time.Millisecond
 
 // a pause to give the task manager a bit of time
 var pause time.Duration = time.Duration(25) * time.Millisecond
+
+// configuration
+const tasksConfig string = `
+service:
+  port: 8080
+  max_connections: 100
+  poll_interval: 100
+  data_dir: TESTING_DIR/data
+  delete_after: 24
+  endpoint: local-endpoint
+databases:
+  source:
+    name: Source Test Database
+    organization: The Source Company
+    endpoint: source-endpoint
+  destination:
+    name: Destination Test Database
+    organization: Fabulous Destinations, Inc.
+    endpoint: destination-endpoint
+endpoints:
+  local-endpoint:
+    name: Local endpoint
+    id: 8816ec2d-4a48-4ded-b68a-5ab46a4417b6
+    provider: local
+    root: TESTING_DIR
+  source-endpoint:
+    name: Endpoint 1
+    id: 26d61236-39f6-4742-a374-8ec709347f2f
+    provider: local
+    root: SOURCE_ROOT
+  destination-endpoint:
+    name: Endpoint 2
+    id: f1865b86-2c64-4b8b-99f3-5aaa945ec3d9
+    provider: local
+    root: DESTINATION_ROOT
+`
 
 // file test metadata
 var testResources map[string]DataResource = map[string]DataResource{
@@ -97,9 +140,21 @@ func setup() {
 	if err != nil {
 		log.Panicf("Couldn't create testing directory: %s", err)
 	}
-	dataDirectory = filepath.Join(TESTING_DIR, "data")
-	os.Mkdir(dataDirectory, 0755)
 	os.Chdir(TESTING_DIR)
+
+	// register test databases referred to in config file
+	databases.RegisterDatabase("source", NewFakeDatabase)
+	databases.RegisterDatabase("destination", NewFakeDatabase)
+
+	// read in the config file with SOURCE_ROOT and DESTINATION_ROOT replaced
+	myConfig := strings.ReplaceAll(tasksConfig, "TESTING_DIR", TESTING_DIR)
+	err = config.Init([]byte(myConfig))
+	if err != nil {
+		log.Panicf("Couldn't initialize configuration: %s", err)
+	}
+
+	// Create the data directory used to save/restore tasks
+	os.Mkdir(config.Service.DataDirectory, 0755)
 }
 
 // this function gets called after all tests have been run
@@ -110,101 +165,113 @@ func breakdown() {
 	}
 }
 
-// call this to create a task manager instance with the appropriate settings
-func createTaskManager() (*TaskManager, error) {
-	return NewTaskManager(NewFakeEndpoint(), pollInterval, dataDirectory, deleteAfter)
-}
+// To run the tests serially, we attach them to a SerialTests type and
+// have the main runner run that.
+type SerialTests struct{ Test *testing.T }
 
-func TestNewTaskManager(t *testing.T) {
-	assert := assert.New(t)
+// test starting and stopping
+func (t *SerialTests) TestStartAndStop() {
+	assert := assert.New(t.Test)
 
-	mgr, err := createTaskManager()
-	assert.NotNil(mgr)
+	assert.False(Running())
+	err := Start()
 	assert.Nil(err)
-
-	mgr.Close()
+	assert.True(Running())
+	err = Stop()
+	assert.Nil(err)
+	assert.False(Running())
 }
 
-func TestAddTask(t *testing.T) {
-	assert := assert.New(t)
+// test adding a task
+func (t *SerialTests) TestAddTask() {
+	assert := assert.New(t.Test)
 
-	mgr, err := createTaskManager()
+	err := Start()
 	assert.Nil(err)
 
 	// queue up a transfer task between two phony databases
-	src := NewFakeDatabase()
-	dest := NewFakeDatabase()
 	orcid := "1234-5678-9012-3456"
-	taskId, err := mgr.Add(orcid, src, dest, []string{"file1", "file2"})
+	taskId, err := Add(orcid, "source", "destination", []string{"file1", "file2"})
 	assert.Nil(err)
 	assert.True(taskId != uuid.UUID{})
 
 	// the initial status of the task should be Unknown
-	status, err := mgr.Status(taskId)
+	status, err := Status(taskId)
 	assert.Nil(err)
 	assert.Equal(TransferStatusUnknown, status.Code)
 
 	// make sure the status switches to staging
 	time.Sleep(pause + pollInterval)
-	status, err = mgr.Status(taskId)
+	status, err = Status(taskId)
 	assert.Nil(err)
 	assert.Equal(TransferStatusStaging, status.Code)
 
 	// wait for the staging to complete and then check its status
 	// again (should be actively transferring)
 	time.Sleep(pause + stagingDuration)
-	status, err = mgr.Status(taskId)
+	status, err = Status(taskId)
 	assert.Nil(err)
 	assert.Equal(TransferStatusActive, status.Code)
 
 	// wait again for the transfer to complete and then check its status
 	// (should be finalizing or have successfully completed)
 	time.Sleep(pause + transferDuration)
-	status, err = mgr.Status(taskId)
+	status, err = Status(taskId)
 	assert.Nil(err)
 	assert.True(status.Code == TransferStatusFinalizing || status.Code == TransferStatusSucceeded)
 
 	// if the transfer was finalizing, check once more for completion
 	if status.Code != TransferStatusSucceeded {
 		time.Sleep(pause + transferDuration)
-		status, err = mgr.Status(taskId)
+		status, err = Status(taskId)
 		assert.Nil(err)
 		assert.Equal(TransferStatusSucceeded, status.Code)
 	}
 
 	// now wait for the task to age out and make sure it's not found
 	time.Sleep(pause + deleteAfter)
-	status, err = mgr.Status(taskId)
+	status, err = Status(taskId)
 	assert.NotNil(err)
 
-	mgr.Close()
+	err = Stop()
+	assert.Nil(err)
 }
 
-func TestRestartTaskManager(t *testing.T) {
-	assert := assert.New(t)
+// test restarts
+func (t *SerialTests) TestStopAndRestart() {
+	assert := assert.New(t.Test)
 
-	// create a new task manager and add a bunch of tasks, then immediately close
-	mgr, err := createTaskManager()
+	// start up, add a bunch of tasks, then immediately close
+	err := Start()
 	assert.Nil(err)
-	src := NewFakeDatabase()
-	dest := NewFakeDatabase()
 	orcid := "1234-5678-9012-3456"
 	numTasks := 10
 	taskIds := make([]uuid.UUID, numTasks)
 	for i := 0; i < numTasks; i++ {
-		taskId, _ := mgr.Add(orcid, src, dest, []string{"file1", "file2"})
+		taskId, _ := Add(orcid, "source", "destination", []string{"file1", "file2"})
 		taskIds[i] = taskId
 	}
-	mgr.Close()
+	time.Sleep(100 * time.Millisecond) // let things settle
+	err = Stop()
+	assert.Nil(err)
 
 	// now restart the task manager and make sure all the tasks are there
-	mgr, err = createTaskManager()
+	err = Start()
 	assert.Nil(err)
 	for i := 0; i < numTasks; i++ {
-		_, err := mgr.Status(taskIds[i])
+		_, err := Status(taskIds[i])
 		assert.Nil(err)
 	}
-	mgr.Close()
+	err = Stop()
+	assert.Nil(err)
+}
+
+// runs all the serial tests... serially!
+func TestRunner(t *testing.T) {
+	tester := SerialTests{Test: t}
+	tester.TestStartAndStop()
+	tester.TestAddTask()
+	tester.TestStopAndRestart()
 }
 
 // This runs setup, runs all tests, and does breakdown.
@@ -215,6 +282,10 @@ func TestMain(m *testing.M) {
 	breakdown()
 	os.Exit(status)
 }
+
+//-------------------
+// Testing Apparatus
+//-------------------
 
 type FakeStagingRequest struct {
 	FileIds []string
@@ -229,22 +300,22 @@ type FakeDatabase struct {
 }
 
 // creates a new fake database that stages its 3 files
-func NewFakeDatabase() *FakeDatabase {
+func NewFakeDatabase(orcid string) (core.Database, error) {
 	db := FakeDatabase{
 		Endpt:   NewFakeEndpoint(),
 		Staging: make(map[uuid.UUID]FakeStagingRequest),
 	}
 	db.Endpt.Database = &db
-	return &db
+	return &db, nil
 }
 
-func (db *FakeDatabase) Search(params SearchParameters) (SearchResults, error) {
+func (db *FakeDatabase) Search(params core.SearchParameters) (core.SearchResults, error) {
 	// this method is unused, so we just need a placeholder
-	return SearchResults{}, nil
+	return core.SearchResults{}, nil
 }
 
-func (db *FakeDatabase) Resources(fileIds []string) ([]DataResource, error) {
-	resources := make([]DataResource, 0)
+func (db *FakeDatabase) Resources(fileIds []string) ([]core.DataResource, error) {
+	resources := make([]core.DataResource, 0)
 	var err error
 	for _, fileId := range fileIds {
 		if resource, found := testResources[fileId]; found {
@@ -266,15 +337,15 @@ func (db *FakeDatabase) StageFiles(fileIds []string) (uuid.UUID, error) {
 	return id, nil
 }
 
-func (db *FakeDatabase) StagingStatus(id uuid.UUID) (StagingStatus, error) {
+func (db *FakeDatabase) StagingStatus(id uuid.UUID) (core.StagingStatus, error) {
 	if info, found := db.Staging[id]; found {
 		if time.Now().Sub(info.Time) >= stagingDuration {
-			return StagingStatusSucceeded, nil
+			return core.StagingStatusSucceeded, nil
 		} else {
-			return StagingStatusActive, nil
+			return core.StagingStatusActive, nil
 		}
 	} else {
-		return StagingStatusUnknown, nil
+		return core.StagingStatusUnknown, nil
 	}
 }
 

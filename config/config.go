@@ -111,7 +111,7 @@ func validateServiceParameters(params serviceConfig) error {
 			params.PollInterval)
 	}
 	if params.DeleteAfter <= 0 {
-		return fmt.Errorf("Non-positive task deletion period specified: (%g h)",
+		return fmt.Errorf("Non-positive task deletion period specified: (%d h)",
 			params.DeleteAfter)
 	}
 	return nil

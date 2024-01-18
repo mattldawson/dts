@@ -49,6 +49,7 @@ type TransferStatus = core.TransferStatus
 
 // useful constants
 const (
+	TransferStatusUnknown    = core.TransferStatusUnknown
 	TransferStatusStaging    = core.TransferStatusStaging
 	TransferStatusActive     = core.TransferStatusActive
 	TransferStatusFailed     = core.TransferStatusFailed
@@ -62,8 +63,7 @@ const (
 type taskType struct {
 	Id                  uuid.UUID      // task identifier
 	Orcid               string         // Orcid ID for user requesting transfer
-	Source, Destination Database       // source and destination databases
-	LocalEndpoint       Endpoint       // local endpoint used for manifest transfers
+	Source, Destination string         // names of source and destination databases
 	FileIds             []string       // IDs of files within Source
 	Resources           []DataResource // Frictionless DataResources for files
 	Staging, Transfer   uuid.NullUUID  // staging and file transfer UUIDs (if any)
@@ -75,16 +75,20 @@ type taskType struct {
 
 // starts a task going, initiating staging
 func (task *taskType) start() error {
+	source, err := databases.NewDatabase(task.Orcid, task.Source)
+	if err != nil {
+		return err
+	}
+
 	// resolve file paths using file IDs
-	var err error
-	task.Resources, err = task.Source.Resources(task.FileIds)
+	task.Resources, err = source.Resources(task.FileIds)
 	if err != nil {
 		return err
 	}
 
 	// tell the source DB to stage the files, stash the task, and return
 	// its new ID
-	task.Staging.UUID, err = task.Source.StageFiles(task.FileIds)
+	task.Staging.UUID, err = source.StageFiles(task.FileIds)
 	task.Staging.Valid = true
 	if err != nil {
 		return err
@@ -99,7 +103,11 @@ func (task *taskType) start() error {
 // checks whether files for a task are finished staging and, if so,
 // initiates the transfer process
 func (task *taskType) checkStaging() error {
-	sourceEndpoint, err := task.Source.Endpoint()
+	source, err := databases.NewDatabase(task.Orcid, task.Source)
+	if err != nil {
+		return err
+	}
+	sourceEndpoint, err := source.Endpoint()
 	if err != nil {
 		return err
 	}
@@ -108,8 +116,17 @@ func (task *taskType) checkStaging() error {
 		return err
 	}
 	if staged {
+		destination, err := databases.NewDatabase(task.Orcid, task.Destination)
+		if err != nil {
+			return err
+		}
+		destinationEndpoint, err := destination.Endpoint()
+		if err != nil {
+			return err
+		}
+
 		// construct the source/destination file paths
-		username, err := task.Source.LocalUser(task.Orcid)
+		username, err := source.LocalUser(task.Orcid)
 		if err != nil {
 			return err
 		}
@@ -124,10 +141,6 @@ func (task *taskType) checkStaging() error {
 		}
 
 		// initiate the transfer
-		destinationEndpoint, err := task.Destination.Endpoint()
-		if err != nil {
-			return err
-		}
 		task.Transfer.UUID, err = sourceEndpoint.Transfer(destinationEndpoint, fileXfers)
 		if err != nil {
 			return err
@@ -147,7 +160,11 @@ func (task *taskType) checkStaging() error {
 // initiates the generation of the file manifest
 func (task *taskType) checkTransfer() error {
 	// has the data transfer completed?
-	sourceEndpoint, err := task.Source.Endpoint()
+	source, err := databases.NewDatabase(task.Orcid, task.Source)
+	if err != nil {
+		return err
+	}
+	sourceEndpoint, err := source.Endpoint()
 	if err != nil {
 		return err
 	}
@@ -159,6 +176,10 @@ func (task *taskType) checkTransfer() error {
 		xferStatus.Code == TransferStatusFailed { // transfer finished
 		task.Transfer = uuid.NullUUID{}
 		if xferStatus.Code == TransferStatusSucceeded {
+			localEndpoint, err := endpoints.NewEndpoint(config.Service.Endpoint)
+			if err != nil {
+				return err
+			}
 			// generate a manifest for the transfer
 			manifest := DataPackage{
 				Name:      "manifest",
@@ -174,7 +195,7 @@ func (task *taskType) checkTransfer() error {
 				return err
 			}
 			var manifestFile *os.File
-			manifestFile, err = os.CreateTemp(task.LocalEndpoint.Root(), "manifest.json")
+			manifestFile, err = os.CreateTemp(localEndpoint.Root(), "manifest.json")
 			if err != nil {
 				return err
 			}
@@ -189,7 +210,7 @@ func (task *taskType) checkTransfer() error {
 			}
 
 			// construct the source/destination file manifest paths
-			username, err := task.Source.LocalUser(task.Orcid)
+			username, err := source.LocalUser(task.Orcid)
 			if err != nil {
 				return err
 			}
@@ -201,11 +222,15 @@ func (task *taskType) checkTransfer() error {
 			}
 
 			// begin transferring the manifest
-			destinationEndpoint, err := task.Destination.Endpoint()
+			destination, err := databases.NewDatabase(task.Orcid, task.Destination)
 			if err != nil {
 				return err
 			}
-			task.Manifest.UUID, err = task.LocalEndpoint.Transfer(destinationEndpoint, fileXfers)
+			destinationEndpoint, err := destination.Endpoint()
+			if err != nil {
+				return err
+			}
+			task.Manifest.UUID, err = localEndpoint.Transfer(destinationEndpoint, fileXfers)
 			if err != nil {
 				return err
 			}
@@ -223,7 +248,11 @@ func (task *taskType) checkTransfer() error {
 // marks the task as completed
 func (task *taskType) checkManifest() error {
 	// has the manifest transfer completed?
-	xferStatus, err := task.LocalEndpoint.Status(task.Manifest.UUID)
+	localEndpoint, err := endpoints.NewEndpoint(config.Service.Endpoint)
+	if err != nil {
+		return err
+	}
+	xferStatus, err := localEndpoint.Status(task.Manifest.UUID)
 	if err != nil {
 		return err
 	}
@@ -449,15 +478,18 @@ var stopHeartbeat chan struct{} // send a pulse to this channel to halt polling
 // Starts processing tasks according to the given configuration, returning an
 // informative error if anything prevents this.
 func Start() error {
-	//localEndpoint Endpoint, pollInterval time.Duration,
-	//dataDirectory string, deleteAfter time.Duration) (*TaskManager, error) {
-
 	if running {
 		return fmt.Errorf("Tasks are already running and cannot be started again.")
 	}
 
 	// does the directory exist and is it writable/readable?
 	err := validateDataDirectory(config.Service.DataDirectory)
+	if err != nil {
+		return err
+	}
+
+	// can we access the local endpoint?
+	_, err = endpoints.NewEndpoint(config.Service.Endpoint)
 	if err != nil {
 		return err
 	}
@@ -480,18 +512,20 @@ func Start() error {
 	stopHeartbeat = make(chan struct{})
 	go heartbeat(pollInterval, taskChannels.Poll, stopHeartbeat)
 
+	// Okay, we're running now.
+	running = true
+
 	return nil
 }
 
 // Stops processing tasks. Adding new tasks and requesting task statuses are
 // disallowed in a stopped state.
-func Stop() {
+func Stop() error {
 	taskChannels.Stop <- struct{}{}
 	stopHeartbeat <- struct{}{}
 	err := <-taskChannels.Error
-	if err != nil {
-		slog.Error(err.Error())
-	}
+	running = false
+	return err
 }
 
 // Returns true if tasks are currently being processed, false if not.
@@ -506,27 +540,23 @@ func Running() bool {
 func Add(orcid, source, destination string, fileIDs []string) (uuid.UUID, error) {
 	var taskId uuid.UUID
 
-	// fetch source and destination databases and our local endpoint
-	sourceDb, err := databases.NewDatabase(orcid, source)
+	// verify that we can fetch the task's source and destination databases
+	// without incident
+	_, err := databases.NewDatabase(orcid, source)
 	if err != nil {
 		return taskId, err
 	}
-	destinationDb, err := databases.NewDatabase(orcid, destination)
-	if err != nil {
-		return taskId, err
-	}
-	localEndpoint, err := endpoints.NewEndpoint(config.Service.Endpoint)
+	_, err = databases.NewDatabase(orcid, destination)
 	if err != nil {
 		return taskId, err
 	}
 
 	// create a new task and send it along for processing
 	taskChannels.Task <- taskType{
-		Orcid:         orcid,
-		Source:        sourceDb,
-		Destination:   destinationDb,
-		LocalEndpoint: localEndpoint,
-		FileIds:       fileIDs,
+		Orcid:       orcid,
+		Source:      source,
+		Destination: destination,
+		FileIds:     fileIDs,
 	}
 	select {
 	case taskId = <-taskChannels.TaskId:

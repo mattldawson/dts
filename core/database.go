@@ -22,6 +22,8 @@
 package core
 
 import (
+	"fmt"
+
 	"github.com/google/uuid"
 )
 
@@ -71,4 +73,13 @@ type Database interface {
 	Endpoint() (Endpoint, error)
 	// returns the local username associated with the given Orcid ID
 	LocalUser(orcid string) (string, error)
+}
+
+// This error is returned when a database is sought but not found.
+type DatabaseNotFoundError struct {
+	dbName string
+}
+
+func (e *DatabaseNotFoundError) Error() string {
+	return fmt.Sprintf("The database '%s' was not found.", e.dbName)
 }

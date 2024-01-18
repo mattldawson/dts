@@ -21,7 +21,7 @@ import (
 	"github.com/kbase/dts/config"
 	"github.com/kbase/dts/core"
 	"github.com/kbase/dts/databases"
-	"github.com/kbase/dts/endpoints"
+	"github.com/kbase/dts/tasks"
 )
 
 // This type implements the TransferService interface, allowing file transfers
@@ -39,9 +39,6 @@ type prototype struct {
 	Router *mux.Router
 	// HTTP server.
 	Server *http.Server
-
-	// manager of transfer tasks
-	Tasks *core.TaskManager
 }
 
 // validates a header, ensuring that it uses the HTTP Bearer authentication
@@ -314,22 +311,15 @@ func (service *prototype) createTransfer(w http.ResponseWriter,
 		return
 	}
 
-	// fetch source and destination databases
-	var source, destination core.Database
-	source, err = databases.NewDatabase(request.Orcid, request.Source)
+	taskId, err := tasks.Add(request.Orcid, request.Source, request.Destination,
+		request.FileIds)
 	if err != nil {
-		writeError(w, err.Error(), 404)
-		return
-	}
-	destination, err = databases.NewDatabase(request.Orcid, request.Destination)
-	if err != nil {
-		writeError(w, err.Error(), 404)
-		return
-	}
-
-	taskId, err := service.Tasks.Add(request.Orcid, source, destination, request.FileIds)
-	if err != nil {
-		writeError(w, err.Error(), 500)
+		switch err.(type) {
+		case databases.NotFoundError:
+			writeError(w, err.Error(), 404)
+		default:
+			writeError(w, err.Error(), 500)
+		}
 		return
 	}
 	jsonData, _ := json.Marshal(TransferResponse{Id: taskId})
@@ -376,7 +366,7 @@ func (service *prototype) getTransferStatus(w http.ResponseWriter,
 	}
 
 	// fetch the status for the job using the appropriate task data
-	status, err := service.Tasks.Status(xferId)
+	status, err := tasks.Status(xferId)
 	if err != nil {
 		errCode := 500
 		if strings.Contains(err.Error(), "not found") {
@@ -464,17 +454,8 @@ func (service *prototype) Start(port int) error {
 	defer listener.Close()
 	listener = netutil.LimitListener(listener, config.Service.MaxConnections)
 
-	localEndpoint, err := endpoints.NewEndpoint(config.Service.Endpoint)
-	if err != nil {
-		return err
-	}
-	service.Tasks, err = core.NewTaskManager(localEndpoint,
-		time.Duration(config.Service.PollInterval)*time.Millisecond,
-		config.Service.DataDirectory,
-		time.Duration(config.Service.DeleteAfter)*time.Hour)
-	if err != nil {
-		return err
-	}
+	// start tasks processing
+	tasks.Start()
 
 	// start the server
 	service.Server = &http.Server{
@@ -491,12 +472,12 @@ func (service *prototype) Start(port int) error {
 
 // gracefully shuts down the service without interrupting active connections
 func (service *prototype) Shutdown(ctx context.Context) error {
-	service.Tasks.Close()
+	tasks.Stop()
 	return service.Server.Shutdown(ctx)
 }
 
 // closes down the service abruptly, freeing all resources
 func (service *prototype) Close() {
-	service.Tasks.Close()
+	tasks.Stop()
 	service.Server.Close()
 }

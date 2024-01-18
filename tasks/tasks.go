@@ -19,7 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package core
+package tasks
 
 import (
 	"bytes"
@@ -32,6 +32,29 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/kbase/dts/config"
+	"github.com/kbase/dts/core"
+	"github.com/kbase/dts/databases"
+	"github.com/kbase/dts/endpoints"
+)
+
+// useful type aliases
+type Database = core.Database
+type DataPackage = core.DataPackage
+type DataResource = core.DataResource
+type Endpoint = core.Endpoint
+type FileTransfer = core.FileTransfer
+type TransferStatus = core.TransferStatus
+
+// useful constants
+const (
+	TransferStatusStaging    = core.TransferStatusStaging
+	TransferStatusActive     = core.TransferStatusActive
+	TransferStatusFailed     = core.TransferStatusFailed
+	TransferStatusFinalizing = core.TransferStatusFinalizing
+	TransferStatusInactive   = core.TransferStatusInactive
+	TransferStatusSucceeded  = core.TransferStatusSucceeded
 )
 
 // this type holds multiple (possibly null) UUIDs corresponding to different
@@ -241,28 +264,6 @@ func (task *taskType) Update() error {
 	return err
 }
 
-// this type holds various channels used by the TaskManager to communicate
-// with its worker goroutine
-type channelsType struct {
-	TaskId chan uuid.UUID      // task ID channel
-	Task   chan taskType       // task input channel
-	Status chan TransferStatus // status output channel
-	Error  chan error          // error output channel
-	Poll   chan struct{}       // polling channel
-	Stop   chan struct{}       // stop channel
-}
-
-func newChannels() channelsType {
-	return channelsType{
-		TaskId: make(chan uuid.UUID, 32),
-		Task:   make(chan taskType, 32),
-		Status: make(chan TransferStatus, 32),
-		Error:  make(chan error, 32),
-		Poll:   make(chan struct{}),
-		Stop:   make(chan struct{}),
-	}
-}
-
 // loads a map of task IDs to tasks from a previously saved file if available,
 // or creates an empty map if no such file is available or valid
 func createOrLoadTasks(dataFile string) map[uuid.UUID]taskType {
@@ -308,22 +309,35 @@ func saveTasks(tasks map[uuid.UUID]taskType, dataFile string) error {
 	return nil
 }
 
+// this type holds various channels used by the TaskManager to communicate
+// with its worker goroutine
+type channelsType struct {
+	TaskId chan uuid.UUID      // task ID channel
+	Task   chan taskType       // task input channel
+	Status chan TransferStatus // status output channel
+	Error  chan error          // error output channel
+	Poll   chan struct{}       // polling channel
+	Stop   chan struct{}       // stop channel
+}
+
 // this function runs in its own goroutine, using the given local endpoint
 // for local file transfers, and the given channels to communicate with
 // the TaskManager
-func processTasks(dataDirectory string, deleteAfter time.Duration,
-	channels channelsType) {
+func processTasks() {
 	// create or recreate a persistent table of transfer-related tasks
-	dataStore := filepath.Join(dataDirectory, "dts.gob")
+	dataStore := filepath.Join(config.Service.DataDirectory, "dts.gob")
 	tasks := createOrLoadTasks(dataStore)
 
-	// parse the channels into directional types as needed
-	var taskIdChan chan uuid.UUID = channels.TaskId
-	var taskChan <-chan taskType = channels.Task
-	var statusChan chan<- TransferStatus = channels.Status
-	var errorChan chan<- error = channels.Error
-	var pollChan <-chan struct{} = channels.Poll
-	var stopChan <-chan struct{} = channels.Stop
+	// parse the task channels into directional types as needed
+	var taskIdChan chan uuid.UUID = taskChannels.TaskId
+	var taskChan <-chan taskType = taskChannels.Task
+	var statusChan chan<- TransferStatus = taskChannels.Status
+	var errorChan chan<- error = taskChannels.Error
+	var pollChan <-chan struct{} = taskChannels.Poll
+	var stopChan <-chan struct{} = taskChannels.Stop
+
+	// the task deletion period is specified in hours
+	deleteAfter := time.Duration(config.Service.DeleteAfter) * time.Hour
 
 	// start scurrying around
 	for {
@@ -373,7 +387,7 @@ func processTasks(dataDirectory string, deleteAfter time.Duration,
 					tasks[taskId] = task
 				}
 			}
-		case <-stopChan: // Close() called
+		case <-stopChan: // Stop() called
 			err := saveTasks(tasks, dataStore) // don't forget to save our state!
 			errorChan <- err
 			break
@@ -381,11 +395,18 @@ func processTasks(dataDirectory string, deleteAfter time.Duration,
 	}
 }
 
-// This type manages all the behind-the-scenes work involved in orchestrating
-// the staging and transfer of files.
-type TaskManager struct {
-	LocalEndpoint Endpoint     // local endpoint used for transferring manifests
-	Channels      channelsType // channels for communication with processTasks
+// this function sends a regular pulse on its poll channel until it receives a
+// pulse on its stop channel
+func heartbeat(pollInterval time.Duration, pollChan chan<- struct{},
+	stopChan <-chan struct{}) {
+	for {
+		time.Sleep(pollInterval)
+		pollChan <- struct{}{}
+		select {
+		case <-stopChan: // Stop() called
+			break
+		}
+	}
 }
 
 // this function checks for the existence of the data directory and whether it
@@ -420,76 +441,109 @@ func validateDataDirectory(dir string) error {
 	return nil
 }
 
-// creates a new task manager with the given local endpoint, poll interval,
-// data directory, and task data deletion period
-func NewTaskManager(localEndpoint Endpoint, pollInterval time.Duration,
-	dataDirectory string, deleteAfter time.Duration) (*TaskManager, error) {
-	if pollInterval <= 0 {
-		return nil, fmt.Errorf("non-positive poll interval specified!")
+// global variables for managing tasks
+var running bool                // true if tasks are processing, false if not
+var taskChannels channelsType   // channels used for processing tasks
+var stopHeartbeat chan struct{} // send a pulse to this channel to halt polling
+
+// Starts processing tasks according to the given configuration, returning an
+// informative error if anything prevents this.
+func Start() error {
+	//localEndpoint Endpoint, pollInterval time.Duration,
+	//dataDirectory string, deleteAfter time.Duration) (*TaskManager, error) {
+
+	if running {
+		return fmt.Errorf("Tasks are already running and cannot be started again.")
 	}
 
 	// does the directory exist and is it writable/readable?
-	err := validateDataDirectory(dataDirectory)
+	err := validateDataDirectory(config.Service.DataDirectory)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	mgr := TaskManager{
-		LocalEndpoint: localEndpoint,
-		Channels:      newChannels(),
+	// allocate channels
+	taskChannels = channelsType{
+		TaskId: make(chan uuid.UUID, 32),
+		Task:   make(chan taskType, 32),
+		Status: make(chan TransferStatus, 32),
+		Error:  make(chan error, 32),
+		Poll:   make(chan struct{}),
+		Stop:   make(chan struct{}),
 	}
 
 	// start processing tasks
-	go processTasks(dataDirectory, deleteAfter, mgr.Channels)
+	go processTasks()
+
 	// start the polling heartbeat
-	go func() {
-		for {
-			time.Sleep(pollInterval)
-			mgr.Channels.Poll <- struct{}{}
-		}
-	}()
-	return &mgr, nil
+	pollInterval := time.Duration(config.Service.PollInterval) * time.Millisecond
+	stopHeartbeat = make(chan struct{})
+	go heartbeat(pollInterval, taskChannels.Poll, stopHeartbeat)
+
+	return nil
+}
+
+// Stops processing tasks. Adding new tasks and requesting task statuses are
+// disallowed in a stopped state.
+func Stop() {
+	taskChannels.Stop <- struct{}{}
+	stopHeartbeat <- struct{}{}
+	err := <-taskChannels.Error
+	if err != nil {
+		slog.Error(err.Error())
+	}
+}
+
+// Returns true if tasks are currently being processed, false if not.
+func Running() bool {
+	return running
 }
 
 // Adds a new transfer task associated with the user with the specified Orcid ID
 // to the manager's set, returning a UUID for the task. The task is defined by
-// specifying source and destination databases and a set of file IDs associated
-// with the source.
-func (mgr *TaskManager) Add(orcid string, source, destination Database, fileIDs []string) (uuid.UUID, error) {
+// specifying the names of the source and destination databases and a set of
+// file IDs associated with the source.
+func Add(orcid, source, destination string, fileIDs []string) (uuid.UUID, error) {
 	var taskId uuid.UUID
-	var err error
-	mgr.Channels.Task <- taskType{
-		LocalEndpoint: mgr.LocalEndpoint,
+
+	// fetch source and destination databases and our local endpoint
+	sourceDb, err := databases.NewDatabase(orcid, source)
+	if err != nil {
+		return taskId, err
+	}
+	destinationDb, err := databases.NewDatabase(orcid, destination)
+	if err != nil {
+		return taskId, err
+	}
+	localEndpoint, err := endpoints.NewEndpoint(config.Service.Endpoint)
+	if err != nil {
+		return taskId, err
+	}
+
+	// create a new task and send it along for processing
+	taskChannels.Task <- taskType{
 		Orcid:         orcid,
-		Source:        source,
-		Destination:   destination,
+		Source:        sourceDb,
+		Destination:   destinationDb,
+		LocalEndpoint: localEndpoint,
 		FileIds:       fileIDs,
 	}
 	select {
-	case taskId = <-mgr.Channels.TaskId:
-	case err = <-mgr.Channels.Error:
+	case taskId = <-taskChannels.TaskId:
+	case err = <-taskChannels.Error:
 	}
 	return taskId, err
 }
 
 // given a task UUID, returns its transfer status code (or a non-nil error
 // indicating any issues encountered)
-func (mgr *TaskManager) Status(taskId uuid.UUID) (TransferStatus, error) {
+func Status(taskId uuid.UUID) (TransferStatus, error) {
 	var status TransferStatus
 	var err error
-	mgr.Channels.TaskId <- taskId
+	taskChannels.TaskId <- taskId
 	select {
-	case status = <-mgr.Channels.Status:
-	case err = <-mgr.Channels.Error:
+	case status = <-taskChannels.Status:
+	case err = <-taskChannels.Error:
 	}
 	return status, err
-}
-
-// shutѕ down the task manager (gracefully or abruptly)
-func (mgr *TaskManager) Close() {
-	mgr.Channels.Stop <- struct{}{}
-	err := <-mgr.Channels.Error
-	if err != nil {
-		slog.Error(err.Error())
-	}
 }

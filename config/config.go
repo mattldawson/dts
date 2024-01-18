@@ -106,6 +106,14 @@ func validateServiceParameters(params serviceConfig) error {
 			return fmt.Errorf("Invalid service endpoint: %s", params.Endpoint)
 		}
 	}
+	if params.PollInterval <= 0 {
+		return fmt.Errorf("Non-positive poll interval specified: (%d s)",
+			params.PollInterval)
+	}
+	if params.DeleteAfter <= 0 {
+		return fmt.Errorf("Non-positive task deletion period specified: (%g h)",
+			params.DeleteAfter)
+	}
 	return nil
 }
 

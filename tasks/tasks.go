@@ -424,15 +424,13 @@ func processTasks() {
 	}
 }
 
-// this function sends a regular pulse on its poll channel until it receives a
-// pulse on its stop channel
-func heartbeat(pollInterval time.Duration, pollChan chan<- struct{},
-	stopChan <-chan struct{}) {
+// this function sends a regular pulse on its poll channel until the global
+// variable running is found to be false
+func heartbeat(pollInterval time.Duration, pollChan chan<- struct{}) {
 	for {
 		time.Sleep(pollInterval)
 		pollChan <- struct{}{}
-		select {
-		case <-stopChan: // Stop() called
+		if !running {
 			break
 		}
 	}
@@ -508,11 +506,12 @@ func Start() error {
 	go processTasks()
 
 	// start the polling heartbeat
+	slog.Info(fmt.Sprintf("Task statuses are updated every %d ms",
+		config.Service.PollInterval))
 	pollInterval := time.Duration(config.Service.PollInterval) * time.Millisecond
-	stopHeartbeat = make(chan struct{})
-	go heartbeat(pollInterval, taskChannels.Poll, stopHeartbeat)
+	go heartbeat(pollInterval, taskChannels.Poll)
 
-	// Okay, we're running now.
+	// okay, we're running now
 	running = true
 
 	return nil
@@ -522,7 +521,6 @@ func Start() error {
 // disallowed in a stopped state.
 func Stop() error {
 	taskChannels.Stop <- struct{}{}
-	stopHeartbeat <- struct{}{}
 	err := <-taskChannels.Error
 	running = false
 	return err
@@ -565,8 +563,8 @@ func Add(orcid, source, destination string, fileIDs []string) (uuid.UUID, error)
 	return taskId, err
 }
 
-// given a task UUID, returns its transfer status code (or a non-nil error
-// indicating any issues encountered)
+// Given a task UUID, returns its transfer status code (or a non-nil error
+// indicating any issues encountered).
 func Status(taskId uuid.UUID) (TransferStatus, error) {
 	var status TransferStatus
 	var err error

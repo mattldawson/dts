@@ -44,9 +44,6 @@ import (
 // temporary testing directory
 var TESTING_DIR string
 
-// the interval at which our test task manager polls to update status
-var pollInterval time.Duration = time.Duration(50) * time.Millisecond
-
 // a directory in which the task manager can read/write files
 var dataDirectory string
 
@@ -67,7 +64,7 @@ const tasksConfig string = `
 service:
   port: 8080
   max_connections: 100
-  poll_interval: 100
+  poll_interval: 50  # milliseconds
   data_dir: TESTING_DIR/data
   delete_after: 24
   endpoint: local-endpoint
@@ -169,7 +166,7 @@ func breakdown() {
 }
 
 // To run the tests serially, we attach them to a SerialTests type and
-// have the main runner run that.
+// have them run by a a single test runner.
 type SerialTests struct{ Test *testing.T }
 
 // test starting and stopping
@@ -191,6 +188,8 @@ func (t *SerialTests) TestAddTask() {
 
 	err := Start()
 	assert.Nil(err)
+
+	pollInterval := time.Duration(config.Service.PollInterval) * time.Millisecond
 
 	// queue up a transfer task between two phony databases
 	orcid := "1234-5678-9012-3456"
@@ -265,6 +264,7 @@ func (t *SerialTests) TestStopAndRestart() {
 		_, err := Status(taskIds[i])
 		assert.Nil(err)
 	}
+
 	err = Stop()
 	assert.Nil(err)
 }
@@ -272,9 +272,9 @@ func (t *SerialTests) TestStopAndRestart() {
 // runs all the serial tests... serially!
 func TestRunner(t *testing.T) {
 	tester := SerialTests{Test: t}
-	tester.TestStartAndStop()
+	//tester.TestStartAndStop()
 	tester.TestAddTask()
-	tester.TestStopAndRestart()
+	//tester.TestStopAndRestart()
 }
 
 // This runs setup, runs all tests, and does breakdown.

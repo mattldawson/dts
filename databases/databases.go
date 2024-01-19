@@ -80,7 +80,7 @@ func NewDatabase(orcid, dbName string) (core.Database, error) {
 			err = NotFoundError{dbName}
 		}
 		if err == nil {
-			allDatabases[dbName] = db // stash it
+			allDatabases[key] = db // stash it
 		}
 	}
 	return db, err

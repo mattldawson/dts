@@ -8,8 +8,8 @@ service:
   poll_interval:   60000 # interval at which DTS checks transfer statuses (ms)
   endpoint: globus-local # name of endpoint used for manifest generation
   data_dir: /path/to/dir # directory DTS uses for data storage
-  delete_after: 168      # period after which info about completed transfers
-                         # is deleted (days)
+  delete_after: 604800   # period after which info about completed transfers
+                         # is deleted (seconds)
 
 endpoints: # file transfer endpoints
   globus-local:

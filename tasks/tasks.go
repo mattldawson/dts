@@ -365,8 +365,8 @@ func processTasks() {
 	var pollChan <-chan struct{} = taskChannels.Poll
 	var stopChan <-chan struct{} = taskChannels.Stop
 
-	// the task deletion period is specified in hours
-	deleteAfter := time.Duration(config.Service.DeleteAfter) * time.Hour
+	// the task deletion period is specified in seconds
+	deleteAfter := time.Duration(config.Service.DeleteAfter) * time.Second
 
 	// start scurrying around
 	for {

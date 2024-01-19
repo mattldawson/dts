@@ -39,6 +39,7 @@ import (
 	"github.com/kbase/dts/config"
 	"github.com/kbase/dts/core"
 	"github.com/kbase/dts/databases"
+	"github.com/kbase/dts/endpoints"
 )
 
 // temporary testing directory
@@ -46,9 +47,6 @@ var TESTING_DIR string
 
 // a directory in which the task manager can read/write files
 var dataDirectory string
-
-// a period of time after which information about a completed task is purged
-var deleteAfter time.Duration = time.Duration(2) * time.Second
 
 // the amount of time it takes a test database to stage files
 var stagingDuration time.Duration = time.Duration(150) * time.Millisecond
@@ -66,7 +64,7 @@ service:
   max_connections: 100
   poll_interval: 50  # milliseconds
   data_dir: TESTING_DIR/data
-  delete_after: 24
+  delete_after: 2    # seconds
   endpoint: local-endpoint
 databases:
   source:
@@ -81,17 +79,17 @@ endpoints:
   local-endpoint:
     name: Local endpoint
     id: 8816ec2d-4a48-4ded-b68a-5ab46a4417b6
-    provider: local
+    provider: fake
     root: TESTING_DIR
   source-endpoint:
     name: Endpoint 1
     id: 26d61236-39f6-4742-a374-8ec709347f2f
-    provider: local
+    provider: fake
     root: SOURCE_ROOT
   destination-endpoint:
     name: Endpoint 2
     id: f1865b86-2c64-4b8b-99f3-5aaa945ec3d9
-    provider: local
+    provider: fake
     root: DESTINATION_ROOT
 `
 
@@ -142,9 +140,10 @@ func setup() {
 	}
 	os.Chdir(TESTING_DIR)
 
-	// register test databases referred to in config file
-	databases.RegisterDatabase("source", NewFakeDatabase)
-	databases.RegisterDatabase("destination", NewFakeDatabase)
+	// register test databases/endpoints referred to in config file
+	databases.RegisterDatabase("source", NewFakeSourceDatabase)
+	databases.RegisterDatabase("destination", NewFakeDestinationDatabase)
+	endpoints.RegisterEndpointProvider("fake", NewFakeEndpoint)
 
 	// read in the config file with SOURCE_ROOT and DESTINATION_ROOT replaced
 	myConfig := strings.ReplaceAll(tasksConfig, "TESTING_DIR", TESTING_DIR)
@@ -190,6 +189,7 @@ func (t *SerialTests) TestAddTask() {
 	assert.Nil(err)
 
 	pollInterval := time.Duration(config.Service.PollInterval) * time.Millisecond
+	deleteAfter := time.Duration(config.Service.DeleteAfter) * time.Second
 
 	// queue up a transfer task between two phony databases
 	orcid := "1234-5678-9012-3456"
@@ -298,17 +298,34 @@ type FakeStagingRequest struct {
 // This type implements core.Database with only enough behavior
 // to test the task manager.
 type FakeDatabase struct {
-	Endpt   *FakeEndpoint
+	Endpt   core.Endpoint
 	Staging map[uuid.UUID]FakeStagingRequest
 }
 
 // creates a new fake database that stages its 3 files
-func NewFakeDatabase(orcid string) (core.Database, error) {
+func NewFakeSourceDatabase(orcid string) (core.Database, error) {
+	endpoint, err := endpoints.NewEndpoint(config.Databases["source"].Endpoint)
+	if err != nil {
+		return nil, err
+	}
 	db := FakeDatabase{
-		Endpt:   NewFakeEndpoint(),
+		Endpt:   endpoint,
 		Staging: make(map[uuid.UUID]FakeStagingRequest),
 	}
-	db.Endpt.Database = &db
+	db.Endpt.(*FakeEndpoint).Database = &db
+	return &db, nil
+}
+
+// ... and a fake destination database that doesn't have to do anything
+func NewFakeDestinationDatabase(orcid string) (core.Database, error) {
+	endpoint, err := endpoints.NewEndpoint(config.Databases["destination"].Endpoint)
+	if err != nil {
+		return nil, err
+	}
+	db := FakeDatabase{
+		Endpt: endpoint,
+	}
+	db.Endpt.(*FakeEndpoint).Database = &db
 	return &db, nil
 }
 
@@ -375,11 +392,11 @@ type FakeEndpoint struct {
 
 // creates a new fake source endpoint that transfers a fictional payload in 1
 // second
-func NewFakeEndpoint() *FakeEndpoint {
+func NewFakeEndpoint(name string) (core.Endpoint, error) {
 	return &FakeEndpoint{
 		TransferDuration: transferDuration,
 		Xfers:            make(map[uuid.UUID]TransferInfo),
-	}
+	}, nil
 }
 
 func (ep *FakeEndpoint) Root() string {

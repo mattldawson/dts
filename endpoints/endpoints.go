@@ -39,29 +39,62 @@ func (e NotFoundError) Error() string {
 	return fmt.Sprintf("The endpoint '%s' was not found.", e.epName)
 }
 
+// This error type is returned when an endpoint has an invalid provider.
+type InvalidProviderError struct {
+	epName, epProvider string
+}
+
+func (e InvalidProviderError) Error() string {
+	return fmt.Sprintf("The endpoint '%s' has an invalid provider: '%s'.",
+		e.epName, e.epProvider)
+}
+
 // we maintain a table of endpoint instances, identified by their names
 var allEndpoints map[string]core.Endpoint = make(map[string]core.Endpoint)
+
+// here's a table of endpoint creation functions
+var createEndpointFuncs = make(map[string]func(name string) (core.Endpoint, error))
+
+// registers a database creation function under the given database name
+// to allow for e.g. test database implementations
+func RegisterEndpointProvider(provider string, createEp func(name string) (core.Endpoint, error)) error {
+	if _, found := createEndpointFuncs[provider]; found {
+		return fmt.Errorf("Cannot register endpoint provider %s (already registered)", provider)
+	} else {
+		createEndpointFuncs[provider] = createEp
+		return nil
+	}
+}
+
+var firstNewEndpointCall = true
 
 // creates an endpoint based on the configured type, or returns an existing
 // instance
 func NewEndpoint(endpointName string) (core.Endpoint, error) {
 	var err error
 
+	// register our built-in endpoint providers if this is the first call to
+	// this function
+	if firstNewEndpointCall {
+		RegisterEndpointProvider("globus", globus.NewEndpoint)
+		RegisterEndpointProvider("local", local.NewEndpoint)
+		firstNewEndpointCall = false
+	}
 	// do we have one of these already?
 	endpoint, found := allEndpoints[endpointName]
 	if !found {
+		// look in our configuration for the endpoint's provider
 		if epConfig, epFound := config.Endpoints[endpointName]; epFound {
-			switch epConfig.Provider {
-			case "globus":
-				endpoint, err = globus.NewEndpoint(endpointName)
-			case "local":
-				endpoint, err = local.NewEndpoint(endpointName)
-			default:
-				err = fmt.Errorf("Invalid provider for endpoint '%s': %s", endpointName,
-					config.Endpoints[endpointName].Provider)
+			if createEp, valid := createEndpointFuncs[epConfig.Provider]; valid {
+				endpoint, err = createEp(endpointName)
+			} else { // invalid provider!
+				err = InvalidProviderError{
+					epName:     endpointName,
+					epProvider: epConfig.Provider,
+				}
 			}
-		} else {
-			err = NotFoundError{}
+		} else { // endpoint not found in config!
+			err = NotFoundError{epName: endpointName}
 		}
 
 		// stash it

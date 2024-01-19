@@ -46,7 +46,7 @@ type serviceConfig struct {
 	// name of existing directory in which DTS can store persistent data
 	// default: none (persistent storage disabled)
 	DataDirectory string `json:"data_dir,omitempty" yaml:"data_dir,omitempty"`
-	// time after which information about a completed transfer is deleted (hours)
+	// time after which information about a completed transfer is deleted (seconds)
 	// default: 7 days
 	DeleteAfter int `json:"delete_after" yaml:"delete_after"`
 }
@@ -77,7 +77,7 @@ func readConfig(bytes []byte) error {
 	conf.Service.Port = 8080
 	conf.Service.MaxConnections = 100
 	conf.Service.PollInterval = int(time.Minute / time.Millisecond)
-	conf.Service.DeleteAfter = 7 * 24
+	conf.Service.DeleteAfter = 7 * 24 * 3600
 	err := yaml.Unmarshal(bytes, &conf)
 	if err != nil {
 		log.Printf("Couldn't parse configuration data: %s\n", err)

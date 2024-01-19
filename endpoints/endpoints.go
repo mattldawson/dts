@@ -30,6 +30,15 @@ import (
 	"github.com/kbase/dts/endpoints/local"
 )
 
+// This error type is returned when an endpoint is sought but not found.
+type NotFoundError struct {
+	epName string
+}
+
+func (e NotFoundError) Error() string {
+	return fmt.Sprintf("The endpoint '%s' was not found.", e.epName)
+}
+
 // we maintain a table of endpoint instances, identified by their names
 var allEndpoints map[string]core.Endpoint = make(map[string]core.Endpoint)
 
@@ -41,14 +50,18 @@ func NewEndpoint(endpointName string) (core.Endpoint, error) {
 	// do we have one of these already?
 	endpoint, found := allEndpoints[endpointName]
 	if !found {
-		switch config.Endpoints[endpointName].Provider {
-		case "globus":
-			endpoint, err = globus.NewEndpoint(endpointName)
-		case "local":
-			endpoint, err = local.NewEndpoint(endpointName)
-		default:
-			err = fmt.Errorf("Invalid provider for endpoint '%s': %s", endpointName,
-				config.Endpoints[endpointName].Provider)
+		if epConfig, epFound := config.Endpoints[endpointName]; epFound {
+			switch epConfig.Provider {
+			case "globus":
+				endpoint, err = globus.NewEndpoint(endpointName)
+			case "local":
+				endpoint, err = local.NewEndpoint(endpointName)
+			default:
+				err = fmt.Errorf("Invalid provider for endpoint '%s': %s", endpointName,
+					config.Endpoints[endpointName].Provider)
+			}
+		} else {
+			err = NotFoundError{}
 		}
 
 		// stash it

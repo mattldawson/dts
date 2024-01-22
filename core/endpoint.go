@@ -44,6 +44,7 @@ const (
 	TransferStatusInactive                      // transfer suspended
 	TransferStatusFinalizing                    // transfer manifest being generated
 	TransferStatusSucceeded                     // transfer completed successfully
+	TransferStatusCanceled                      // transfer canceled
 	TransferStatusFailed                        // transfer failed
 )
 

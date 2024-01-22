@@ -27,6 +27,7 @@ import (
 	"os"
 	"path"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -179,8 +180,31 @@ func TestGlobusTransfer(t *testing.T) {
 			DestinationPath: path.Join(destDirName(16), path.Base(sourceFilesById[id])),
 		})
 	}
-	_, err := source.Transfer(destination, fileXfers)
+	taskId, err := source.Transfer(destination, fileXfers)
 	assert.Nil(err)
+
+	// wait for the task to register in the system
+	for {
+		_, err = source.Status(taskId)
+		if err == nil {
+			break
+		} else {
+			time.Sleep(1 * time.Second)
+		}
+	}
+	assert.Nil(err)
+
+	// now wait for it to complete
+	var status core.TransferStatus
+	for {
+		status, err = source.Status(taskId)
+		assert.Nil(err)
+		switch status.Code {
+		case core.TransferStatusSucceeded, core.TransferStatusCanceled, core.TransferStatusFailed:
+			break
+		}
+	}
+	assert.Equal(core.TransferStatusSucceeded, status.Code)
 }
 
 func TestBadGlobusTransfer(t *testing.T) {
@@ -210,6 +234,38 @@ func TestUnknownGlobusStatus(t *testing.T) {
 	status, err := endpoint.Status(taskId)
 	assert.Equal(core.TransferStatusUnknown, status.Code)
 	assert.NotNil(err)
+}
+
+func TestGlobusTransferCancellation(t *testing.T) {
+	assert := assert.New(t)
+	source, _ := NewEndpoint("source")
+	destination, _ := NewEndpoint("destination")
+
+	fileXfers := make([]core.FileTransfer, 0)
+	for i := 1; i <= 3; i++ {
+		id := fmt.Sprintf("%d", i)
+
+		fileXfers = append(fileXfers, core.FileTransfer{
+			SourcePath:      sourceFilesById[id],
+			DestinationPath: path.Join(destDirName(16), path.Base(sourceFilesById[id])),
+		})
+	}
+	taskId, err := source.Transfer(destination, fileXfers)
+	assert.Nil(err)
+
+	// wait for the task to show up
+	for {
+		_, err = source.Status(taskId)
+		if err == nil {
+			break
+		} else {
+			time.Sleep(1 * time.Second) // doot doo...
+		}
+	}
+	assert.Nil(err)
+
+	err = source.Cancel(taskId)
+	assert.Nil(err)
 }
 
 // this runs setup, runs all tests, and does breakdown

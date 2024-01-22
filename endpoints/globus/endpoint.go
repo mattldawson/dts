@@ -473,12 +473,31 @@ func (ep *Endpoint) Status(id uuid.UUID) (core.TransferStatus, error) {
 func (ep *Endpoint) Cancel(id uuid.UUID) error {
 	// https://docs.globus.org/api/transfer/task/#cancel_task_by_id
 	resource := fmt.Sprintf("task/%s/cancel", id.String())
-	resp, err := ep.get(resource, url.Values{})
+	resp, err := ep.post(resource, nil)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
-	// FIXME
-	//body, err := io.ReadAll(resp.Body)
-	return err
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	type TaskResponse struct {
+		Code      string `json:"code"`
+		Message   string `json:"message"`
+		RequeѕtId string `json:"request_id"`
+		Resource  string `json:"resource"`
+	}
+	var response TaskResponse
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		return err
+	}
+	switch response.Code {
+	case "Cancelled", "CancelAccepted", "TaskComplete":
+		return nil
+	default:
+		return fmt.Errorf("Task %s could not be canceled (%s)", id.String(),
+			response.Message)
+	}
 }

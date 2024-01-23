@@ -200,8 +200,11 @@ func TestGlobusTransfer(t *testing.T) {
 		status, err = source.Status(taskId)
 		assert.Nil(err)
 		switch status.Code {
-		case core.TransferStatusSucceeded, core.TransferStatusCanceled, core.TransferStatusFailed:
+		case core.TransferStatusSucceeded, core.TransferStatusFailed:
 			break
+		default: // not yet finished
+			fmt.Printf("Status code: %d (%d/%d/%d)\n", status.Code, status.NumFilesTransferred, status.NumFilesSkipped, status.NumFiles)
+			time.Sleep(1 * time.Second)
 		}
 	}
 	assert.Equal(core.TransferStatusSucceeded, status.Code)
@@ -259,7 +262,7 @@ func TestGlobusTransferCancellation(t *testing.T) {
 		if err == nil {
 			break
 		} else {
-			time.Sleep(1 * time.Second) // doot doo...
+			time.Sleep(1 * time.Second)
 		}
 	}
 	assert.Nil(err)

@@ -44,8 +44,7 @@ const (
 	TransferStatusInactive                      // transfer suspended
 	TransferStatusFinalizing                    // transfer manifest being generated
 	TransferStatusSucceeded                     // transfer completed successfully
-	TransferStatusCanceled                      // transfer canceled
-	TransferStatusFailed                        // transfer failed
+	TransferStatusFailed                        // transfer failed or was canceled
 )
 
 // this type conveys various information about a file transfer's status
@@ -56,6 +55,8 @@ type TransferStatus struct {
 	NumFiles int
 	// number of files that have been transferred
 	NumFilesTransferred int
+	// number of files that are skipped for whatever reason
+	NumFilesSkipped int
 }
 
 // This type represents an endpoint for transferring files.

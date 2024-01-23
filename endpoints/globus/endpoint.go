@@ -317,46 +317,31 @@ func (ep *Endpoint) Transfers() ([]uuid.UUID, error) {
 	return taskIds, nil
 }
 
-func (ep *Endpoint) Transfer(dst core.Endpoint, files []core.FileTransfer) (uuid.UUID, error) {
-	// first, we check that all requested files are staged on this endpoint
-	// (Globus does not perform this check by itself)
-	requestedFiles := make([]core.DataResource, len(files))
-	for i, file := range files {
-		requestedFiles[i].Path = file.SourcePath // only the Path field is required
-	}
-	staged, err := ep.FilesStaged(requestedFiles)
-	if err != nil {
-		return uuid.UUID{}, err
-	}
-	if !staged {
-		return uuid.UUID{}, fmt.Errorf("The files requested for transfer are not yet staged.")
-	}
-
-	// obtain a submission ID
-	// https://docs.globus.org/api/transfer/task_submit/#get_submission_id
-	var xferId uuid.UUID
+// https://docs.globus.org/api/transfer/task_submit/#get_submission_id
+func (ep *Endpoint) getSubmissionId() (uuid.UUID, error) {
+	var id uuid.UUID
 	resp, err := ep.get("submission_id", url.Values{})
 	if err != nil {
-		return xferId, err
+		return id, err
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return xferId, err
+		return id, err
 	}
 	type SubmissionIdResponse struct {
 		Value uuid.UUID `json:"value"`
 	}
 	var response SubmissionIdResponse
 	err = json.Unmarshal(body, &response)
-	if err != nil {
-		return xferId, err
-	}
-	xferId = response.Value
+	return response.Value, err
+}
 
-	// now, submit the transfer task itself
-	// https://docs.globus.org/api/transfer/task_submit/#submit_transfer_task
-	// https://docs.globus.org/api/transfer/task_submit/#transfer_item_fields
+// https://docs.globus.org/api/transfer/task_submit/#submit_transfer_task
+// https://docs.globus.org/api/transfer/task_submit/#transfer_item_fields
+func (ep *Endpoint) submitTransfer(destination core.Endpoint, submissionId uuid.UUID, files []core.FileTransfer) (uuid.UUID, error) {
+	var xferId uuid.UUID
+
 	type TransferItem struct {
 		DataType          string `json:"DATA_TYPE"` // "transfer_item"
 		SourcePath        string `json:"source_path"`
@@ -387,27 +372,33 @@ func (ep *Endpoint) Transfer(dst core.Endpoint, files []core.FileTransfer) (uuid
 			ChecksumAlgorithm: file.HashAlgorithm,
 		}
 	}
-	gDst := dst.(*Endpoint)
+
+	// the destination is a Globus endpoint, right?
+	gDestination, ok := destination.(*Endpoint)
+	if !ok {
+		return xferId, fmt.Errorf("The destination is not a Globus endpoint.")
+	}
+
 	data, err := json.Marshal(SubmissionRequest{
 		DataType:            "transfer",
-		Id:                  xferId.String(),
+		Id:                  submissionId.String(),
 		Label:               "DTS",
 		Data:                xferItems,
-		DestinationEndpoint: gDst.Id.String(),
+		DestinationEndpoint: gDestination.Id.String(),
 		SourceEndpoint:      ep.Id.String(),
 		SyncLevel:           3, // transfer only if checksums don't match
 		VerifyChecksum:      true,
 		FailOnQuotaErrors:   true,
 	})
-	if err == nil {
+	if err != nil {
 		return xferId, err
 	}
-	resp, err = ep.post("transfer", bytes.NewReader(data))
+	resp, err := ep.post("transfer", bytes.NewReader(data))
 	if err != nil {
 		return xferId, err
 	}
 	defer resp.Body.Close()
-	body, err = io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return xferId, err
 	}
@@ -430,6 +421,39 @@ func (ep *Endpoint) Transfer(dst core.Endpoint, files []core.FileTransfer) (uuid
 	return xferId, nil
 }
 
+func (ep *Endpoint) Transfer(destination core.Endpoint, files []core.FileTransfer) (uuid.UUID, error) {
+	// check that all requested files are staged on this endpoint
+	// (Globus does not perform this check by itself)
+	requestedFiles := make([]core.DataResource, len(files))
+	for i, file := range files {
+		requestedFiles[i].Path = file.SourcePath // only the Path field is required
+	}
+	staged, err := ep.FilesStaged(requestedFiles)
+	if err != nil {
+		return uuid.UUID{}, err
+	}
+	if !staged {
+		return uuid.UUID{}, fmt.Errorf("The files requested for transfer are not yet staged.")
+	}
+
+	// obtain a submission ID
+	submissionId, err := ep.getSubmissionId()
+	if err != nil {
+		return uuid.UUID{}, err
+	}
+
+	// now, submit the transfer task itself
+	return ep.submitTransfer(destination, submissionId, files)
+}
+
+// mapping of Globus status code strings to DTS status codes
+var statusCodesForStrings = map[string]core.TransferStatusCode{
+	"ACTIVE":    core.TransferStatusActive,
+	"INACTIVE":  core.TransferStatusInactive,
+	"SUCCEEDED": core.TransferStatusSucceeded,
+	"FAILED":    core.TransferStatusFailed,
+}
+
 func (ep *Endpoint) Status(id uuid.UUID) (core.TransferStatus, error) {
 	resource := fmt.Sprintf("task/%s", id.String())
 	resp, err := ep.get(resource, url.Values{})
@@ -443,29 +467,20 @@ func (ep *Endpoint) Status(id uuid.UUID) (core.TransferStatus, error) {
 	}
 	type TaskResponse struct {
 		Files            int    `json:"files"`
+		FilesSkipped     int    `json:"files_skipped"`
 		FilesTransferred int    `json:"files_transferred"`
 		IsPaused         bool   `json:"is_paused"`
 		Status           string `json:"status"`
-		Code             string `json:"code"`
-		Message          string `json:"message"`
 	}
 	var response TaskResponse
 	err = json.Unmarshal(body, &response)
 	if err != nil {
 		return core.TransferStatus{}, err
 	}
-	if strings.Contains(response.Code, "ClientError") {
-		return core.TransferStatus{}, fmt.Errorf(response.Message)
-	}
-	codes := map[string]core.TransferStatusCode{
-		"Active":    core.TransferStatusActive,
-		"Inactive":  core.TransferStatusInactive,
-		"Succeeded": core.TransferStatusSucceeded,
-		"Failed":    core.TransferStatusFailed,
-	}
 	return core.TransferStatus{
-		Code:                codes[response.Status],
+		Code:                statusCodesForStrings[response.Status],
 		NumFiles:            response.Files,
+		NumFilesSkipped:     response.FilesSkipped,
 		NumFilesTransferred: response.FilesTransferred,
 	}, nil
 }

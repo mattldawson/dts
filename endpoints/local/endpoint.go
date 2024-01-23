@@ -165,7 +165,7 @@ func (ep *Endpoint) transferFiles(xferId uuid.UUID, dest core.Endpoint) {
 	if err != nil { // trouble!
 		xfer.Status.Code = core.TransferStatusFailed
 	} else if xfer.Canceled {
-		xfer.Status.Code = core.TransferStatusCanceled
+		xfer.Status.Code = core.TransferStatusFailed
 	} else { // all's well
 		xfer.Status.Code = core.TransferStatusSucceeded
 	}

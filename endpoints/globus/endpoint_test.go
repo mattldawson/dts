@@ -199,11 +199,10 @@ func TestGlobusTransfer(t *testing.T) {
 	for {
 		status, err = source.Status(taskId)
 		assert.Nil(err)
-		switch status.Code {
-		case core.TransferStatusSucceeded, core.TransferStatusFailed:
+		if status.Code == core.TransferStatusSucceeded ||
+			status.Code == core.TransferStatusFailed {
 			break
-		default: // not yet finished
-			fmt.Printf("Status code: %d (%d/%d/%d)\n", status.Code, status.NumFilesTransferred, status.NumFilesSkipped, status.NumFiles)
+		} else { // not yet finished
 			time.Sleep(1 * time.Second)
 		}
 	}

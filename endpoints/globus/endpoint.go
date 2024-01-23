@@ -346,7 +346,6 @@ func (ep *Endpoint) submitTransfer(destination core.Endpoint, submissionId uuid.
 		DataType          string `json:"DATA_TYPE"` // "transfer_item"
 		SourcePath        string `json:"source_path"`
 		DestinationPath   string `json:"destination_path"`
-		Recursive         bool   `json:"recursive"`
 		ExternalChecksum  string `json:"external_checksum,omitempty"`
 		ChecksumAlgorithm string `json:"checksum_algorithm,omitempty"`
 	}
@@ -367,7 +366,6 @@ func (ep *Endpoint) submitTransfer(destination core.Endpoint, submissionId uuid.
 			DataType:          "transfer_item",
 			SourcePath:        file.SourcePath,
 			DestinationPath:   file.DestinationPath,
-			Recursive:         true,
 			ExternalChecksum:  file.Hash,
 			ChecksumAlgorithm: file.HashAlgorithm,
 		}
@@ -471,11 +469,17 @@ func (ep *Endpoint) Status(id uuid.UUID) (core.TransferStatus, error) {
 		FilesTransferred int    `json:"files_transferred"`
 		IsPaused         bool   `json:"is_paused"`
 		Status           string `json:"status"`
+		// the following fields are present only when an error occurs
+		Code    string `json:"code"`
+		Message string `json:"message"`
 	}
 	var response TaskResponse
 	err = json.Unmarshal(body, &response)
 	if err != nil {
 		return core.TransferStatus{}, err
+	}
+	if strings.Contains(response.Code, "ClientError") { // e.g. not found
+		return core.TransferStatus{}, fmt.Errorf(response.Message)
 	}
 	return core.TransferStatus{
 		Code:                statusCodesForStrings[response.Status],
@@ -509,7 +513,7 @@ func (ep *Endpoint) Cancel(id uuid.UUID) error {
 		return err
 	}
 	switch response.Code {
-	case "Cancelled", "CancelAccepted", "TaskComplete":
+	case "Canceled", "CancelAccepted", "TaskComplete":
 		return nil
 	default:
 		return fmt.Errorf("Task %s could not be canceled (%s)", id.String(),

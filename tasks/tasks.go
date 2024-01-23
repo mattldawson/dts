@@ -448,7 +448,11 @@ func validateDataDirectory(dir string) error {
 		return err
 	}
 	if !info.IsDir() {
-		return fmt.Errorf("Given data directory is not a directory!")
+		return &os.PathError{
+			Op:   "validateDataDirectory",
+			Path: dir,
+			Err:  fmt.Errorf("%s is not a directory!", dir),
+		}
 	}
 
 	// can we write a file and read it?
@@ -456,14 +460,22 @@ func validateDataDirectory(dir string) error {
 	writtenTestData := []byte("test")
 	err = os.WriteFile(testFile, writtenTestData, 0644)
 	if err != nil {
-		return fmt.Errorf("Could not write to given data directory!")
+		return &os.PathError{
+			Op:   "validateDataDirectory",
+			Path: dir,
+			Err:  fmt.Errorf("Could not write to data directory %s!", dir),
+		}
 	}
 	readTestData, err := os.ReadFile(testFile)
 	if err == nil {
 		os.Remove(testFile)
 	}
 	if err != nil || !bytes.Equal(readTestData, writtenTestData) {
-		return fmt.Errorf("Could not read from given data directory!")
+		return &os.PathError{
+			Op:   "validateDataDirectory",
+			Path: dir,
+			Err:  fmt.Errorf("Could not read from data directory %s!", dir),
+		}
 	}
 	return nil
 }

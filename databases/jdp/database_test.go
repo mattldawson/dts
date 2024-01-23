@@ -1,7 +1,6 @@
 package jdp
 
 import (
-	"log/slog"
 	"os"
 	"testing"
 
@@ -9,6 +8,7 @@ import (
 
 	"github.com/kbase/dts/config"
 	"github.com/kbase/dts/core"
+	"github.com/kbase/dts/dtstest"
 )
 
 const jdpConfig string = `
@@ -31,16 +31,9 @@ endpoints:
       client_secret: ${DTS_GLOBUS_CLIENT_SECRET}
 `
 
-func enableDebugLogging() {
-	logLevel := new(slog.LevelVar)
-	logLevel.Set(slog.LevelDebug)
-	h := slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel})
-	slog.SetDefault(slog.New(h))
-}
-
 // this function gets called at the begіnning of a test session
 func setup() {
-	enableDebugLogging()
+	dtstest.EnableDebugLogging()
 	config.Init([]byte(jdpConfig))
 }
 

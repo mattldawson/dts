@@ -27,7 +27,6 @@ package tasks
 import (
 	"fmt"
 	"log"
-	"log/slog"
 	"os"
 	"strings"
 	"testing"
@@ -39,6 +38,7 @@ import (
 	"github.com/kbase/dts/config"
 	"github.com/kbase/dts/core"
 	"github.com/kbase/dts/databases"
+	"github.com/kbase/dts/dtstest"
 	"github.com/kbase/dts/endpoints"
 )
 
@@ -121,16 +121,9 @@ var testResources map[string]DataResource = map[string]DataResource{
 	},
 }
 
-func enableDebugLogging() {
-	logLevel := new(slog.LevelVar)
-	logLevel.Set(slog.LevelDebug)
-	h := slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel})
-	slog.SetDefault(slog.New(h))
-}
-
 // this function gets called at the begіnning of a test session
 func setup() {
-	enableDebugLogging()
+	dtstest.EnableDebugLogging()
 
 	log.Print("Creating testing directory...\n")
 	var err error
@@ -272,9 +265,9 @@ func (t *SerialTests) TestStopAndRestart() {
 // runs all the serial tests... serially!
 func TestRunner(t *testing.T) {
 	tester := SerialTests{Test: t}
-	//tester.TestStartAndStop()
+	tester.TestStartAndStop()
 	tester.TestAddTask()
-	//tester.TestStopAndRestart()
+	tester.TestStopAndRestart()
 }
 
 // This runs setup, runs all tests, and does breakdown.
@@ -361,9 +354,8 @@ func (db *FakeDatabase) StagingStatus(id uuid.UUID) (core.StagingStatus, error) 
 	if info, found := db.Staging[id]; found {
 		if time.Now().Sub(info.Time) >= stagingDuration {
 			return core.StagingStatusSucceeded, nil
-		} else {
-			return core.StagingStatusActive, nil
 		}
+		return core.StagingStatusActive, nil
 	} else {
 		return core.StagingStatusUnknown, nil
 	}

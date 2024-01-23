@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -26,6 +25,7 @@ import (
 	"github.com/kbase/dts/config"
 	"github.com/kbase/dts/core"
 	"github.com/kbase/dts/databases"
+	"github.com/kbase/dts/dtstest"
 	"github.com/kbase/dts/endpoints"
 )
 
@@ -166,16 +166,9 @@ func (db *testDatabase) LocalUser(orcid string) (string, error) {
 	return testUser, nil
 }
 
-func enableDebugLogging() {
-	logLevel := new(slog.LevelVar)
-	logLevel.Set(slog.LevelDebug)
-	h := slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel})
-	slog.SetDefault(slog.New(h))
-}
-
 // performs testing setup
 func setup() {
-	enableDebugLogging()
+	dtstest.EnableDebugLogging()
 
 	// jot down our CWD, create a temporary directory, and change to it
 	var err error

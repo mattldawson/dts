@@ -23,7 +23,6 @@ package globus
 
 import (
 	"fmt"
-	"log/slog"
 	"math/rand"
 	"os"
 	"path"
@@ -34,6 +33,7 @@ import (
 
 	"github.com/kbase/dts/config"
 	"github.com/kbase/dts/core"
+	"github.com/kbase/dts/dtstest"
 )
 
 // we test our Globus endpoint implementation using two endpoints:
@@ -79,16 +79,9 @@ endpoints:
       client_secret: ${DTS_GLOBUS_CLIENT_SECRET}
 `, sourceEndpointName, sourceEndpointId)
 
-func enableDebugLogging() {
-	logLevel := new(slog.LevelVar)
-	logLevel.Set(slog.LevelDebug)
-	h := slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel})
-	slog.SetDefault(slog.New(h))
-}
-
 // this function gets called at the begіnning of a test session
 func setup() {
-	enableDebugLogging()
+	dtstest.EnableDebugLogging()
 
 	if _, ok := os.LookupEnv("DTS_GLOBUS_TEST_ENDPOINT"); !ok {
 		panic("DTS_GLOBUS_TEST_ENDPOINT environment variable must be set!")

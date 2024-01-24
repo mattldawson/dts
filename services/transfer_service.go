@@ -12,9 +12,12 @@ import (
 
 // This package-specific helper function writes a JSON payload to an
 // http.ResponseWriter.
-func writeJson(w http.ResponseWriter, data []byte) {
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(data)
+func writeJson(w http.ResponseWriter, data []byte, code int) {
+	w.WriteHeader(code)
+	if len(data) > 0 {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(data)
+	}
 }
 
 // This type holds information about an error that occurred responding to a

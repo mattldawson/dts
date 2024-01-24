@@ -158,6 +158,10 @@ paths:
         Cancels the previously initiated file transfer with the given ID
       operationId: deleteTransfer
       responses:
+        202:
+          description: |
+            A response indicating that the cancellation request for the file
+            transfer has been received but not enacted
         204:
           description: |
             A response indicating that the file transfer has been canceled

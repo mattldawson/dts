@@ -357,7 +357,7 @@ func TestQueryInvalidDatabase(t *testing.T) {
 
 	resp, err := get(baseUrl + apiPrefix + "databases/nonexistentdb")
 	assert.Nil(err)
-	assert.Equal(404, resp.StatusCode)
+	assert.Equal(http.StatusNotFound, resp.StatusCode)
 }
 
 // searches a specific database for files matching a simple query
@@ -370,7 +370,7 @@ func TestSearchDatabase(t *testing.T) {
 
 	respBody, err := io.ReadAll(resp.Body)
 	assert.Nil(err)
-	assert.Equal(200, resp.StatusCode)
+	assert.Equal(http.StatusOK, resp.StatusCode)
 	defer resp.Body.Close()
 
 	var results ElasticSearchResponse
@@ -394,7 +394,7 @@ func TestCreateTransfer(t *testing.T) {
 	})
 	resp, err := post(baseUrl+apiPrefix+"transfers", bytes.NewReader(payload))
 	assert.Nil(err)
-	assert.Equal(200, resp.StatusCode)
+	assert.Equal(http.StatusCreated, resp.StatusCode)
 	defer resp.Body.Close()
 	var body []byte
 	body, err = io.ReadAll(resp.Body)
@@ -408,7 +408,7 @@ func TestCreateTransfer(t *testing.T) {
 	queryTransfer := func() (TransferStatusResponse, error) {
 		resp, err := get(baseUrl + apiPrefix + fmt.Sprintf("transfers/%s", xferId.String()))
 		assert.Nil(err)
-		assert.Equal(200, resp.StatusCode)
+		assert.Equal(http.StatusOK, resp.StatusCode)
 		var body []byte
 		body, err = io.ReadAll(resp.Body)
 		resp.Body.Close()
@@ -447,12 +447,12 @@ func TestFetchInvalidTransferStatus(t *testing.T) {
 	// try an ill-formed transfer
 	resp, err := get(baseUrl + apiPrefix + "transfers/xyzzy")
 	assert.Nil(err)
-	assert.Equal(400, resp.StatusCode)
+	assert.Equal(http.StatusBadRequest, resp.StatusCode)
 
 	// I bet this one doesn't exist!!
 	resp, err = get(baseUrl + apiPrefix + "transfers/3f0f9563-e1f8-4b9c-9308-36988e25df0b")
 	assert.Nil(err)
-	assert.Equal(404, resp.StatusCode)
+	assert.Equal(http.StatusNotFound, resp.StatusCode)
 }
 
 // runs setup, runs all tests, and does breakdown

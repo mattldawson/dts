@@ -1,6 +1,7 @@
 package services
 
 import (
+	"cmp"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -9,6 +10,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -89,7 +91,7 @@ func (service *prototype) getRoot(w http.ResponseWriter,
 	_, _, err := getAuthInfo(r.Header)
 	if err != nil {
 		log.Print(err.Error())
-		writeError(w, err.Error(), 401)
+		writeError(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
 
@@ -102,7 +104,7 @@ func (service *prototype) getRoot(w http.ResponseWriter,
 		data.Documentation = "/docs"
 	}
 	jsonData, _ := json.Marshal(data)
-	writeJson(w, jsonData)
+	writeJson(w, jsonData, http.StatusOK)
 }
 
 // type holding database metadata
@@ -120,7 +122,7 @@ func (service *prototype) getDatabases(w http.ResponseWriter,
 	_, _, err := getAuthInfo(r.Header)
 	if err != nil {
 		log.Print(err.Error())
-		writeError(w, err.Error(), 401)
+		writeError(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
 
@@ -133,9 +135,11 @@ func (service *prototype) getDatabases(w http.ResponseWriter,
 			Organization: db.Organization,
 		})
 	}
-	// FIXME: sort by name
+	slices.SortFunc(dbs, func(db1, db2 dbMetadata) int { // sort by name
+		return cmp.Compare(db1.Name, db2.Name)
+	})
 	jsonData, _ := json.Marshal(dbs)
-	writeJson(w, jsonData)
+	writeJson(w, jsonData, http.StatusOK)
 }
 
 // handler method for querying a single database for its metadata
@@ -145,7 +149,7 @@ func (service *prototype) getDatabase(w http.ResponseWriter,
 	_, _, err := getAuthInfo(r.Header)
 	if err != nil {
 		log.Print(err.Error())
-		writeError(w, err.Error(), 401)
+		writeError(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
 
@@ -157,14 +161,14 @@ func (service *prototype) getDatabase(w http.ResponseWriter,
 	if !ok {
 		errStr := fmt.Sprintf("Database %s not found", dbName)
 		log.Print(errStr)
-		writeError(w, errStr, 404)
+		writeError(w, errStr, http.StatusNotFound)
 	} else {
 		data, _ := json.Marshal(dbMetadata{
 			Id:           dbName,
 			Name:         db.Name,
 			Organization: db.Organization,
 		})
-		writeJson(w, data)
+		writeJson(w, data, http.StatusOK)
 	}
 }
 
@@ -220,7 +224,7 @@ func (service *prototype) searchDatabase(w http.ResponseWriter,
 	_, orcid, err := getAuthInfo(r.Header)
 	if err != nil {
 		log.Print(err.Error())
-		writeError(w, err.Error(), 401)
+		writeError(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
 
@@ -232,31 +236,31 @@ func (service *prototype) searchDatabase(w http.ResponseWriter,
 	if !ok {
 		errStr := fmt.Sprintf("Database %s not found", dbName)
 		log.Print(errStr)
-		writeError(w, errStr, 404)
+		writeError(w, errStr, http.StatusNotFound)
 		return
 	}
 
 	// are we asked to return a subset of our results?
 	params, err := extractSearchParams(r)
 	if err != nil {
-		writeError(w, err.Error(), 400)
+		writeError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	log.Printf("Searching database %s for files...", dbName)
 	db, err := databases.NewDatabase(orcid, dbName)
 	if err != nil {
-		writeError(w, err.Error(), 404)
+		writeError(w, err.Error(), http.StatusNotFound)
 		return
 	}
 	results, err := db.Search(params)
 	if err != nil {
-		writeError(w, err.Error(), 400)
+		writeError(w, err.Error(), http.StatusBadRequest)
 		return
 	} else {
 		// return our results to the caller
 		jsonData, _ := jsonFromSearchResults(dbName, params.Query, results)
-		writeJson(w, jsonData)
+		writeJson(w, jsonData, http.StatusOK)
 	}
 }
 
@@ -307,23 +311,23 @@ func (service *prototype) createTransfer(w http.ResponseWriter,
 	// extract and validate request data
 	request, err := getTransferRequest(r)
 	if err != nil {
-		writeError(w, err.Error(), 401)
+		writeError(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
 
-	taskId, err := tasks.Add(request.Orcid, request.Source, request.Destination,
-		request.FileIds)
+	taskId, err := tasks.Create(request.Orcid, request.Source,
+		request.Destination, request.FileIds)
 	if err != nil {
 		switch err.(type) {
 		case databases.NotFoundError:
-			writeError(w, err.Error(), 404)
+			writeError(w, err.Error(), http.StatusNotFound)
 		default:
-			writeError(w, err.Error(), 500)
+			writeError(w, err.Error(), http.StatusInternalServerError)
 		}
 		return
 	}
 	jsonData, _ := json.Marshal(TransferResponse{Id: taskId})
-	writeJson(w, jsonData)
+	writeJson(w, jsonData, http.StatusCreated)
 }
 
 // convert a transfer status code to a nice human-friendly string
@@ -352,25 +356,24 @@ func (service *prototype) getTransferStatus(w http.ResponseWriter,
 	_, _, err := getAuthInfo(r.Header)
 	if err != nil {
 		log.Print(err.Error())
-		writeError(w, err.Error(), 401)
+		writeError(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
 
-	// Extract the transfer ID from the request.
+	// extract the transfer ID from the request
 	vars := mux.Vars(r)
 	xferId, err := uuid.Parse(vars["id"])
 	if err != nil {
-		errStr := fmt.Sprintf("Invalid transfer ID: %s", xferId)
-		writeError(w, errStr, 400)
+		writeError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	// fetch the status for the job using the appropriate task data
 	status, err := tasks.Status(xferId)
 	if err != nil {
-		errCode := 500
+		errCode := http.StatusInternalServerError
 		if strings.Contains(err.Error(), "not found") {
-			errCode = 404
+			errCode = http.StatusNotFound
 		}
 		writeError(w, err.Error(), errCode)
 		return
@@ -382,7 +385,45 @@ func (service *prototype) getTransferStatus(w http.ResponseWriter,
 		NumFilesTransferred: status.NumFilesTransferred,
 	}
 	jsonData, _ := json.Marshal(resp)
-	writeJson(w, jsonData)
+	writeJson(w, jsonData, http.StatusOK)
+}
+
+// handler method for deleting (canceling) an existing transfer
+func (service *prototype) deleteTransfer(w http.ResponseWriter,
+	r *http.Request) {
+
+	_, _, err := getAuthInfo(r.Header)
+	if err != nil {
+		log.Print(err.Error())
+		writeError(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	// extract the transfer ID from the request
+	vars := mux.Vars(r)
+	xferId, err := uuid.Parse(vars["id"])
+	if err != nil {
+		writeError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// try to cancel it
+	status, err := tasks.Cancel(xferId)
+	if err != nil {
+		errCode := http.StatusInternalServerError
+		if strings.Contains(err.Error(), "not found") {
+			errCode = http.StatusNotFound
+		}
+		writeError(w, err.Error(), errCode)
+		return
+	}
+	// check the status and return the appropriate code
+	code := http.StatusAccepted
+	if status.Code == core.TransferStatusSucceeded ||
+		status.Code == core.TransferStatusFailed {
+		code = http.StatusOK
+	}
+	writeJson(w, nil, code)
 }
 
 // returns the uptime for the service in seconds
@@ -432,7 +473,7 @@ func NewDTSPrototype() (TransferService, error) {
 	api_v1.HandleFunc("/files", service.searchDatabase).Methods("GET")
 	api_v1.HandleFunc("/transfers", service.createTransfer).Methods("POST")
 	api_v1.HandleFunc("/transfers/{id}", service.getTransferStatus).Methods("GET")
-	// TODO: add DELETE mechanism for /transfers/{id}
+	api_v1.HandleFunc("/transfers/{id}", service.deleteTransfer).Methods("POST")
 	service.Router = r
 
 	return service, nil

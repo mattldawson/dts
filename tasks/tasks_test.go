@@ -175,7 +175,7 @@ func (t *SerialTests) TestStartAndStop() {
 }
 
 // test adding a task
-func (t *SerialTests) TestAddTask() {
+func (t *SerialTests) TestCreateTask() {
 	assert := assert.New(t.Test)
 
 	err := Start()
@@ -186,7 +186,7 @@ func (t *SerialTests) TestAddTask() {
 
 	// queue up a transfer task between two phony databases
 	orcid := "1234-5678-9012-3456"
-	taskId, err := Add(orcid, "source", "destination", []string{"file1", "file2"})
+	taskId, err := Create(orcid, "source", "destination", []string{"file1", "file2"})
 	assert.Nil(err)
 	assert.True(taskId != uuid.UUID{})
 
@@ -243,7 +243,7 @@ func (t *SerialTests) TestStopAndRestart() {
 	numTasks := 10
 	taskIds := make([]uuid.UUID, numTasks)
 	for i := 0; i < numTasks; i++ {
-		taskId, _ := Add(orcid, "source", "destination", []string{"file1", "file2"})
+		taskId, _ := Create(orcid, "source", "destination", []string{"file1", "file2"})
 		taskIds[i] = taskId
 	}
 	time.Sleep(100 * time.Millisecond) // let things settle
@@ -266,7 +266,7 @@ func (t *SerialTests) TestStopAndRestart() {
 func TestRunner(t *testing.T) {
 	tester := SerialTests{Test: t}
 	tester.TestStartAndStop()
-	tester.TestAddTask()
+	tester.TestCreateTask()
 	tester.TestStopAndRestart()
 }
 

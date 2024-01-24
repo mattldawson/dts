@@ -1,7 +1,6 @@
 package jdp
 
 import (
-	"log/slog"
 	"os"
 	"testing"
 
@@ -9,6 +8,7 @@ import (
 
 	"github.com/kbase/dts/config"
 	"github.com/kbase/dts/core"
+	"github.com/kbase/dts/dtstest"
 )
 
 const jdpConfig string = `
@@ -33,8 +33,7 @@ endpoints:
 
 // this function gets called at the begіnning of a test session
 func setup() {
-	logLevel := new(slog.LevelVar)
-	logLevel.Set(slog.LevelDebug)
+	dtstest.EnableDebugLogging()
 	config.Init([]byte(jdpConfig))
 }
 

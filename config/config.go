@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -32,14 +33,22 @@ import (
 // a type with service configuration parameters
 type serviceConfig struct {
 	// port on which the service listens
-	Port int `json:"port" yaml:"port"`
+	Port int `json:"port,omitempty" yaml:"port,omitempty"`
 	// maximum number of allowed incoming connections
-	MaxConnections int `json:"max_connections" yaml:"max_connections"`
-	// polling interval for checking transfer statuses (seconds)
+	// default: 100
+	MaxConnections int `json:"max_connections,omitempty" yaml:"max_connections,omitempty"`
+	// polling interval for checking transfer statuses (milliseconds)
+	// default: 1 minute
 	PollInterval int `json:"poll_interval" yaml:"poll_interval"`
 	// name of endpoint with access to local filesystem
 	// (for generating and transferring manifests)
 	Endpoint string `json:"endpoint" yaml:"endpoint"`
+	// name of existing directory in which DTS can store persistent data
+	// default: none (persistent storage disabled)
+	DataDirectory string `json:"data_dir,omitempty" yaml:"data_dir,omitempty"`
+	// time after which information about a completed transfer is deleted (seconds)
+	// default: 7 days
+	DeleteAfter int `json:"delete_after" yaml:"delete_after"`
 }
 
 // global config variables
@@ -67,14 +76,15 @@ func readConfig(bytes []byte) error {
 	var conf configFile
 	conf.Service.Port = 8080
 	conf.Service.MaxConnections = 100
-	conf.Service.PollInterval = 60000
+	conf.Service.PollInterval = int(time.Minute / time.Millisecond)
+	conf.Service.DeleteAfter = 7 * 24 * 3600
 	err := yaml.Unmarshal(bytes, &conf)
 	if err != nil {
 		log.Printf("Couldn't parse configuration data: %s\n", err)
 		return err
 	}
 
-	// copy the config data into place
+	// copy the config data into place, performing any needed conversions
 	Service = conf.Service
 	Endpoints = conf.Endpoints
 	Databases = conf.Databases
@@ -95,6 +105,14 @@ func validateServiceParameters(params serviceConfig) error {
 		if _, endpointFound := Endpoints[params.Endpoint]; !endpointFound {
 			return fmt.Errorf("Invalid service endpoint: %s", params.Endpoint)
 		}
+	}
+	if params.PollInterval <= 0 {
+		return fmt.Errorf("Non-positive poll interval specified: (%d s)",
+			params.PollInterval)
+	}
+	if params.DeleteAfter <= 0 {
+		return fmt.Errorf("Non-positive task deletion period specified: (%d h)",
+			params.DeleteAfter)
 	}
 	return nil
 }

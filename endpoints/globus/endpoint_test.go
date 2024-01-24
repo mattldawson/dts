@@ -33,6 +33,7 @@ import (
 
 	"github.com/kbase/dts/config"
 	"github.com/kbase/dts/core"
+	"github.com/kbase/dts/dtstest"
 )
 
 // we test our Globus endpoint implementation using two endpoints:
@@ -80,6 +81,8 @@ endpoints:
 
 // this function gets called at the begіnning of a test session
 func setup() {
+	dtstest.EnableDebugLogging()
+
 	if _, ok := os.LookupEnv("DTS_GLOBUS_TEST_ENDPOINT"); !ok {
 		panic("DTS_GLOBUS_TEST_ENDPOINT environment variable must be set!")
 	}

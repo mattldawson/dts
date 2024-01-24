@@ -25,6 +25,7 @@ import (
 	"github.com/kbase/dts/config"
 	"github.com/kbase/dts/core"
 	"github.com/kbase/dts/databases"
+	"github.com/kbase/dts/dtstest"
 	"github.com/kbase/dts/endpoints"
 )
 
@@ -52,6 +53,8 @@ service:
   port: 8080
   max_connections: 100
   poll_interval: 100
+  data_dir: TESTING_DIR/data
+  delete_after: 24
   endpoint: local-endpoint
 databases:
   source:
@@ -165,6 +168,8 @@ func (db *testDatabase) LocalUser(orcid string) (string, error) {
 
 // performs testing setup
 func setup() {
+	dtstest.EnableDebugLogging()
+
 	// jot down our CWD, create a temporary directory, and change to it
 	var err error
 	CWD, err = os.Getwd()
@@ -207,6 +212,9 @@ func setup() {
 	if err != nil {
 		log.Panicf("Couldn't initialize configuration: %s", err)
 	}
+
+	// create the DTS data directory
+	os.Mkdir(config.Service.DataDirectory, 0755)
 
 	// Start the service.
 	log.Print("Starting test mapping service...\n")

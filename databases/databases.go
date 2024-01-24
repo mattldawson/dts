@@ -29,6 +29,15 @@ import (
 	"github.com/kbase/dts/databases/kbase"
 )
 
+// This error type is returned when a database is sought but not found.
+type NotFoundError struct {
+	dbName string
+}
+
+func (e NotFoundError) Error() string {
+	return fmt.Sprintf("The database '%s' was not found.", e.dbName)
+}
+
 // we maintain a table of database instances, identified by their names
 var allDatabases = make(map[string]core.Database)
 
@@ -68,10 +77,10 @@ func NewDatabase(orcid, dbName string) (core.Database, error) {
 		if createDb, valid := createDatabaseFuncs[dbName]; valid {
 			db, err = createDb(orcid)
 		} else {
-			err = fmt.Errorf("Unknown database type for '%s'", dbName)
+			err = NotFoundError{dbName}
 		}
 		if err == nil {
-			allDatabases[dbName] = db // stash it
+			allDatabases[key] = db // stash it
 		}
 	}
 	return db, err

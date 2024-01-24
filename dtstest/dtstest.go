@@ -19,14 +19,18 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package config
+// This package contains testing utilities for the Data Transfer System.
+package dtstest
 
-// A database provides files for a file transfer (at its source or destination).
-type databaseConfig struct {
-	// the full name of the database
-	Name string `yaml:"name"`
-	// the name of the organization hosting the database
-	Organization string `yaml:"organization"`
-	// the name of an endpoint for this database
-	Endpoint string `yaml:"endpoint"`
+import (
+	"log/slog"
+	"os"
+)
+
+// Enables DEBUG log messages for DTS's structured log (slog).
+func EnableDebugLogging() {
+	logLevel := new(slog.LevelVar)
+	logLevel.Set(slog.LevelDebug)
+	h := slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel})
+	slog.SetDefault(slog.New(h))
 }

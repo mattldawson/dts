@@ -407,23 +407,16 @@ func (service *prototype) deleteTransfer(w http.ResponseWriter,
 		return
 	}
 
-	// try to cancel it
-	status, err := tasks.Cancel(xferId)
+	// request that the task be canceled
+	err = tasks.Cancel(xferId)
 	if err != nil {
-		errCode := http.StatusInternalServerError
-		if strings.Contains(err.Error(), "not found") {
-			errCode = http.StatusNotFound
-		}
-		writeError(w, err.Error(), errCode)
+		writeError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	// check the status and return the appropriate code
-	code := http.StatusAccepted
-	if status.Code == core.TransferStatusSucceeded ||
-		status.Code == core.TransferStatusFailed {
-		code = http.StatusOK
-	}
-	writeJson(w, nil, code)
+
+	// at this point, all we can say is that the cancellation request
+	// has been accepted
+	writeJson(w, nil, http.StatusAccepted)
 }
 
 // returns the uptime for the service in seconds

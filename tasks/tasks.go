@@ -443,7 +443,6 @@ func processTasks() {
 			if task, found := tasks[taskId]; found {
 				slog.Info(fmt.Sprintf("Task %s: received cancellation request", taskId.String()))
 				task.Cancel()
-				returnTaskStatusChan <- task.Status
 			} else {
 				err := fmt.Errorf("Task %s not found!", taskId.String())
 				errorChan <- err
@@ -664,15 +663,14 @@ func Status(taskId uuid.UUID) (TransferStatus, error) {
 	return status, err
 }
 
-// Cancels or attempts to cancel a task UUID, returning its status (or a non-nil
-// error indicating any issues encountered).
-func Cancel(taskId uuid.UUID) (TransferStatus, error) {
-	var status TransferStatus
+// Requests that the task with the given UUID be canceled. Clients should check
+// the status of the task separately.
+func Cancel(taskId uuid.UUID) error {
 	var err error
 	taskChannels.CancelTask <- taskId
-	select {
-	case status = <-taskChannels.ReturnTaskStatus:
+	select { // default block provides non-blocking error check
 	case err = <-taskChannels.Error:
+	default:
 	}
-	return status, err
+	return err
 }

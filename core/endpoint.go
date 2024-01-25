@@ -73,6 +73,7 @@ type Endpoint interface {
 	Transfer(dst Endpoint, files []FileTransfer) (uuid.UUID, error)
 	// retrieves the status for a transfer task identified by its UUID
 	Status(id uuid.UUID) (TransferStatus, error)
-	// cancels the transfer task with the given UUID
+	// cancels the transfer task with the given UUID (must return immediately,
+	// even if an asynchronous cancellation has not been processed)
 	Cancel(id uuid.UUID) error
 }

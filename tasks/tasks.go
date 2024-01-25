@@ -101,6 +101,30 @@ func (task *taskType) start() error {
 	return nil
 }
 
+// updates the status of a canceled task depending on where it is in its
+// lifecycle
+func (task *taskType) checkCancellation() error {
+	if task.Transfer.Valid {
+		// the task's status is the same as its transfer status
+		source, err := databases.NewDatabase(task.Orcid, task.Source)
+		if err != nil {
+			return err
+		}
+		endpoint, err := source.Endpoint()
+		if err != nil {
+			return err
+		}
+		task.Status, err = endpoint.Status(task.Id)
+	} else {
+		// at any other point in the lifecycle, cut and run
+		task.Status.Code = TransferStatusFailed
+	}
+	if task.Completed() {
+		task.CompletionTime = time.Now()
+	}
+	return nil
+}
+
 // checks whether files for a task are finished staging and, if so,
 // initiates the transfer process
 func (task *taskType) checkStaging() error {
@@ -285,29 +309,12 @@ func (task *taskType) Completed() bool {
 		task.Status.Code == TransferStatusFailed
 }
 
-// this function updates the state of a task, setting its status as necessary
-func (task *taskType) Update() error {
-	var err error
-	if task.Resources == nil { // new task!
-		err = task.start()
-	} else if task.Staging.Valid { // we're staging
-		err = task.checkStaging()
-	} else if task.Transfer.Valid { // we're transferring
-		err = task.checkTransfer()
-	} else if task.Manifest.Valid { // we're generating/sending a manifest
-		err = task.checkManifest()
-	}
-	return err
-}
-
-// called asynchrously, this function requests the cancellation of the task,
-// monitoring its progress (errors are logged, not propagated)
+// requests that the task be cancelled
 func (task *taskType) Cancel() {
-	var endpoint core.Endpoint
-
-	task.Canceled = true // mark as canceled to avoid normal updates
+	task.Canceled = true // mark as canceled
 
 	// fetch the source endpoint
+	var endpoint core.Endpoint
 	source, err := databases.NewDatabase(task.Orcid, task.Source)
 	if err != nil {
 		goto errorOccurred
@@ -317,31 +324,32 @@ func (task *taskType) Cancel() {
 		goto errorOccurred
 	}
 
-	// try to cancel the task (this can take some time, depending on
-	// the endpoint)
+	// request that the task be canceled
 	err = endpoint.Cancel(task.Id)
 	if err != nil {
 		goto errorOccurred
 	}
-
-	// wait for the thing to complete
-	task.Status, err = endpoint.Status(task.Id)
-	if err != nil {
-		goto errorOccurred
-	}
-	for !task.Completed() {
-		time.Sleep(1 * time.Second)
-		task.Status, err = endpoint.Status(task.Id)
-		if err != nil {
-			goto errorOccurred
-		}
-	}
-	task.CompletionTime = time.Now()
 	return
-
 errorOccurred:
 	slog.Error(fmt.Sprintf("Task %s: error in cancellation: %s",
 		task.Id, err.Error()))
+}
+
+// this function updates the state of a task, setting its status as necessary
+func (task *taskType) Update() error {
+	var err error
+	if task.Resources == nil { // new task!
+		err = task.start()
+	} else if task.Canceled { // cancellation requested
+		err = task.checkCancellation()
+	} else if task.Staging.Valid { // we're staging
+		err = task.checkStaging()
+	} else if task.Transfer.Valid { // we're transferring
+		err = task.checkTransfer()
+	} else if task.Manifest.Valid { // we're generating/sending a manifest
+		err = task.checkManifest()
+	}
+	return err
 }
 
 // loads a map of task IDs to tasks from a previously saved file if available,
@@ -434,7 +442,7 @@ func processTasks() {
 		case taskId := <-cancelTaskChan: // Cancel() called
 			if task, found := tasks[taskId]; found {
 				slog.Info(fmt.Sprintf("Task %s: received cancellation request", taskId.String()))
-				go task.Cancel() // asynchronously request cancellation
+				task.Cancel()
 				returnTaskStatusChan <- task.Status
 			} else {
 				err := fmt.Errorf("Task %s not found!", taskId.String())
@@ -449,7 +457,7 @@ func processTasks() {
 			}
 		case <-pollChan: // time to move things along
 			for taskId, task := range tasks {
-				if !task.Completed() && !task.Canceled {
+				if !task.Completed() {
 					oldStatus := task.Status
 					err := task.Update()
 					if err != nil {

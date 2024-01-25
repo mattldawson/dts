@@ -31,6 +31,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -490,33 +491,37 @@ func (ep *Endpoint) Status(id uuid.UUID) (core.TransferStatus, error) {
 }
 
 func (ep *Endpoint) Cancel(id uuid.UUID) error {
-	// https://docs.globus.org/api/transfer/task/#cancel_task_by_id
-	resource := fmt.Sprintf("task/%s/cancel", id.String())
-	resp, err := ep.post(resource, nil)
-	if err != nil {
+	// Because cancellation requests can't be honored under all circumstances,
+	// this Globus call is asynchronous. Nevertheless, the Globus documentation
+	// (https://docs.globus.org/api/transfer/task/#cancel_task_by_id) claims the
+	// call can take up to 10 seconds before returning, which doesn't meet the
+	// needs of the DTS. The possible outcomes of the call are identified with
+	// these response codes:
+	// 1. "Canceled", indicating that the task has been canceled
+	// 2. "CancelAccepted", indicating that the cancellation request has been
+	//    acknowledged but not yet processed
+	// 3. "TaskComplete", indicating that the task is complete and not able to
+	//    be canceled.
+	//
+	// To avoid a 10-second wait, we simply issue a request asynchronously and
+	// settle for a "best-effort" execution, which (it seems to me) is just a less
+	// elaborate framing of what Globus gives us.
+
+	errChan := make(chan error, 1) // <-- captures immediately issued errors
+	go func() {
+		resource := fmt.Sprintf("task/%s/cancel", id.String())
+		_, err := ep.post(resource, nil) // can take up to 10 ѕeconds!
+		if err != nil {
+			errChan <- err
+			return
+		}
+		// no need to read the response--just close the error channel
+		close(errChan)
+	}()
+	select {
+	case err := <-errChan: // error received!
 		return err
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-	type TaskResponse struct {
-		Code      string `json:"code"`
-		Message   string `json:"message"`
-		RequeѕtId string `json:"request_id"`
-		Resource  string `json:"resource"`
-	}
-	var response TaskResponse
-	err = json.Unmarshal(body, &response)
-	if err != nil {
-		return err
-	}
-	switch response.Code {
-	case "Canceled", "CancelAccepted", "TaskComplete":
+	case <-time.After(10 * time.Millisecond): // short timeout period
 		return nil
-	default:
-		return fmt.Errorf("Task %s could not be canceled (%s)", id.String(),
-			response.Message)
 	}
 }

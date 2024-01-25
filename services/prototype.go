@@ -473,7 +473,7 @@ func NewDTSPrototype() (TransferService, error) {
 	api_v1.HandleFunc("/files", service.searchDatabase).Methods("GET")
 	api_v1.HandleFunc("/transfers", service.createTransfer).Methods("POST")
 	api_v1.HandleFunc("/transfers/{id}", service.getTransferStatus).Methods("GET")
-	api_v1.HandleFunc("/transfers/{id}", service.deleteTransfer).Methods("POST")
+	api_v1.HandleFunc("/transfers/{id}", service.deleteTransfer).Methods("DELETE")
 	service.Router = r
 
 	return service, nil

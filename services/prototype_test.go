@@ -41,9 +41,12 @@ var (
 	apiPrefix = "api/v1/"
 )
 
-var testUser string = "testuser"
-var sourceRoot string
-var destinationRoot string
+var (
+	testUser         = "testuser"
+	sourceRoot       string
+	destination1Root string
+	destination2Root string
+)
 
 // service instance
 var service TransferService
@@ -61,10 +64,14 @@ databases:
     name: Source Test Database
     organization: The Source Company
     endpoint: source-endpoint
-  destination:
-    name: Destination Test Database
+  destination1:
+    name: Destination Test Database 1
     organization: Fabulous Destinations, Inc.
-    endpoint: destination-endpoint
+    endpoint: destination-endpoint1
+  destination2:
+    name: Destination Test Database 2
+    organization: Fabulous Destinations, Inc.
+    endpoint: destination-endpoint2
 endpoints:
   local-endpoint:
     name: Local endpoint
@@ -76,11 +83,16 @@ endpoints:
     id: 26d61236-39f6-4742-a374-8ec709347f2f
     provider: local
     root: SOURCE_ROOT
-  destination-endpoint:
+  destination-endpoint1:
     name: Endpoint 2
     id: f1865b86-2c64-4b8b-99f3-5aaa945ec3d9
     provider: local
-    root: DESTINATION_ROOT
+    root: DESTINATION1_ROOT
+  destination-endpoint2:
+    name: Endpoint 3
+    id: f1865b86-2c64-4b8b-99f3-5aaa945ec3d9
+    provider: local
+    root: DESTINATION2_ROOT
 `
 
 //===============================
@@ -100,11 +112,19 @@ func newSourceTestDatabase(orcid string) (core.Database, error) {
 	}, err
 }
 
-func newDestinationTestDatabase(orcid string) (core.Database, error) {
-	ep, err := endpoints.NewEndpoint("destination-endpoint")
+func newDestination1TestDatabase(orcid string) (core.Database, error) {
+	ep, err := endpoints.NewEndpoint("destination-endpoint1")
 	return &testDatabase{
 		endpoint: ep,
-		rootDir:  destinationRoot,
+		rootDir:  destination1Root,
+	}, err
+}
+
+func newDestination2TestDatabase(orcid string) (core.Database, error) {
+	ep, err := endpoints.NewEndpoint("destination-endpoint2")
+	return &testDatabase{
+		endpoint: ep,
+		rootDir:  destination2Root,
 	}, err
 }
 
@@ -189,10 +209,13 @@ func setup() {
 	if err != nil {
 		log.Panicf("Couldn't create source directory: %s", err)
 	}
-	destinationRoot = filepath.Join(TESTING_DIR, "destination")
-	err = os.Mkdir(destinationRoot, 0700)
-	if err != nil {
-		log.Panicf("Couldn't create destination directory: %s", err)
+	destination1Root = filepath.Join(TESTING_DIR, "destination1")
+	destination2Root = filepath.Join(TESTING_DIR, "destination2")
+	for _, destinationDir := range []string{destination1Root, destination2Root} {
+		err = os.Mkdir(destinationDir, 0700)
+		if err != nil {
+			log.Panicf("Couldn't create destination directory: %s", err)
+		}
 	}
 	// create source files
 	for i := 1; i <= 3; i++ {
@@ -204,9 +227,10 @@ func setup() {
 		}
 	}
 
-	// read in the config file with SOURCE_ROOT and DESTINATION_ROOT replaced
+	// read in the config file with SOURCE_ROOT and DESTINATION?_ROOT replaced
 	myConfig := strings.ReplaceAll(dtsConfig, "SOURCE_ROOT", sourceRoot)
-	myConfig = strings.ReplaceAll(myConfig, "DESTINATION_ROOT", destinationRoot)
+	myConfig = strings.ReplaceAll(myConfig, "DESTINATION1_ROOT", destination1Root)
+	myConfig = strings.ReplaceAll(myConfig, "DESTINATION2_ROOT", destination2Root)
 	myConfig = strings.ReplaceAll(myConfig, "TESTING_DIR", TESTING_DIR)
 	err = config.Init([]byte(myConfig))
 	if err != nil {
@@ -224,7 +248,8 @@ func setup() {
 			log.Panicf("Couldn't construct the service: %s", err.Error())
 		}
 		databases.RegisterDatabase("source", newSourceTestDatabase)
-		databases.RegisterDatabase("destination", newDestinationTestDatabase)
+		databases.RegisterDatabase("destination1", newDestination1TestDatabase)
+		databases.RegisterDatabase("destination2", newDestination2TestDatabase)
 		err = service.Start(config.Service.Port)
 		if err != nil {
 			log.Panicf("Couldn't start search service: %s", err.Error())
@@ -280,6 +305,19 @@ func post(resource string, body io.Reader) (*http.Response, error) {
 	return http.DefaultClient.Do(req)
 }
 
+// sends a DELETE query with well-formed headers
+func delete_(resource string) (*http.Response, error) {
+	req, err := http.NewRequest(http.MethodDelete, resource, http.NoBody)
+	if err != nil {
+		return nil, err
+	}
+	accessToken := os.Getenv("DTS_KBASE_DEV_TOKEN")
+	b64Token := base64.StdEncoding.EncodeToString([]byte(accessToken))
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", b64Token))
+	req.Header.Add("Content-Type", "application/json")
+	return http.DefaultClient.Do(req)
+}
+
 // queries the service's root endpoint
 func TestQueryRoot(t *testing.T) {
 	assert := assert.New(t)
@@ -312,7 +350,7 @@ func TestQueryDatabases(t *testing.T) {
 	var dbs []dbMetadata
 	err = json.Unmarshal(respBody, &dbs)
 	assert.Nil(err)
-	assert.Equal(2, len(dbs))
+	assert.Equal(3, len(dbs))
 	slices.SortFunc(dbs, func(a, b dbMetadata) int { // sort alphabetically
 		if a.Id < b.Id {
 			return -1
@@ -323,13 +361,17 @@ func TestQueryDatabases(t *testing.T) {
 		}
 	})
 
-	assert.Equal("destination", dbs[0].Id)
-	assert.Equal("Destination Test Database", dbs[0].Name)
+	assert.Equal("destination1", dbs[0].Id)
+	assert.Equal("Destination Test Database 1", dbs[0].Name)
 	assert.Equal("Fabulous Destinations, Inc.", dbs[0].Organization)
 
-	assert.Equal("source", dbs[1].Id)
-	assert.Equal("Source Test Database", dbs[1].Name)
-	assert.Equal("The Source Company", dbs[1].Organization)
+	assert.Equal("destination2", dbs[1].Id)
+	assert.Equal("Destination Test Database 2", dbs[1].Name)
+	assert.Equal("Fabulous Destinations, Inc.", dbs[1].Organization)
+
+	assert.Equal("source", dbs[2].Id)
+	assert.Equal("Source Test Database", dbs[2].Name)
+	assert.Equal("The Source Company", dbs[2].Organization)
 }
 
 // queries a specific (valid) database
@@ -382,7 +424,7 @@ func TestSearchDatabase(t *testing.T) {
 	assert.Equal("file1", results.Resources[0].Name)
 }
 
-// creates a transfer for our test files
+// creates a transfer from source -> destination1
 func TestCreateTransfer(t *testing.T) {
 	assert := assert.New(t)
 
@@ -390,7 +432,7 @@ func TestCreateTransfer(t *testing.T) {
 	payload, err := json.Marshal(TransferRequest{
 		Source:      "source",
 		FileIds:     []string{"1", "2", "3"},
-		Destination: "destination",
+		Destination: "destination1",
 	})
 	resp, err := post(baseUrl+apiPrefix+"transfers", bytes.NewReader(payload))
 	assert.Nil(err)
@@ -435,8 +477,76 @@ func TestCreateTransfer(t *testing.T) {
 	// FIXME: user-specific and task-specific folder. We need to formalize this.
 	username := testUser
 	for _, file := range []string{"file1.txt", "file2.txt", "file3.txt", "manifest.json"} {
-		_, err := os.Stat(filepath.Join(destinationRoot, username, xferId.String(), file))
+		_, err := os.Stat(filepath.Join(destination1Root, username, xferId.String(), file))
 		assert.Nil(err)
+	}
+}
+
+// creates a transfer from source -> destination2 and then cancels it
+func TestCreateAndCancelTransfer(t *testing.T) {
+	assert := assert.New(t)
+
+	// request a transfer of file1.txt, file2.txt, and file3.txt
+	payload, err := json.Marshal(TransferRequest{
+		Source:      "source",
+		FileIds:     []string{"1", "2", "3"},
+		Destination: "destination2",
+	})
+	resp, err := post(baseUrl+apiPrefix+"transfers", bytes.NewReader(payload))
+	assert.Nil(err)
+	assert.Equal(http.StatusCreated, resp.StatusCode)
+	defer resp.Body.Close()
+	var body []byte
+	body, err = io.ReadAll(resp.Body)
+	assert.Nil(err)
+	var xferResp TransferResponse
+	err = json.Unmarshal(body, &xferResp)
+	assert.Nil(err)
+	xferId := xferResp.Id
+
+	// these are functions for querying and canceling the transfer
+	queryTransfer := func() (TransferStatusResponse, error) {
+		var statusResp TransferStatusResponse
+		resp, err := get(baseUrl + apiPrefix + fmt.Sprintf("transfers/%s", xferId.String()))
+		if err != nil {
+			return statusResp, err
+		}
+		assert.Equal(http.StatusOK, resp.StatusCode)
+		var body []byte
+		body, err = io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return statusResp, err
+		}
+		err = json.Unmarshal(body, &statusResp)
+		return statusResp, err
+	}
+	cancelTransfer := func() error {
+		resp, err := delete_(baseUrl + apiPrefix + fmt.Sprintf("transfers/%s", xferId.String()))
+		if err != nil {
+			return err
+		}
+		assert.Equal(http.StatusAccepted, resp.StatusCode)
+		return err
+	}
+
+	// get the transfer status
+	status, err := queryTransfer()
+	assert.Nil(err)
+	assert.True(status.Status != "failed")
+
+	// cancel the transfer
+	err = cancelTransfer()
+
+	// wait for the transfer to finish or be canceled
+	status, err = queryTransfer()
+	assert.Nil(err)
+	for {
+		if status.Status == "succeeded" || status.Status == "failed" {
+			break
+		}
+		time.Sleep(600 * time.Millisecond)
+		status, err = queryTransfer()
 	}
 }
 

@@ -309,7 +309,7 @@ func (task *taskType) Completed() bool {
 		task.Status.Code == TransferStatusFailed
 }
 
-// requests that the task be cancelled
+// requests that the task be canceled
 func (task *taskType) Cancel() {
 	task.Canceled = true // mark as canceled
 

@@ -250,10 +250,11 @@ func (t *SerialTests) TestCancelTask() {
 	assert.Nil(err)
 
 	// cancel the thing
-	status, err := Cancel(taskId)
+	err = Cancel(taskId)
 	assert.Nil(err)
 
 	// wait for the task to complete
+	status, err := Status(taskId)
 	for {
 		if status.Code == TransferStatusSucceeded ||
 			status.Code == TransferStatusFailed {

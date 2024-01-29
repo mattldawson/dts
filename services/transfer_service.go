@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/kbase/dts/core"
+	"github.com/kbase/dts/frictionless"
 )
 
 // This package-specific helper function writes a JSON payload to an
@@ -64,7 +64,7 @@ type ElasticSearchResponse struct {
 	// ElasticSearch query string
 	Query string `json:"query"`
 	// Resources matching the query
-	Resources []core.DataResource `json:"resources"`
+	Resources []frictionless.DataResource `json:"resources"`
 }
 
 // a request for a file transfer (POST)

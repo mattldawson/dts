@@ -23,10 +23,10 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/kbase/dts/config"
-	"github.com/kbase/dts/core"
 	"github.com/kbase/dts/databases"
 	"github.com/kbase/dts/dtstest"
 	"github.com/kbase/dts/endpoints"
+	"github.com/kbase/dts/frictionless"
 )
 
 // working directory from which the tests were invoked
@@ -100,11 +100,11 @@ endpoints:
 //===============================
 
 type testDatabase struct {
-	endpoint core.Endpoint
+	endpoint endpoints.Endpoint
 	rootDir  string
 }
 
-func newSourceTestDatabase(orcid string) (core.Database, error) {
+func newSourceTestDatabase(orcid string) (databases.Database, error) {
 	ep, err := endpoints.NewEndpoint("source-endpoint")
 	return &testDatabase{
 		endpoint: ep,
@@ -112,7 +112,7 @@ func newSourceTestDatabase(orcid string) (core.Database, error) {
 	}, err
 }
 
-func newDestination1TestDatabase(orcid string) (core.Database, error) {
+func newDestination1TestDatabase(orcid string) (databases.Database, error) {
 	ep, err := endpoints.NewEndpoint("destination-endpoint1")
 	return &testDatabase{
 		endpoint: ep,
@@ -120,7 +120,7 @@ func newDestination1TestDatabase(orcid string) (core.Database, error) {
 	}, err
 }
 
-func newDestination2TestDatabase(orcid string) (core.Database, error) {
+func newDestination2TestDatabase(orcid string) (databases.Database, error) {
 	ep, err := endpoints.NewEndpoint("destination-endpoint2")
 	return &testDatabase{
 		endpoint: ep,
@@ -128,12 +128,12 @@ func newDestination2TestDatabase(orcid string) (core.Database, error) {
 	}, err
 }
 
-func (db *testDatabase) Search(params core.SearchParameters) (core.SearchResults, error) {
+func (db *testDatabase) Search(params databases.SearchParameters) (databases.SearchResults, error) {
 	// the test database returns the query as the file ID for IDs "1", "2", and "3".
 	if params.Query == "1" || params.Query == "2" || params.Query == "3" {
-		return core.SearchResults{
-			Resources: []core.DataResource{
-				core.DataResource{
+		return databases.SearchResults{
+			Resources: []frictionless.DataResource{
+				frictionless.DataResource{
 					Id:        params.Query,
 					Name:      fmt.Sprintf("file%s", params.Query),
 					Path:      fmt.Sprintf("file%s.txt", params.Query),
@@ -144,15 +144,15 @@ func (db *testDatabase) Search(params core.SearchParameters) (core.SearchResults
 			},
 		}, nil
 	} else {
-		return core.SearchResults{}, nil
+		return databases.SearchResults{}, nil
 	}
 }
 
-func (db *testDatabase) Resources(fileIds []string) ([]core.DataResource, error) {
-	results := make([]core.DataResource, 0)
+func (db *testDatabase) Resources(fileIds []string) ([]frictionless.DataResource, error) {
+	results := make([]frictionless.DataResource, 0)
 	for _, id := range fileIds {
 		if id == "1" || id == "2" || id == "3" {
-			results = append(results, core.DataResource{
+			results = append(results, frictionless.DataResource{
 				Id:        id,
 				Name:      fmt.Sprintf("file%s", id),
 				Path:      fmt.Sprintf("file%s.txt", id),
@@ -173,12 +173,12 @@ func (db *testDatabase) StageFiles(fileIds []string) (uuid.UUID, error) {
 	return uuid.NewUUID()
 }
 
-func (db *testDatabase) StagingStatus(stagingId uuid.UUID) (core.StagingStatus, error) {
+func (db *testDatabase) StagingStatus(stagingId uuid.UUID) (databases.StagingStatus, error) {
 	// the files are already in place, so staging has always "succeeded".
-	return core.StagingStatusSucceeded, nil
+	return databases.StagingStatusSucceeded, nil
 }
 
-func (db *testDatabase) Endpoint() (core.Endpoint, error) {
+func (db *testDatabase) Endpoint() (endpoints.Endpoint, error) {
 	return db.endpoint, nil
 }
 
@@ -333,7 +333,7 @@ func TestQueryRoot(t *testing.T) {
 	err = json.Unmarshal(respBody, &root)
 	assert.Nil(err)
 	assert.Equal("DTS prototype", root.Name)
-	assert.Equal(core.Version, root.Version)
+	assert.Equal(version, root.Version)
 }
 
 // queries the service's databases endpoint

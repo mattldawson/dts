@@ -34,28 +34,32 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/kbase/dts/config"
-	"github.com/kbase/dts/core"
 	"github.com/kbase/dts/databases"
+	"github.com/kbase/dts/databases/jdp"
+	"github.com/kbase/dts/databases/kbase"
 	"github.com/kbase/dts/endpoints"
+	"github.com/kbase/dts/endpoints/globus"
+	"github.com/kbase/dts/endpoints/local"
+	"github.com/kbase/dts/frictionless"
 )
 
 // useful type aliases
-type Database = core.Database
-type DataPackage = core.DataPackage
-type DataResource = core.DataResource
-type Endpoint = core.Endpoint
-type FileTransfer = core.FileTransfer
-type TransferStatus = core.TransferStatus
+type Database = databases.Database
+type DataPackage = frictionless.DataPackage
+type DataResource = frictionless.DataResource
+type Endpoint = endpoints.Endpoint
+type FileTransfer = endpoints.FileTransfer
+type TransferStatus = endpoints.TransferStatus
 
 // useful constants
 const (
-	TransferStatusUnknown    = core.TransferStatusUnknown
-	TransferStatusStaging    = core.TransferStatusStaging
-	TransferStatusActive     = core.TransferStatusActive
-	TransferStatusFailed     = core.TransferStatusFailed
-	TransferStatusFinalizing = core.TransferStatusFinalizing
-	TransferStatusInactive   = core.TransferStatusInactive
-	TransferStatusSucceeded  = core.TransferStatusSucceeded
+	TransferStatusUnknown    = endpoints.TransferStatusUnknown
+	TransferStatusStaging    = endpoints.TransferStatusStaging
+	TransferStatusActive     = endpoints.TransferStatusActive
+	TransferStatusFailed     = endpoints.TransferStatusFailed
+	TransferStatusFinalizing = endpoints.TransferStatusFinalizing
+	TransferStatusInactive   = endpoints.TransferStatusInactive
+	TransferStatusSucceeded  = endpoints.TransferStatusSucceeded
 )
 
 // this type holds multiple (possibly null) UUIDs corresponding to different
@@ -314,7 +318,7 @@ func (task *taskType) Cancel() {
 	task.Canceled = true // mark as canceled
 
 	// fetch the source endpoint
-	var endpoint core.Endpoint
+	var endpoint endpoints.Endpoint
 	source, err := databases.NewDatabase(task.Orcid, task.Source)
 	if err != nil {
 		goto errorOccurred
@@ -554,6 +558,7 @@ func validateDataDirectory(dir string) error {
 }
 
 // global variables for managing tasks
+var firstCall = true            // indicates first call to Start()
 var running bool                // true if tasks are processing, false if not
 var taskChannels channelsType   // channels used for processing tasks
 var stopHeartbeat chan struct{} // send a pulse to this channel to halt polling
@@ -563,6 +568,16 @@ var stopHeartbeat chan struct{} // send a pulse to this channel to halt polling
 func Start() error {
 	if running {
 		return fmt.Errorf("Tasks are already running and cannot be started again.")
+	}
+
+	// if this is the first call to Start(), register our built-in endpoint
+	// and database providers
+	if firstCall {
+		endpoints.RegisterEndpointProvider("globus", globus.NewEndpoint)
+		endpoints.RegisterEndpointProvider("local", local.NewEndpoint)
+		databases.RegisterDatabase("jdp", jdp.NewDatabase)
+		databases.RegisterDatabase("kbase", kbase.NewDatabase)
+		firstCall = false
 	}
 
 	// does the directory exist and is it writable/readable?

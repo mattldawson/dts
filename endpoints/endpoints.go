@@ -24,11 +24,64 @@ package endpoints
 import (
 	"fmt"
 
+	"github.com/google/uuid"
+
 	"github.com/kbase/dts/config"
-	"github.com/kbase/dts/core"
-	"github.com/kbase/dts/endpoints/globus"
-	"github.com/kbase/dts/endpoints/local"
+	"github.com/kbase/dts/frictionless"
 )
+
+// this type holds all relevant information for the transfer of an individual
+// file
+type FileTransfer struct {
+	// absolute source and destination paths on respective endpoints
+	SourcePath, DestinationPath string
+	// Hash and hash algorithm used to validate the file
+	Hash, HashAlgorithm string
+}
+
+// this "enum" type encodes the status of a file transfer between endpoints
+type TransferStatusCode int
+
+const (
+	TransferStatusUnknown    TransferStatusCode = iota
+	TransferStatusStaging                       // files being staged
+	TransferStatusActive                        // transfer in progress
+	TransferStatusInactive                      // transfer suspended
+	TransferStatusFinalizing                    // transfer manifest being generated
+	TransferStatusSucceeded                     // transfer completed successfully
+	TransferStatusFailed                        // transfer failed or was canceled
+)
+
+// this type conveys various information about a file transfer's status
+type TransferStatus struct {
+	// status code (see above)
+	Code TransferStatusCode
+	// total number of files being transferred
+	NumFiles int
+	// number of files that have been transferred
+	NumFilesTransferred int
+	// number of files that are skipped for whatever reason
+	NumFilesSkipped int
+}
+
+// This type represents an endpoint for transferring files.
+type Endpoint interface {
+	// returns the path on the file system that serves as the endpoint's root
+	Root() string
+	// returns true if the files associated with the given DataResources are
+	// staged at this endpoint AND are valid, false otherwise
+	FilesStaged(files []frictionless.DataResource) (bool, error)
+	// returns a list of UUIDs for all transfers associated with this endpoint
+	Transfers() ([]uuid.UUID, error)
+	// begins a transfer task that moves the files identified by the FileTransfer
+	// structs, returning a UUID that can be used to refer to this task.
+	Transfer(dst Endpoint, files []FileTransfer) (uuid.UUID, error)
+	// retrieves the status for a transfer task identified by its UUID
+	Status(id uuid.UUID) (TransferStatus, error)
+	// cancels the transfer task with the given UUID (must return immediately,
+	// even if an asynchronous cancellation has not been processed)
+	Cancel(id uuid.UUID) error
+}
 
 // This error type is returned when an endpoint is sought but not found.
 type NotFoundError struct {
@@ -50,14 +103,14 @@ func (e InvalidProviderError) Error() string {
 }
 
 // we maintain a table of endpoint instances, identified by their names
-var allEndpoints map[string]core.Endpoint = make(map[string]core.Endpoint)
+var allEndpoints map[string]Endpoint = make(map[string]Endpoint)
 
 // here's a table of endpoint creation functions
-var createEndpointFuncs = make(map[string]func(name string) (core.Endpoint, error))
+var createEndpointFuncs = make(map[string]func(name string) (Endpoint, error))
 
 // registers a database creation function under the given database name
 // to allow for e.g. test database implementations
-func RegisterEndpointProvider(provider string, createEp func(name string) (core.Endpoint, error)) error {
+func RegisterEndpointProvider(provider string, createEp func(name string) (Endpoint, error)) error {
 	if _, found := createEndpointFuncs[provider]; found {
 		return fmt.Errorf("Cannot register endpoint provider %s (already registered)", provider)
 	} else {
@@ -66,20 +119,11 @@ func RegisterEndpointProvider(provider string, createEp func(name string) (core.
 	}
 }
 
-var firstNewEndpointCall = true
-
 // creates an endpoint based on the configured type, or returns an existing
 // instance
-func NewEndpoint(endpointName string) (core.Endpoint, error) {
+func NewEndpoint(endpointName string) (Endpoint, error) {
 	var err error
 
-	// register our built-in endpoint providers if this is the first call to
-	// this function
-	if firstNewEndpointCall {
-		RegisterEndpointProvider("globus", globus.NewEndpoint)
-		RegisterEndpointProvider("local", local.NewEndpoint)
-		firstNewEndpointCall = false
-	}
 	// do we have one of these already?
 	endpoint, found := allEndpoints[endpointName]
 	if !found {

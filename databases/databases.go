@@ -24,10 +24,59 @@ package databases
 import (
 	"fmt"
 
-	"github.com/kbase/dts/core"
-	"github.com/kbase/dts/databases/jdp"
-	"github.com/kbase/dts/databases/kbase"
+	"github.com/google/uuid"
+
+	"github.com/kbase/dts/endpoints"
+	"github.com/kbase/dts/frictionless"
 )
+
+// parameters that define a search for files
+type SearchParameters struct {
+	// ElasticSearch query string
+	Query string
+	// pagination support
+	Pagination struct {
+		// number of search results to skip
+		Offset int
+		// maximum number of search results to include (0 indicates no max)
+		MaxNum int
+	}
+}
+
+// results from an ElasticSearch query
+type SearchResults struct {
+	Resources []frictionless.DataResource `json:"resources"`
+}
+
+// This "enum" type identifies the status of a staging operation that moves
+// files into place on a Database's endpoint.
+type StagingStatus int
+
+const (
+	StagingStatusUnknown   StagingStatus = iota // unknown staging operation or status not available
+	StagingStatusActive                         // staging in progress
+	StagingStatusSucceeded                      // staging completed successfully
+	StagingStatusFailed                         // staging failed
+)
+
+// Database defines the interface for a database that is used to search for
+// files and initiate file transfers
+type Database interface {
+	// search for files using the given parameters
+	Search(params SearchParameters) (SearchResults, error)
+	// returns a slice of Frictionless DataResources for the files with the
+	// given IDs
+	Resources(fileIds []string) ([]frictionless.DataResource, error)
+	// begins staging the files for a transfer, returning a UUID representing the
+	// staging operation
+	StageFiles(fileIds []string) (uuid.UUID, error)
+	// returns the status of a given staging operation
+	StagingStatus(id uuid.UUID) (StagingStatus, error)
+	// returns the endpoint associated with this database
+	Endpoint() (endpoints.Endpoint, error)
+	// returns the local username associated with the given Orcid ID
+	LocalUser(orcid string) (string, error)
+}
 
 // This error type is returned when a database is sought but not found.
 type NotFoundError struct {
@@ -39,14 +88,14 @@ func (e NotFoundError) Error() string {
 }
 
 // we maintain a table of database instances, identified by their names
-var allDatabases = make(map[string]core.Database)
+var allDatabases = make(map[string]Database)
 
 // here's a table of database creation functions
-var createDatabaseFuncs = make(map[string]func(name string) (core.Database, error))
+var createDatabaseFuncs = make(map[string]func(name string) (Database, error))
 
 // registers a database creation function under the given database name
 // to allow for e.g. test database implementations
-func RegisterDatabase(dbName string, createDb func(orcid string) (core.Database, error)) error {
+func RegisterDatabase(dbName string, createDb func(orcid string) (Database, error)) error {
 	if _, found := createDatabaseFuncs[dbName]; found {
 		return fmt.Errorf("Cannot register database %s (already registered)", dbName)
 	} else {
@@ -55,19 +104,10 @@ func RegisterDatabase(dbName string, createDb func(orcid string) (core.Database,
 	}
 }
 
-var firstNewDatabaseCall = true
-
 // creates a database proxy associated with the given ORCID ID, based on the
 // configured type, or returns an existing instance
-func NewDatabase(orcid, dbName string) (core.Database, error) {
+func NewDatabase(orcid, dbName string) (Database, error) {
 	var err error
-
-	// register our built-in databases if this is the first call to this function
-	if firstNewDatabaseCall {
-		RegisterDatabase("jdp", jdp.NewDatabase)
-		RegisterDatabase("kbase", kbase.NewDatabase)
-		firstNewDatabaseCall = false
-	}
 
 	// do we have one of these already?
 	key := fmt.Sprintf("orcid: %s db: %s", orcid, dbName)

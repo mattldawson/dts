@@ -32,7 +32,8 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/kbase/dts/config"
-	"github.com/kbase/dts/core"
+	"github.com/kbase/dts/endpoints"
+	"github.com/kbase/dts/frictionless"
 )
 
 var tempRoot string
@@ -144,15 +145,15 @@ func TestGlobusFilesStaged(t *testing.T) {
 	endpoint, _ := NewEndpoint("source")
 
 	// provide an empty slice of filenames, which should return true
-	staged, err := endpoint.FilesStaged([]core.DataResource{})
+	staged, err := endpoint.FilesStaged([]frictionless.DataResource{})
 	assert.True(staged)
 	assert.Nil(err)
 
 	// provide files that are known to be on the source endpoint
-	resources := make([]core.DataResource, 0)
+	resources := make([]frictionless.DataResource, 0)
 	for i := 1; i <= 3; i++ {
 		id := fmt.Sprintf("%d", i)
-		resources = append(resources, core.DataResource{
+		resources = append(resources, frictionless.DataResource{
 			Id:   id,
 			Path: sourceFilesById[id],
 		})
@@ -162,8 +163,8 @@ func TestGlobusFilesStaged(t *testing.T) {
 	assert.Nil(err)
 
 	// provide a nonexistent file, which should return false
-	resources = []core.DataResource{
-		core.DataResource{
+	resources = []frictionless.DataResource{
+		frictionless.DataResource{
 			Id:   "yadda",
 			Path: "yaddayadda/yadda/yaddayadda/yaddayaddayadda.xml",
 		},
@@ -179,11 +180,11 @@ func TestLocalTransfer(t *testing.T) {
 	source, _ := NewEndpoint("source")
 	destination, _ := NewEndpoint("destination")
 
-	fileXfers := make([]core.FileTransfer, 0)
+	fileXfers := make([]endpoints.FileTransfer, 0)
 	for i := 1; i <= 3; i++ {
 		id := fmt.Sprintf("%d", i)
 
-		fileXfers = append(fileXfers, core.FileTransfer{
+		fileXfers = append(fileXfers, endpoints.FileTransfer{
 			SourcePath:      sourceFilesById[id],
 			DestinationPath: sourceFilesById[id],
 		})
@@ -198,10 +199,10 @@ func TestBadLocalTransfer(t *testing.T) {
 	destination, _ := NewEndpoint("destination")
 
 	// ask for some nonexistent files
-	fileXfers := make([]core.FileTransfer, 0)
+	fileXfers := make([]endpoints.FileTransfer, 0)
 	for i := 1; i <= 3; i++ {
 		id := fmt.Sprintf("%d", i)
-		fileXfers = append(fileXfers, core.FileTransfer{
+		fileXfers = append(fileXfers, endpoints.FileTransfer{
 			SourcePath:      sourceFilesById[id] + "_with_bad_suffix",
 			DestinationPath: sourceFilesById[id] + "_with_bad_suffix",
 		})
@@ -217,7 +218,7 @@ func TestUnknownLocalStatus(t *testing.T) {
 	// make up a bogus transfer UUID and check its status
 	taskId := uuid.New()
 	status, err := endpoint.Status(taskId)
-	assert.Equal(core.TransferStatusUnknown, status.Code)
+	assert.Equal(endpoints.TransferStatusUnknown, status.Code)
 	assert.NotNil(err)
 }
 
@@ -227,11 +228,11 @@ func TestLocalTransferCancellation(t *testing.T) {
 	source, _ := NewEndpoint("source")
 	destination, _ := NewEndpoint("destination-cancel")
 
-	fileXfers := make([]core.FileTransfer, 0)
+	fileXfers := make([]endpoints.FileTransfer, 0)
 	for i := 1; i <= 3; i++ {
 		id := fmt.Sprintf("%d", i)
 
-		fileXfers = append(fileXfers, core.FileTransfer{
+		fileXfers = append(fileXfers, endpoints.FileTransfer{
 			SourcePath:      sourceFilesById[id],
 			DestinationPath: sourceFilesById[id],
 		})

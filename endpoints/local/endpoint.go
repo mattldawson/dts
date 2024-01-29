@@ -31,12 +31,13 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/kbase/dts/config"
-	"github.com/kbase/dts/core"
+	"github.com/kbase/dts/endpoints"
+	"github.com/kbase/dts/frictionless"
 )
 
 type xferRecord struct {
-	Status   core.TransferStatus
-	Files    []core.FileTransfer
+	Status   endpoints.TransferStatus
+	Files    []endpoints.FileTransfer
 	Canceled bool
 }
 
@@ -55,7 +56,7 @@ type Endpoint struct {
 
 // creates a new local endpoint using the information supplied in the
 // DTS configuration file under the given endpoint name
-func NewEndpoint(endpointName string) (core.Endpoint, error) {
+func NewEndpoint(endpointName string) (endpoints.Endpoint, error) {
 	epConfig, found := config.Endpoints[endpointName]
 	if !found {
 		return nil, fmt.Errorf("'%s' is not an endpoint", endpointName)
@@ -89,7 +90,7 @@ func (ep *Endpoint) Root() string {
 	return ep.root
 }
 
-func (ep *Endpoint) FilesStaged(files []core.DataResource) (bool, error) {
+func (ep *Endpoint) FilesStaged(files []frictionless.DataResource) (bool, error) {
 	for _, resource := range files {
 		absPath := filepath.Join(ep.root, resource.Path)
 		_, err := os.Stat(absPath)
@@ -104,7 +105,7 @@ func (ep *Endpoint) Transfers() ([]uuid.UUID, error) {
 	xfers := make([]uuid.UUID, 0)
 	for xferId, xfer := range ep.Xfers {
 		switch xfer.Status.Code {
-		case core.TransferStatusSucceeded, core.TransferStatusFailed:
+		case endpoints.TransferStatusSucceeded, endpoints.TransferStatusFailed:
 		default:
 			xfers = append(xfers, xferId)
 		}
@@ -113,7 +114,7 @@ func (ep *Endpoint) Transfers() ([]uuid.UUID, error) {
 }
 
 // implements asynchronous local file transfers and validation
-func (ep *Endpoint) transferFiles(xferId uuid.UUID, dest core.Endpoint) {
+func (ep *Endpoint) transferFiles(xferId uuid.UUID, dest endpoints.Endpoint) {
 	var err error
 	xfer := ep.Xfers[xferId]
 	for _, file := range xfer.Files {
@@ -163,16 +164,16 @@ func (ep *Endpoint) transferFiles(xferId uuid.UUID, dest core.Endpoint) {
 		continue
 	}
 	if err != nil { // trouble!
-		xfer.Status.Code = core.TransferStatusFailed
+		xfer.Status.Code = endpoints.TransferStatusFailed
 	} else if xfer.Canceled {
-		xfer.Status.Code = core.TransferStatusFailed
+		xfer.Status.Code = endpoints.TransferStatusFailed
 	} else { // all's well
-		xfer.Status.Code = core.TransferStatusSucceeded
+		xfer.Status.Code = endpoints.TransferStatusSucceeded
 	}
 	ep.Xfers[xferId] = xfer
 }
 
-func (ep *Endpoint) Transfer(dst core.Endpoint, files []core.FileTransfer) (uuid.UUID, error) {
+func (ep *Endpoint) Transfer(dst endpoints.Endpoint, files []endpoints.FileTransfer) (uuid.UUID, error) {
 	var xferId uuid.UUID
 	_, ok := dst.(*Endpoint)
 	if !ok {
@@ -180,7 +181,7 @@ func (ep *Endpoint) Transfer(dst core.Endpoint, files []core.FileTransfer) (uuid
 	}
 
 	// first, we check that all requested files are staged on this endpoint
-	requestedFiles := make([]core.DataResource, len(files))
+	requestedFiles := make([]frictionless.DataResource, len(files))
 	for i, file := range files {
 		requestedFiles[i].Path = file.SourcePath // only the Path field is required
 	}
@@ -192,8 +193,8 @@ func (ep *Endpoint) Transfer(dst core.Endpoint, files []core.FileTransfer) (uuid
 		// assign a UUID to the transfer and set it going
 		xferId := uuid.New()
 		ep.Xfers[xferId] = xferRecord{
-			Status: core.TransferStatus{
-				Code:                core.TransferStatusActive,
+			Status: endpoints.TransferStatus{
+				Code:                endpoints.TransferStatusActive,
 				NumFiles:            len(files),
 				NumFilesTransferred: 0,
 			},
@@ -206,12 +207,12 @@ func (ep *Endpoint) Transfer(dst core.Endpoint, files []core.FileTransfer) (uuid
 	}
 }
 
-func (ep *Endpoint) Status(id uuid.UUID) (core.TransferStatus, error) {
+func (ep *Endpoint) Status(id uuid.UUID) (endpoints.TransferStatus, error) {
 	if xfer, found := ep.Xfers[id]; found {
 		return xfer.Status, nil
 	} else {
-		return core.TransferStatus{
-			Code: core.TransferStatusUnknown,
+		return endpoints.TransferStatus{
+			Code: endpoints.TransferStatusUnknown,
 		}, fmt.Errorf("Transfer %s not found!", id.String())
 	}
 }

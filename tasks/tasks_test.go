@@ -36,7 +36,6 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/kbase/dts/config"
-	"github.com/kbase/dts/core"
 	"github.com/kbase/dts/databases"
 	"github.com/kbase/dts/dtstest"
 	"github.com/kbase/dts/endpoints"
@@ -325,15 +324,15 @@ type FakeStagingRequest struct {
 	Time    time.Time
 }
 
-// This type implements core.Database with only enough behavior
+// This type implements databases.Database with only enough behavior
 // to test the task manager.
 type FakeDatabase struct {
-	Endpt   core.Endpoint
+	Endpt   endpoints.Endpoint
 	Staging map[uuid.UUID]FakeStagingRequest
 }
 
 // creates a new fake database that stages its 3 files
-func NewFakeSourceDatabase(orcid string) (core.Database, error) {
+func NewFakeSourceDatabase(orcid string) (databases.Database, error) {
 	endpoint, err := endpoints.NewEndpoint(config.Databases["source"].Endpoint)
 	if err != nil {
 		return nil, err
@@ -347,7 +346,7 @@ func NewFakeSourceDatabase(orcid string) (core.Database, error) {
 }
 
 // ... and a fake destination database that doesn't have to do anything
-func NewFakeDestinationDatabase(orcid string) (core.Database, error) {
+func NewFakeDestinationDatabase(orcid string) (databases.Database, error) {
 	endpoint, err := endpoints.NewEndpoint(config.Databases["destination"].Endpoint)
 	if err != nil {
 		return nil, err
@@ -359,13 +358,13 @@ func NewFakeDestinationDatabase(orcid string) (core.Database, error) {
 	return &db, nil
 }
 
-func (db *FakeDatabase) Search(params core.SearchParameters) (core.SearchResults, error) {
+func (db *FakeDatabase) Search(params databases.SearchParameters) (databases.SearchResults, error) {
 	// this method is unused, so we just need a placeholder
-	return core.SearchResults{}, nil
+	return databases.SearchResults{}, nil
 }
 
-func (db *FakeDatabase) Resources(fileIds []string) ([]core.DataResource, error) {
-	resources := make([]core.DataResource, 0)
+func (db *FakeDatabase) Resources(fileIds []string) ([]DataResource, error) {
+	resources := make([]DataResource, 0)
 	var err error
 	for _, fileId := range fileIds {
 		if resource, found := testResources[fileId]; found {
@@ -387,14 +386,14 @@ func (db *FakeDatabase) StageFiles(fileIds []string) (uuid.UUID, error) {
 	return id, nil
 }
 
-func (db *FakeDatabase) StagingStatus(id uuid.UUID) (core.StagingStatus, error) {
+func (db *FakeDatabase) StagingStatus(id uuid.UUID) (databases.StagingStatus, error) {
 	if info, found := db.Staging[id]; found {
 		if time.Now().Sub(info.Time) >= stagingDuration {
-			return core.StagingStatusSucceeded, nil
+			return databases.StagingStatusSucceeded, nil
 		}
-		return core.StagingStatusActive, nil
+		return databases.StagingStatusActive, nil
 	} else {
-		return core.StagingStatusUnknown, nil
+		return databases.StagingStatusUnknown, nil
 	}
 }
 
@@ -411,7 +410,7 @@ type TransferInfo struct {
 	Status TransferStatus
 }
 
-// This type implements core.Endpoint with only enough behavior
+// This type implements endpoints.Endpoint with only enough behavior
 // to test the task manager.
 type FakeEndpoint struct {
 	Database         *FakeDatabase // fake database attached to endpoint
@@ -421,7 +420,7 @@ type FakeEndpoint struct {
 
 // creates a new fake source endpoint that transfers a fictional payload in 1
 // second
-func NewFakeEndpoint(name string) (core.Endpoint, error) {
+func NewFakeEndpoint(name string) (endpoints.Endpoint, error) {
 	return &FakeEndpoint{
 		TransferDuration: transferDuration,
 		Xfers:            make(map[uuid.UUID]TransferInfo),

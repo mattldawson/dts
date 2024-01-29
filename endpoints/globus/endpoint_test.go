@@ -33,8 +33,9 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/kbase/dts/config"
-	"github.com/kbase/dts/core"
 	"github.com/kbase/dts/dtstest"
+	"github.com/kbase/dts/endpoints"
+	"github.com/kbase/dts/frictionless"
 )
 
 // we test our Globus endpoint implementation using two endpoints:
@@ -124,16 +125,16 @@ func TestGlobusFilesStaged(t *testing.T) {
 	endpoint, _ := NewEndpoint("source")
 
 	// provide an empty slice of filenames, which should return true
-	staged, err := endpoint.FilesStaged([]core.DataResource{})
+	staged, err := endpoint.FilesStaged([]frictionless.DataResource{})
 	assert.True(staged)
 	assert.Nil(err)
 
 	// provide a file that's known to be on the source endpoint, which
 	// should return true
-	resources := make([]core.DataResource, 0)
+	resources := make([]frictionless.DataResource, 0)
 	for i := 1; i <= 3; i++ {
 		id := fmt.Sprintf("%d", i)
-		resources = append(resources, core.DataResource{
+		resources = append(resources, frictionless.DataResource{
 			Id:   id,
 			Path: sourceFilesById[id],
 		})
@@ -143,8 +144,8 @@ func TestGlobusFilesStaged(t *testing.T) {
 	assert.Nil(err)
 
 	// provide a nonexistent file, which should return false
-	resources = []core.DataResource{
-		core.DataResource{
+	resources = []frictionless.DataResource{
+		frictionless.DataResource{
 			Id:   "yadda",
 			Path: "yaddayadda/yadda/yaddayadda/yaddayaddayadda.xml",
 		},
@@ -171,11 +172,11 @@ func TestGlobusTransfer(t *testing.T) {
 	source, _ := NewEndpoint("source")
 	destination, _ := NewEndpoint("destination")
 
-	fileXfers := make([]core.FileTransfer, 0)
+	fileXfers := make([]endpoints.FileTransfer, 0)
 	for i := 1; i <= 3; i++ {
 		id := fmt.Sprintf("%d", i)
 
-		fileXfers = append(fileXfers, core.FileTransfer{
+		fileXfers = append(fileXfers, endpoints.FileTransfer{
 			SourcePath:      sourceFilesById[id],
 			DestinationPath: path.Join(destDirName(16), path.Base(sourceFilesById[id])),
 		})
@@ -195,18 +196,18 @@ func TestGlobusTransfer(t *testing.T) {
 	assert.Nil(err)
 
 	// now wait for it to complete
-	var status core.TransferStatus
+	var status endpoints.TransferStatus
 	for {
 		status, err = source.Status(taskId)
 		assert.Nil(err)
-		if status.Code == core.TransferStatusSucceeded ||
-			status.Code == core.TransferStatusFailed {
+		if status.Code == endpoints.TransferStatusSucceeded ||
+			status.Code == endpoints.TransferStatusFailed {
 			break
 		} else { // not yet finished
 			time.Sleep(1 * time.Second)
 		}
 	}
-	assert.Equal(core.TransferStatusSucceeded, status.Code)
+	assert.Equal(endpoints.TransferStatusSucceeded, status.Code)
 }
 
 func TestBadGlobusTransfer(t *testing.T) {
@@ -215,10 +216,10 @@ func TestBadGlobusTransfer(t *testing.T) {
 	destination, _ := NewEndpoint("destination")
 
 	// ask for some nonexistent files
-	fileXfers := make([]core.FileTransfer, 0)
+	fileXfers := make([]endpoints.FileTransfer, 0)
 	for i := 1; i <= 3; i++ {
 		id := fmt.Sprintf("%d", i)
-		fileXfers = append(fileXfers, core.FileTransfer{
+		fileXfers = append(fileXfers, endpoints.FileTransfer{
 			SourcePath:      sourceFilesById[id] + "_with_bad_suffix",
 			DestinationPath: path.Join(destDirName(16), path.Base(sourceFilesById[id]+"_with_bad_suffix")),
 		})
@@ -234,7 +235,7 @@ func TestUnknownGlobusStatus(t *testing.T) {
 	// make up a bogus transfer UUID and check its status
 	taskId := uuid.New()
 	status, err := endpoint.Status(taskId)
-	assert.Equal(core.TransferStatusUnknown, status.Code)
+	assert.Equal(endpoints.TransferStatusUnknown, status.Code)
 	assert.NotNil(err)
 }
 
@@ -243,11 +244,11 @@ func TestGlobusTransferCancellation(t *testing.T) {
 	source, _ := NewEndpoint("source")
 	destination, _ := NewEndpoint("destination")
 
-	fileXfers := make([]core.FileTransfer, 0)
+	fileXfers := make([]endpoints.FileTransfer, 0)
 	for i := 1; i <= 3; i++ {
 		id := fmt.Sprintf("%d", i)
 
-		fileXfers = append(fileXfers, core.FileTransfer{
+		fileXfers = append(fileXfers, endpoints.FileTransfer{
 			SourcePath:      sourceFilesById[id],
 			DestinationPath: path.Join(destDirName(16), path.Base(sourceFilesById[id])),
 		})

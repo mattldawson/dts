@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/kbase/dts/config"
-	"github.com/kbase/dts/core"
+	"github.com/kbase/dts/databases"
 	"github.com/kbase/dts/dtstest"
 )
 
@@ -71,7 +71,7 @@ func TestSearch(t *testing.T) {
 	assert := assert.New(t)
 	orcid := os.Getenv("DTS_KBASE_TEST_ORCID")
 	db, _ := NewDatabase(orcid)
-	params := core.SearchParameters{
+	params := databases.SearchParameters{
 		Query: "prochlorococcus",
 		Pagination: struct {
 			Offset, MaxNum int
@@ -89,7 +89,7 @@ func TestResources(t *testing.T) {
 	assert := assert.New(t)
 	orcid := os.Getenv("DTS_KBASE_TEST_ORCID")
 	db, _ := NewDatabase(orcid)
-	params := core.SearchParameters{
+	params := databases.SearchParameters{
 		Query: "prochlorococcus",
 	}
 	results, _ := db.Search(params)
@@ -128,9 +128,8 @@ func TestEndpoint(t *testing.T) {
 
 // this runs setup, runs all tests, and does breakdown
 func TestMain(m *testing.M) {
-	var status int
 	setup()
-	status = m.Run()
+	status := m.Run()
 	breakdown()
 	os.Exit(status)
 }

@@ -37,9 +37,10 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/kbase/dts/config"
-	"github.com/kbase/dts/core"
 	"github.com/kbase/dts/credit"
+	"github.com/kbase/dts/databases"
 	"github.com/kbase/dts/endpoints"
+	"github.com/kbase/dts/frictionless"
 )
 
 const (
@@ -151,8 +152,8 @@ func fileTypesFromFile(file File) []string {
 }
 
 // extracts source information from the given metadata
-func sourcesFromMetadata(md Metadata) []core.DataSource {
-	sources := make([]core.DataSource, 0)
+func sourcesFromMetadata(md Metadata) []frictionless.DataSource {
+	sources := make([]frictionless.DataSource, 0)
 	piInfo := md.Proposal.PI
 	if len(piInfo.LastName) > 0 {
 		var title string
@@ -175,7 +176,7 @@ func sourcesFromMetadata(md Metadata) []core.DataSource {
 		if len(md.Proposal.AwardDOI) > 0 {
 			doiURL = fmt.Sprintf("https://doi.org/%s", md.Proposal.AwardDOI)
 		}
-		source := core.DataSource{
+		source := frictionless.DataSource{
 			Title: title,
 			Path:  doiURL,
 			Email: piInfo.EmailAddress,
@@ -227,7 +228,7 @@ func trimFileSuffix(filename string) string {
 }
 
 // creates a DataResource from a File
-func dataResourceFromFile(file File) core.DataResource {
+func dataResourceFromFile(file File) frictionless.DataResource {
 	id := "JDP:" + file.Id
 	format := formatFromFileName(file.Name)
 	fileTypes := fileTypesFromFile(file)
@@ -240,7 +241,7 @@ func dataResourceFromFile(file File) core.DataResource {
 	// Data Resource specification
 	filePath := filepath.Join(strings.TrimPrefix(file.Path, filePathPrefix), file.Name)
 
-	return core.DataResource{
+	return frictionless.DataResource{
 		Id:        id,
 		Name:      name,
 		Path:      filePath,
@@ -254,7 +255,7 @@ func dataResourceFromFile(file File) core.DataResource {
 }
 
 // file database appropriate for handling JDP searches and transfers
-// (implements the core.Database interface)
+// (implements the databases.Database interface)
 type Database struct {
 	// database identifier
 	Id string
@@ -270,7 +271,7 @@ type Database struct {
 	StagingIds map[uuid.UUID]int
 }
 
-func NewDatabase(orcid string) (core.Database, error) {
+func NewDatabase(orcid string) (databases.Database, error) {
 	if orcid == "" {
 		return nil, fmt.Errorf("No ORCID ID was given")
 	}
@@ -342,8 +343,8 @@ func (db *Database) post(resource string, body io.Reader) (*http.Response, error
 }
 
 // this helper extracts files for the JDP /search GET query with given parameters
-func (db *Database) filesFromSearch(params url.Values) (core.SearchResults, error) {
-	var results core.SearchResults
+func (db *Database) filesFromSearch(params url.Values) (databases.SearchResults, error) {
+	var results databases.SearchResults
 
 	idEncountered := make(map[string]bool) // keep track of duplicates
 	resp, err := db.get("search", params)
@@ -361,14 +362,14 @@ func (db *Database) filesFromSearch(params url.Values) (core.SearchResults, erro
 			Files []File `json:"files"`
 		} `json:"organisms"`
 	}
-	results.Resources = make([]core.DataResource, 0)
+	results.Resources = make([]frictionless.DataResource, 0)
 	var jdpResults JDPResults
 	err = json.Unmarshal(body, &jdpResults)
 	if err != nil {
 		return results, err
 	}
 	for _, org := range jdpResults.Organisms {
-		resources := make([]core.DataResource, 0)
+		resources := make([]frictionless.DataResource, 0)
 		for _, file := range org.Files {
 			res := dataResourceFromFile(file)
 			if _, encountered := idEncountered[res.Id]; !encountered {
@@ -402,7 +403,7 @@ func pageNumberAndSize(offset, maxNum int) (int, int) {
 	return pageNumber, pageSize
 }
 
-func (db *Database) Search(params core.SearchParameters) (core.SearchResults, error) {
+func (db *Database) Search(params databases.SearchParameters) (databases.SearchResults, error) {
 	// we assume the JDP interface for ElasticSearch queries
 	// (see https://files.jgi.doe.gov/apidoc/)
 	pageNumber, pageSize := pageNumberAndSize(params.Pagination.Offset, params.Pagination.MaxNum)
@@ -415,7 +416,7 @@ func (db *Database) Search(params core.SearchParameters) (core.SearchResults, er
 	return db.filesFromSearch(p)
 }
 
-func (db *Database) Resources(fileIds []string) ([]core.DataResource, error) {
+func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, error) {
 	// For the moment, this implementation is a stopgap to save the JDP team
 	// from implementing additional functionality for the DTS. Here we query JAMO
 	// directly for information about files that correspond to the given set of
@@ -430,9 +431,9 @@ func (db *Database) Resources(fileIds []string) ([]core.DataResource, error) {
 	}
 
 	// translate from JAMOese to Frictionless-ese
-	resources := make([]core.DataResource, len(jamoFiles))
+	resources := make([]frictionless.DataResource, len(jamoFiles))
 	for i, jamoFile := range jamoFiles {
-		resources[i] = core.DataResource{
+		resources[i] = frictionless.DataResource{
 			Id:     "JDP:" + jamoFile.Id,
 			Name:   trimFileSuffix(jamoFile.FileName),
 			Path:   filepath.Join(strings.TrimPrefix(jamoFile.FilePath, filePathPrefix), jamoFile.FileName),
@@ -507,18 +508,18 @@ func (db *Database) StageFiles(fileIds []string) (uuid.UUID, error) {
 	return xferId, err
 }
 
-func (db *Database) StagingStatus(id uuid.UUID) (core.StagingStatus, error) {
+func (db *Database) StagingStatus(id uuid.UUID) (databases.StagingStatus, error) {
 	if restoreId, found := db.StagingIds[id]; found {
 		resource := fmt.Sprintf("request_archived_files/requests/%d", restoreId)
 		resp, err := db.get(resource, url.Values{})
 		if err != nil {
-			return core.StagingStatusUnknown, err
+			return databases.StagingStatusUnknown, err
 		}
 		defer resp.Body.Close()
 		var body []byte
 		body, err = io.ReadAll(resp.Body)
 		if err != nil {
-			return core.StagingStatusUnknown, err
+			return databases.StagingStatusUnknown, err
 		}
 		type JDPResult struct {
 			Status string `json:"status"` // "ready" or not
@@ -526,10 +527,10 @@ func (db *Database) StagingStatus(id uuid.UUID) (core.StagingStatus, error) {
 		var jdpResult JDPResult
 		err = json.Unmarshal(body, &jdpResult)
 		if err != nil {
-			return core.StagingStatusUnknown, err
+			return databases.StagingStatusUnknown, err
 		}
-		statusForString := map[string]core.StagingStatus{
-			"ready": core.StagingStatusSucceeded,
+		statusForString := map[string]databases.StagingStatus{
+			"ready": databases.StagingStatusSucceeded,
 		}
 		if status, ok := statusForString[jdpResult.Status]; ok {
 			return status, nil
@@ -537,11 +538,11 @@ func (db *Database) StagingStatus(id uuid.UUID) (core.StagingStatus, error) {
 			return status, fmt.Errorf("Unrecognized staging status string: %s", jdpResult.Status)
 		}
 	} else {
-		return core.StagingStatusUnknown, nil
+		return databases.StagingStatusUnknown, nil
 	}
 }
 
-func (db *Database) Endpoint() (core.Endpoint, error) {
+func (db *Database) Endpoint() (endpoints.Endpoint, error) {
 	return endpoints.NewEndpoint(config.Databases[db.Id].Endpoint)
 }
 

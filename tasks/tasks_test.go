@@ -161,7 +161,6 @@ func breakdown() {
 // have them run by a a single test runner.
 type SerialTests struct{ Test *testing.T }
 
-// test starting and stopping
 func (t *SerialTests) TestStartAndStop() {
 	assert := assert.New(t.Test)
 
@@ -174,8 +173,7 @@ func (t *SerialTests) TestStartAndStop() {
 	assert.False(Running())
 }
 
-// test adding a task
-func (t *SerialTests) TestAddTask() {
+func (t *SerialTests) TestCreateTask() {
 	assert := assert.New(t.Test)
 
 	err := Start()
@@ -186,7 +184,7 @@ func (t *SerialTests) TestAddTask() {
 
 	// queue up a transfer task between two phony databases
 	orcid := "1234-5678-9012-3456"
-	taskId, err := Add(orcid, "source", "destination", []string{"file1", "file2"})
+	taskId, err := Create(orcid, "source", "destination", []string{"file1", "file2"})
 	assert.Nil(err)
 	assert.True(taskId != uuid.UUID{})
 
@@ -232,7 +230,45 @@ func (t *SerialTests) TestAddTask() {
 	assert.Nil(err)
 }
 
-// test restarts
+func (t *SerialTests) TestCancelTask() {
+	assert := assert.New(t.Test)
+
+	err := Start()
+	assert.Nil(err)
+
+	pollInterval := time.Duration(config.Service.PollInterval) * time.Millisecond
+
+	// queue up a transfer task between two phony databases
+	orcid := "1234-5678-9012-3456"
+	taskId, err := Create(orcid, "source", "destination", []string{"file1", "file2"})
+	assert.Nil(err)
+	assert.True(taskId != uuid.UUID{})
+
+	// get things going and make sure we can check its status
+	time.Sleep(pause + pollInterval)
+	_, err = Status(taskId)
+	assert.Nil(err)
+
+	// cancel the thing
+	err = Cancel(taskId)
+	assert.Nil(err)
+
+	// wait for the task to complete
+	status, err := Status(taskId)
+	for {
+		if status.Code == TransferStatusSucceeded ||
+			status.Code == TransferStatusFailed {
+			break
+		}
+		time.Sleep(pause + pollInterval)
+		status, err = Status(taskId)
+		assert.Nil(err)
+	}
+
+	err = Stop()
+	assert.Nil(err)
+}
+
 func (t *SerialTests) TestStopAndRestart() {
 	assert := assert.New(t.Test)
 
@@ -243,7 +279,7 @@ func (t *SerialTests) TestStopAndRestart() {
 	numTasks := 10
 	taskIds := make([]uuid.UUID, numTasks)
 	for i := 0; i < numTasks; i++ {
-		taskId, _ := Add(orcid, "source", "destination", []string{"file1", "file2"})
+		taskId, _ := Create(orcid, "source", "destination", []string{"file1", "file2"})
 		taskIds[i] = taskId
 	}
 	time.Sleep(100 * time.Millisecond) // let things settle
@@ -266,7 +302,8 @@ func (t *SerialTests) TestStopAndRestart() {
 func TestRunner(t *testing.T) {
 	tester := SerialTests{Test: t}
 	tester.TestStartAndStop()
-	tester.TestAddTask()
+	tester.TestCreateTask()
+	tester.TestCancelTask()
 	tester.TestStopAndRestart()
 }
 

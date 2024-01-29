@@ -34,9 +34,14 @@ import (
 	"github.com/kbase/dts/core"
 )
 
-// This file implements an endpoint that moves files around on a local
-// file system. It's used only for testing.
+type xferRecord struct {
+	Status   core.TransferStatus
+	Files    []core.FileTransfer
+	Canceled bool
+}
 
+// This type implements an endpoint that moves files around on a local
+// file system. It's used only for testing.
 type Endpoint struct {
 	// descriptive endpoint name (obtained from config)
 	Name string
@@ -45,7 +50,7 @@ type Endpoint struct {
 	// root directory for endpoint (default: current working directory)
 	root string
 	// transfers in progress
-	Xfers map[uuid.UUID]core.TransferStatus
+	Xfers map[uuid.UUID]xferRecord
 }
 
 // creates a new local endpoint using the information supplied in the
@@ -65,7 +70,7 @@ func NewEndpoint(endpointName string) (core.Endpoint, error) {
 	ep := &Endpoint{
 		Name:  epConfig.Name,
 		Id:    epConfig.Id,
-		Xfers: make(map[uuid.UUID]core.TransferStatus),
+		Xfers: make(map[uuid.UUID]xferRecord),
 	}
 	err := ep.setRoot(epConfig.Root)
 	return ep, err
@@ -97,8 +102,8 @@ func (ep *Endpoint) FilesStaged(files []core.DataResource) (bool, error) {
 
 func (ep *Endpoint) Transfers() ([]uuid.UUID, error) {
 	xfers := make([]uuid.UUID, 0)
-	for xferId, xferStatus := range ep.Xfers {
-		switch xferStatus.Code {
+	for xferId, xfer := range ep.Xfers {
+		switch xfer.Status.Code {
 		case core.TransferStatusSucceeded, core.TransferStatusFailed:
 		default:
 			xfers = append(xfers, xferId)
@@ -108,53 +113,63 @@ func (ep *Endpoint) Transfers() ([]uuid.UUID, error) {
 }
 
 // implements asynchronous local file transfers and validation
-func (ep *Endpoint) transferFiles(xferId uuid.UUID, dest core.Endpoint, files []core.FileTransfer) {
-	status := ep.Xfers[xferId]
-	for _, file := range files {
+func (ep *Endpoint) transferFiles(xferId uuid.UUID, dest core.Endpoint) {
+	var err error
+	xfer := ep.Xfers[xferId]
+	for _, file := range xfer.Files {
+		// has the transfer been canceled?
+		if xfer.Canceled {
+			break
+		}
+
 		sourcePath := filepath.Join(ep.Root(), file.SourcePath)
 		destPath := filepath.Join(dest.Root(), file.DestinationPath)
 
-		// create the destination directory if needed
+		// check for the source directory
 		sourceDir := filepath.Dir(sourcePath)
-		sourceDirInfo, err := os.Stat(sourceDir)
+		var sourceDirInfo os.FileInfo
+		sourceDirInfo, err = os.Stat(sourceDir)
+		if err != nil {
+			break
+		}
+
+		// create the destination directory if needed
 		destDir := filepath.Dir(destPath)
 		_, err = os.Stat(destDir)
 		if err != nil {
-			if errors.Is(err, fs.ErrNotExist) {
+			if errors.Is(err, fs.ErrNotExist) { // destination dir doesn't exist
 				os.MkdirAll(destDir, sourceDirInfo.Mode())
-			} else {
-				status := ep.Xfers[xferId]
-				status.Code = core.TransferStatusFailed
-				ep.Xfers[xferId] = status
+			} else { // something else happened
 				break
 			}
 		}
 
 		// copy the file into place
 		var data []byte
-		sourceInfo, err := os.Stat(sourcePath)
+		var sourceFileInfo os.FileInfo
+		sourceFileInfo, err = os.Stat(sourcePath)
 		if err != nil {
-			goto transferFailed
+			break
 		}
 		data, err = os.ReadFile(sourcePath)
 		if err != nil {
-			goto transferFailed
+			break
 		}
-		err = os.WriteFile(destPath, data, sourceInfo.Mode())
+		err = os.WriteFile(destPath, data, sourceFileInfo.Mode())
 		if err != nil {
-			goto transferFailed
+			break
 		}
-		status.NumFilesTransferred++
-		ep.Xfers[xferId] = status
+		xfer.Status.NumFilesTransferred++
 		continue
-
-	transferFailed: // all transfer failures reroute here
-		status.Code = core.TransferStatusFailed
-		ep.Xfers[xferId] = status
-		break
 	}
-	status.Code = core.TransferStatusSucceeded
-	ep.Xfers[xferId] = status
+	if err != nil { // trouble!
+		xfer.Status.Code = core.TransferStatusFailed
+	} else if xfer.Canceled {
+		xfer.Status.Code = core.TransferStatusFailed
+	} else { // all's well
+		xfer.Status.Code = core.TransferStatusSucceeded
+	}
+	ep.Xfers[xferId] = xfer
 }
 
 func (ep *Endpoint) Transfer(dst core.Endpoint, files []core.FileTransfer) (uuid.UUID, error) {
@@ -176,12 +191,15 @@ func (ep *Endpoint) Transfer(dst core.Endpoint, files []core.FileTransfer) (uuid
 	if staged {
 		// assign a UUID to the transfer and set it going
 		xferId := uuid.New()
-		ep.Xfers[xferId] = core.TransferStatus{
-			Code:                core.TransferStatusActive,
-			NumFiles:            len(files),
-			NumFilesTransferred: 0,
+		ep.Xfers[xferId] = xferRecord{
+			Status: core.TransferStatus{
+				Code:                core.TransferStatusActive,
+				NumFiles:            len(files),
+				NumFilesTransferred: 0,
+			},
+			Files: files,
 		}
-		go ep.transferFiles(xferId, dst, files)
+		go ep.transferFiles(xferId, dst)
 		return xferId, nil
 	} else {
 		return xferId, fmt.Errorf("The files requested for transfer are not yet staged.")
@@ -189,8 +207,8 @@ func (ep *Endpoint) Transfer(dst core.Endpoint, files []core.FileTransfer) (uuid
 }
 
 func (ep *Endpoint) Status(id uuid.UUID) (core.TransferStatus, error) {
-	if xferStatus, found := ep.Xfers[id]; found {
-		return xferStatus, nil
+	if xfer, found := ep.Xfers[id]; found {
+		return xfer.Status, nil
 	} else {
 		return core.TransferStatus{
 			Code: core.TransferStatusUnknown,
@@ -199,5 +217,10 @@ func (ep *Endpoint) Status(id uuid.UUID) (core.TransferStatus, error) {
 }
 
 func (ep *Endpoint) Cancel(id uuid.UUID) error {
-	return fmt.Errorf("Local transfers cannot be canceled!")
+	if xfer, found := ep.Xfers[id]; found {
+		xfer.Canceled = true
+		return nil
+	} else {
+		return fmt.Errorf("Transfer %s not found!", id.String())
+	}
 }

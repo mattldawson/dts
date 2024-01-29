@@ -44,7 +44,7 @@ const (
 	TransferStatusInactive                      // transfer suspended
 	TransferStatusFinalizing                    // transfer manifest being generated
 	TransferStatusSucceeded                     // transfer completed successfully
-	TransferStatusFailed                        // transfer failed
+	TransferStatusFailed                        // transfer failed or was canceled
 )
 
 // this type conveys various information about a file transfer's status
@@ -55,6 +55,8 @@ type TransferStatus struct {
 	NumFiles int
 	// number of files that have been transferred
 	NumFilesTransferred int
+	// number of files that are skipped for whatever reason
+	NumFilesSkipped int
 }
 
 // This type represents an endpoint for transferring files.
@@ -71,6 +73,7 @@ type Endpoint interface {
 	Transfer(dst Endpoint, files []FileTransfer) (uuid.UUID, error)
 	// retrieves the status for a transfer task identified by its UUID
 	Status(id uuid.UUID) (TransferStatus, error)
-	// cancels the transfer task with the given UUID
+	// cancels the transfer task with the given UUID (must return immediately,
+	// even if an asynchronous cancellation has not been processed)
 	Cancel(id uuid.UUID) error
 }

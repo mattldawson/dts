@@ -66,6 +66,7 @@ type taskType struct {
 	Source, Destination string         // names of source and destination databases
 	FileIds             []string       // IDs of files within Source
 	Resources           []DataResource // Frictionless DataResources for files
+	Canceled            bool           // set if a cancellation request has been made
 	Staging, Transfer   uuid.NullUUID  // staging and file transfer UUIDs (if any)
 	Manifest            uuid.NullUUID  // manifest generation UUID (if any)
 	ManifestFile        string         // name of locally-created manifest file
@@ -96,6 +97,30 @@ func (task *taskType) start() error {
 	task.Status = TransferStatus{
 		Code:     TransferStatusStaging,
 		NumFiles: len(task.FileIds),
+	}
+	return nil
+}
+
+// updates the status of a canceled task depending on where it is in its
+// lifecycle
+func (task *taskType) checkCancellation() error {
+	if task.Transfer.Valid {
+		// the task's status is the same as its transfer status
+		source, err := databases.NewDatabase(task.Orcid, task.Source)
+		if err != nil {
+			return err
+		}
+		endpoint, err := source.Endpoint()
+		if err != nil {
+			return err
+		}
+		task.Status, err = endpoint.Status(task.Id)
+	} else {
+		// at any other point in the lifecycle, cut and run
+		task.Status.Code = TransferStatusFailed
+	}
+	if task.Completed() {
+		task.CompletionTime = time.Now()
 	}
 	return nil
 }
@@ -278,11 +303,45 @@ func (task *taskType) Age() time.Duration {
 	}
 }
 
+// returns true if the task has completed (successfully or not), false otherwise
+func (task *taskType) Completed() bool {
+	return task.Status.Code == TransferStatusSucceeded ||
+		task.Status.Code == TransferStatusFailed
+}
+
+// requests that the task be canceled
+func (task *taskType) Cancel() {
+	task.Canceled = true // mark as canceled
+
+	// fetch the source endpoint
+	var endpoint core.Endpoint
+	source, err := databases.NewDatabase(task.Orcid, task.Source)
+	if err != nil {
+		goto errorOccurred
+	}
+	endpoint, err = source.Endpoint()
+	if err != nil {
+		goto errorOccurred
+	}
+
+	// request that the task be canceled
+	err = endpoint.Cancel(task.Id)
+	if err != nil {
+		goto errorOccurred
+	}
+	return
+errorOccurred:
+	slog.Error(fmt.Sprintf("Task %s: error in cancellation: %s",
+		task.Id, err.Error()))
+}
+
 // this function updates the state of a task, setting its status as necessary
 func (task *taskType) Update() error {
 	var err error
 	if task.Resources == nil { // new task!
 		err = task.start()
+	} else if task.Canceled { // cancellation requested
+		err = task.checkCancellation()
 	} else if task.Staging.Valid { // we're staging
 		err = task.checkStaging()
 	} else if task.Transfer.Valid { // we're transferring
@@ -306,7 +365,7 @@ func createOrLoadTasks(dataFile string) map[uuid.UUID]taskType {
 	var tasks map[uuid.UUID]taskType
 	err = enc.Decode(&tasks)
 	if err != nil { // file not readable
-		slog.Error(fmt.Sprintf("Reading task manager file %s: %s", dataFile, err.Error()))
+		slog.Error(fmt.Sprintf("Reading task file %s: %s", dataFile, err.Error()))
 		return make(map[uuid.UUID]taskType)
 	}
 	slog.Debug(fmt.Sprintf("Restored %d tasks from %s", len(tasks), dataFile))
@@ -319,7 +378,7 @@ func saveTasks(tasks map[uuid.UUID]taskType, dataFile string) error {
 		slog.Debug(fmt.Sprintf("Saving %d tasks to %s", len(tasks), dataFile))
 		file, err := os.OpenFile(dataFile, os.O_RDWR|os.O_CREATE, 0644)
 		if err != nil {
-			return fmt.Errorf("Opening task manager file %s: %s", dataFile, err.Error())
+			return fmt.Errorf("Opening task file %s: %s", dataFile, err.Error())
 		}
 		enc := gob.NewEncoder(file)
 		err = enc.Encode(tasks)
@@ -331,22 +390,24 @@ func saveTasks(tasks map[uuid.UUID]taskType, dataFile string) error {
 		err = file.Close()
 		if err != nil {
 			os.Remove(dataFile)
-			return fmt.Errorf("Writing task manager file %s: %s", dataFile, err.Error())
+			return fmt.Errorf("Writing task file %s: %s", dataFile, err.Error())
 		}
 		slog.Debug(fmt.Sprintf("Saved %d tasks to %s", len(tasks), dataFile))
 	}
 	return nil
 }
 
-// this type holds various channels used by the TaskManager to communicate
+// this type holds various channels used by the task manager to communicate
 // with its worker goroutine
 type channelsType struct {
-	TaskId chan uuid.UUID      // task ID channel
-	Task   chan taskType       // task input channel
-	Status chan TransferStatus // status output channel
-	Error  chan error          // error output channel
-	Poll   chan struct{}       // polling channel
-	Stop   chan struct{}       // stop channel
+	CreateTask       chan taskType       // used by client to request task creation
+	CancelTask       chan uuid.UUID      // used by client to request task cancellation
+	GetTaskStatus    chan uuid.UUID      // used by client to request task status
+	ReturnTaskId     chan uuid.UUID      // returns task ID to client
+	ReturnTaskStatus chan TransferStatus // returns task status to client
+	Error            chan error          // returns error to client
+	Poll             chan struct{}       // carries heartbeat signal for task updates
+	Stop             chan struct{}       // used by client to stop task management
 }
 
 // this function runs in its own goroutine, using the given local endpoint
@@ -358,9 +419,11 @@ func processTasks() {
 	tasks := createOrLoadTasks(dataStore)
 
 	// parse the task channels into directional types as needed
-	var taskIdChan chan uuid.UUID = taskChannels.TaskId
-	var taskChan <-chan taskType = taskChannels.Task
-	var statusChan chan<- TransferStatus = taskChannels.Status
+	var createTaskChan <-chan taskType = taskChannels.CreateTask
+	var cancelTaskChan <-chan uuid.UUID = taskChannels.CancelTask
+	var getTaskStatusChan <-chan uuid.UUID = taskChannels.GetTaskStatus
+	var returnTaskIdChan chan<- uuid.UUID = taskChannels.ReturnTaskId
+	var returnTaskStatusChan chan<- TransferStatus = taskChannels.ReturnTaskStatus
 	var errorChan chan<- error = taskChannels.Error
 	var pollChan <-chan struct{} = taskChannels.Poll
 	var stopChan <-chan struct{} = taskChannels.Stop
@@ -371,46 +434,56 @@ func processTasks() {
 	// start scurrying around
 	for {
 		select {
-		case newTask := <-taskChan: // Add() called
+		case newTask := <-createTaskChan: // Create() called
 			newTask.Id = uuid.New()
 			tasks[newTask.Id] = newTask
-			taskIdChan <- newTask.Id
-			slog.Info(fmt.Sprintf("Added new transfer task %s.", newTask.Id.String()))
-		case taskId := <-taskIdChan: // Status() called
+			returnTaskIdChan <- newTask.Id
+			slog.Info(fmt.Sprintf("Created new transfer task %s", newTask.Id.String()))
+		case taskId := <-cancelTaskChan: // Cancel() called
 			if task, found := tasks[taskId]; found {
-				statusChan <- task.Status
+				slog.Info(fmt.Sprintf("Task %s: received cancellation request", taskId.String()))
+				task.Cancel()
+			} else {
+				err := fmt.Errorf("Task %s not found!", taskId.String())
+				errorChan <- err
+			}
+		case taskId := <-getTaskStatusChan: // Status() called
+			if task, found := tasks[taskId]; found {
+				returnTaskStatusChan <- task.Status
 			} else {
 				err := fmt.Errorf("Task %s not found!", taskId.String())
 				errorChan <- err
 			}
 		case <-pollChan: // time to move things along
 			for taskId, task := range tasks {
-				oldStatus := task.Status
-				err := task.Update()
-				if err != nil {
-					// we log task update errors but do not propagate them
-					slog.Error(err.Error())
-				}
-				if task.Status.Code != oldStatus.Code {
-					switch task.Status.Code {
-					case TransferStatusStaging:
-						slog.Info(fmt.Sprintf("Staging files for task %s.", task.Id.String()))
-					case TransferStatusActive:
-						slog.Info(fmt.Sprintf("Beginning transfer for task %s.", task.Id.String()))
-					case TransferStatusInactive:
-						slog.Info(fmt.Sprintf("Suspended transfer for task %s.", task.Id.String()))
-					case TransferStatusFinalizing:
-						slog.Info(fmt.Sprintf("Finalizing transfer for task %s.", task.Id.String()))
-					case TransferStatusSucceeded:
-						slog.Info(fmt.Sprintf("Transfer task %s completed successfully.", task.Id.String()))
-					case TransferStatusFailed:
-						slog.Info(fmt.Sprintf("Transfer task %s failed.", task.Id.String()))
+				if !task.Completed() {
+					oldStatus := task.Status
+					err := task.Update()
+					if err != nil {
+						// we log task update errors but do not propagate them
+						slog.Error(err.Error())
+					}
+					if task.Status.Code != oldStatus.Code {
+						switch task.Status.Code {
+						case TransferStatusStaging:
+							slog.Info(fmt.Sprintf("Task %s: staging files", task.Id.String()))
+						case TransferStatusActive:
+							slog.Info(fmt.Sprintf("Task %s: beginning transfer", task.Id.String()))
+						case TransferStatusInactive:
+							slog.Info(fmt.Sprintf("Task %s: suspended transfer", task.Id.String()))
+						case TransferStatusFinalizing:
+							slog.Info(fmt.Sprintf("Task %s: finalizing transfer", task.Id.String()))
+						case TransferStatusSucceeded:
+							slog.Info(fmt.Sprintf("Task %s: completed successfully", task.Id.String()))
+						case TransferStatusFailed:
+							slog.Info(fmt.Sprintf("Task %s: failed", task.Id.String()))
+						}
 					}
 				}
 
 				// if the task completed a long enough time go, delete its entry
 				if task.Age() > deleteAfter {
-					slog.Debug(fmt.Sprintf("Purging task %s.", task.Id.String()))
+					slog.Debug(fmt.Sprintf("Task %s: purging transfer record", task.Id.String()))
 					delete(tasks, taskId)
 				} else { // update its entry
 					tasks[taskId] = task
@@ -506,12 +579,14 @@ func Start() error {
 
 	// allocate channels
 	taskChannels = channelsType{
-		TaskId: make(chan uuid.UUID, 32),
-		Task:   make(chan taskType, 32),
-		Status: make(chan TransferStatus, 32),
-		Error:  make(chan error, 32),
-		Poll:   make(chan struct{}),
-		Stop:   make(chan struct{}),
+		CreateTask:       make(chan taskType, 32),
+		CancelTask:       make(chan uuid.UUID, 32),
+		GetTaskStatus:    make(chan uuid.UUID, 32),
+		ReturnTaskId:     make(chan uuid.UUID, 32),
+		ReturnTaskStatus: make(chan TransferStatus, 32),
+		Error:            make(chan error, 32),
+		Poll:             make(chan struct{}),
+		Stop:             make(chan struct{}),
 	}
 
 	// start processing tasks
@@ -543,11 +618,11 @@ func Running() bool {
 	return running
 }
 
-// Adds a new transfer task associated with the user with the specified Orcid ID
-// to the manager's set, returning a UUID for the task. The task is defined by
-// specifying the names of the source and destination databases and a set of
+// Creates a new transfer task associated with the user with the specified Orcid
+// ID to the manager's set, returning a UUID for the task. The task is defined
+// by specifying the names of the source and destination databases and a set of
 // file IDs associated with the source.
-func Add(orcid, source, destination string, fileIDs []string) (uuid.UUID, error) {
+func Create(orcid, source, destination string, fileIDs []string) (uuid.UUID, error) {
 	var taskId uuid.UUID
 
 	// verify that we can fetch the task's source and destination databases
@@ -562,28 +637,40 @@ func Add(orcid, source, destination string, fileIDs []string) (uuid.UUID, error)
 	}
 
 	// create a new task and send it along for processing
-	taskChannels.Task <- taskType{
+	taskChannels.CreateTask <- taskType{
 		Orcid:       orcid,
 		Source:      source,
 		Destination: destination,
 		FileIds:     fileIDs,
 	}
 	select {
-	case taskId = <-taskChannels.TaskId:
+	case taskId = <-taskChannels.ReturnTaskId:
 	case err = <-taskChannels.Error:
 	}
 	return taskId, err
 }
 
-// Given a task UUID, returns its transfer status code (or a non-nil error
+// Given a task UUID, returns its transfer status (or a non-nil error
 // indicating any issues encountered).
 func Status(taskId uuid.UUID) (TransferStatus, error) {
 	var status TransferStatus
 	var err error
-	taskChannels.TaskId <- taskId
+	taskChannels.GetTaskStatus <- taskId
 	select {
-	case status = <-taskChannels.Status:
+	case status = <-taskChannels.ReturnTaskStatus:
 	case err = <-taskChannels.Error:
 	}
 	return status, err
+}
+
+// Requests that the task with the given UUID be canceled. Clients should check
+// the status of the task separately.
+func Cancel(taskId uuid.UUID) error {
+	var err error
+	taskChannels.CancelTask <- taskId
+	select { // default block provides non-blocking error check
+	case err = <-taskChannels.Error:
+	default:
+	}
+	return err
 }

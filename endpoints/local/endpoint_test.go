@@ -38,6 +38,7 @@ import (
 var tempRoot string
 var sourceRoot string
 var destinationRoot string
+var destinationRootCancel string
 
 // source database files by ID
 var sourceFilesById = map[string]string{
@@ -58,6 +59,11 @@ endpoints:
     id: b925d96e-7e39-473b-a658-714f8c243b1c
     provider: local
     root: DESTINATION_ROOT
+  destination-cancel:
+    name: Destination Endpoint for cancellation
+    id: b925d96e-7e39-473b-a658-714f8c243b1c
+    provider: local
+    root: DESTINATION_CANCEL
 `
 
 // this function gets called at the begіnning of a test session
@@ -78,6 +84,11 @@ func setup() {
 	if err != nil {
 		panic(err)
 	}
+	destinationRootCancel = filepath.Join(tempRoot, "destination-cancel")
+	err = os.Mkdir(destinationRootCancel, 0700)
+	if err != nil {
+		panic(err)
+	}
 	// create source files
 	for i := 1; i <= 3; i++ {
 		err = os.WriteFile(filepath.Join(sourceRoot, fmt.Sprintf("file%d.txt", i)),
@@ -87,9 +98,10 @@ func setup() {
 		}
 	}
 
-	// read in the config file with SOURCE_ROOT and DESTINATION_ROOT replaced
+	// read in the config file with variable paths substituted
 	myConfig := strings.ReplaceAll(localConfig, "SOURCE_ROOT", sourceRoot)
 	myConfig = strings.ReplaceAll(myConfig, "DESTINATION_ROOT", destinationRoot)
+	myConfig = strings.ReplaceAll(myConfig, "DESTINATION_CANCEL", destinationRootCancel)
 	fmt.Printf(myConfig)
 	err = config.Init([]byte(myConfig))
 	if err != nil {
@@ -207,6 +219,27 @@ func TestUnknownLocalStatus(t *testing.T) {
 	status, err := endpoint.Status(taskId)
 	assert.Equal(core.TransferStatusUnknown, status.Code)
 	assert.NotNil(err)
+}
+
+func TestLocalTransferCancellation(t *testing.T) {
+	assert := assert.New(t)
+
+	source, _ := NewEndpoint("source")
+	destination, _ := NewEndpoint("destination-cancel")
+
+	fileXfers := make([]core.FileTransfer, 0)
+	for i := 1; i <= 3; i++ {
+		id := fmt.Sprintf("%d", i)
+
+		fileXfers = append(fileXfers, core.FileTransfer{
+			SourcePath:      sourceFilesById[id],
+			DestinationPath: sourceFilesById[id],
+		})
+	}
+	id, err := source.Transfer(destination, fileXfers)
+	assert.Nil(err)
+	err = source.Cancel(id)
+	assert.Nil(err)
 }
 
 // this runs setup, runs all tests, and does breakdown

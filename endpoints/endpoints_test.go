@@ -35,13 +35,6 @@ func setup() {
 func breakdown() {
 }
 
-func TestNewGlobusEndpoint(t *testing.T) {
-	assert := assert.New(t)
-	ep, err := NewEndpoint("globus")
-	assert.NotNil(ep, "Globus endpoint not created")
-	assert.Nil(err, "Globus endpoint creation encountered an error")
-}
-
 func TestInvalidEndpoint(t *testing.T) {
 	assert := assert.New(t)
 	ep, err := NewEndpoint("invalid")

@@ -25,7 +25,7 @@
 package tasks
 
 import (
-	"fmt"
+	//	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -36,9 +36,9 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/kbase/dts/config"
-	"github.com/kbase/dts/databases"
+	//	"github.com/kbase/dts/databases"
 	"github.com/kbase/dts/dtstest"
-	"github.com/kbase/dts/endpoints"
+	// "github.com/kbase/dts/endpoints"
 )
 
 // temporary testing directory
@@ -47,11 +47,11 @@ var TESTING_DIR string
 // a directory in which the task manager can read/write files
 var dataDirectory string
 
-// the amount of time it takes a test database to stage files
-var stagingDuration time.Duration = time.Duration(150) * time.Millisecond
-
-// the amount of time it takes a test endpoint to transfer files
-var transferDuration time.Duration = time.Duration(500) * time.Millisecond
+// endpoint testing options
+var endpointOptions = dtstest.EndpointOptions{
+	StagingDuration:  time.Duration(150) * time.Millisecond,
+	TransferDuration: time.Duration(500) * time.Millisecond,
+}
 
 // a pause to give the task manager a bit of time
 var pause time.Duration = time.Duration(25) * time.Millisecond
@@ -66,11 +66,11 @@ service:
   delete_after: 2    # seconds
   endpoint: local-endpoint
 databases:
-  source:
+  test-source:
     name: Source Test Database
     organization: The Source Company
     endpoint: source-endpoint
-  destination:
+  test-destination:
     name: Destination Test Database
     organization: Fabulous Destinations, Inc.
     endpoint: destination-endpoint
@@ -78,17 +78,17 @@ endpoints:
   local-endpoint:
     name: Local endpoint
     id: 8816ec2d-4a48-4ded-b68a-5ab46a4417b6
-    provider: fake
+    provider: test
     root: TESTING_DIR
   source-endpoint:
     name: Endpoint 1
     id: 26d61236-39f6-4742-a374-8ec709347f2f
-    provider: fake
+    provider: test
     root: SOURCE_ROOT
   destination-endpoint:
     name: Endpoint 2
     id: f1865b86-2c64-4b8b-99f3-5aaa945ec3d9
-    provider: fake
+    provider: test
     root: DESTINATION_ROOT
 `
 
@@ -132,17 +132,20 @@ func setup() {
 	}
 	os.Chdir(TESTING_DIR)
 
-	// register test databases/endpoints referred to in config file
-	databases.RegisterDatabase("source", NewFakeSourceDatabase)
-	databases.RegisterDatabase("destination", NewFakeDestinationDatabase)
-	endpoints.RegisterEndpointProvider("fake", NewFakeEndpoint)
-
 	// read in the config file with SOURCE_ROOT and DESTINATION_ROOT replaced
 	myConfig := strings.ReplaceAll(tasksConfig, "TESTING_DIR", TESTING_DIR)
 	err = config.Init([]byte(myConfig))
 	if err != nil {
 		log.Panicf("Couldn't initialize configuration: %s", err)
 	}
+
+	// register test databases/endpoints referred to in config file
+	dtstest.RegisterTestFixturesFromConfig(endpointOptions, testResources)
+	/*
+		databases.RegisterDatabase("source", NewFakeSourceDatabase)
+		databases.RegisterDatabase("destination", NewFakeDestinationDatabase)
+		endpoints.RegisterEndpointProvider("fake", NewFakeEndpoint)
+	*/
 
 	// Create the data directory used to save/restore tasks
 	os.Mkdir(config.Service.DataDirectory, 0755)
@@ -183,7 +186,7 @@ func (t *SerialTests) TestCreateTask() {
 
 	// queue up a transfer task between two phony databases
 	orcid := "1234-5678-9012-3456"
-	taskId, err := Create(orcid, "source", "destination", []string{"file1", "file2"})
+	taskId, err := Create(orcid, "test-source", "test-destination", []string{"file1", "file2"})
 	assert.Nil(err)
 	assert.True(taskId != uuid.UUID{})
 
@@ -200,21 +203,21 @@ func (t *SerialTests) TestCreateTask() {
 
 	// wait for the staging to complete and then check its status
 	// again (should be actively transferring)
-	time.Sleep(pause + stagingDuration)
+	time.Sleep(pause + endpointOptions.StagingDuration)
 	status, err = Status(taskId)
 	assert.Nil(err)
 	assert.Equal(TransferStatusActive, status.Code)
 
 	// wait again for the transfer to complete and then check its status
 	// (should be finalizing or have successfully completed)
-	time.Sleep(pause + transferDuration)
+	time.Sleep(pause + endpointOptions.TransferDuration)
 	status, err = Status(taskId)
 	assert.Nil(err)
 	assert.True(status.Code == TransferStatusFinalizing || status.Code == TransferStatusSucceeded)
 
 	// if the transfer was finalizing, check once more for completion
 	if status.Code != TransferStatusSucceeded {
-		time.Sleep(pause + transferDuration)
+		time.Sleep(pause + endpointOptions.TransferDuration)
 		status, err = Status(taskId)
 		assert.Nil(err)
 		assert.Equal(TransferStatusSucceeded, status.Code)
@@ -239,7 +242,7 @@ func (t *SerialTests) TestCancelTask() {
 
 	// queue up a transfer task between two phony databases
 	orcid := "1234-5678-9012-3456"
-	taskId, err := Create(orcid, "source", "destination", []string{"file1", "file2"})
+	taskId, err := Create(orcid, "test-source", "test-destination", []string{"file1", "file2"})
 	assert.Nil(err)
 	assert.True(taskId != uuid.UUID{})
 
@@ -278,7 +281,7 @@ func (t *SerialTests) TestStopAndRestart() {
 	numTasks := 10
 	taskIds := make([]uuid.UUID, numTasks)
 	for i := 0; i < numTasks; i++ {
-		taskId, _ := Create(orcid, "source", "destination", []string{"file1", "file2"})
+		taskId, _ := Create(orcid, "test-source", "test-destination", []string{"file1", "file2"})
 		taskIds[i] = taskId
 	}
 	time.Sleep(100 * time.Millisecond) // let things settle
@@ -313,178 +316,4 @@ func TestMain(m *testing.M) {
 	status = m.Run()
 	breakdown()
 	os.Exit(status)
-}
-
-//-------------------
-// Testing Apparatus
-//-------------------
-
-type FakeStagingRequest struct {
-	FileIds []string
-	Time    time.Time
-}
-
-// This type implements databases.Database with only enough behavior
-// to test the task manager.
-type FakeDatabase struct {
-	Endpt   endpoints.Endpoint
-	Staging map[uuid.UUID]FakeStagingRequest
-}
-
-// creates a new fake database that stages its 3 files
-func NewFakeSourceDatabase(orcid string) (databases.Database, error) {
-	endpoint, err := endpoints.NewEndpoint(config.Databases["source"].Endpoint)
-	if err != nil {
-		return nil, err
-	}
-	db := FakeDatabase{
-		Endpt:   endpoint,
-		Staging: make(map[uuid.UUID]FakeStagingRequest),
-	}
-	db.Endpt.(*FakeEndpoint).Database = &db
-	return &db, nil
-}
-
-// ... and a fake destination database that doesn't have to do anything
-func NewFakeDestinationDatabase(orcid string) (databases.Database, error) {
-	endpoint, err := endpoints.NewEndpoint(config.Databases["destination"].Endpoint)
-	if err != nil {
-		return nil, err
-	}
-	db := FakeDatabase{
-		Endpt: endpoint,
-	}
-	db.Endpt.(*FakeEndpoint).Database = &db
-	return &db, nil
-}
-
-func (db *FakeDatabase) Search(params databases.SearchParameters) (databases.SearchResults, error) {
-	// this method is unused, so we just need a placeholder
-	return databases.SearchResults{}, nil
-}
-
-func (db *FakeDatabase) Resources(fileIds []string) ([]DataResource, error) {
-	resources := make([]DataResource, 0)
-	var err error
-	for _, fileId := range fileIds {
-		if resource, found := testResources[fileId]; found {
-			resources = append(resources, resource)
-		} else {
-			err = fmt.Errorf("Unrecognized File ID: %s", fileId)
-			break
-		}
-	}
-	return resources, err
-}
-
-func (db *FakeDatabase) StageFiles(fileIds []string) (uuid.UUID, error) {
-	id := uuid.New()
-	db.Staging[id] = FakeStagingRequest{
-		FileIds: fileIds,
-		Time:    time.Now(),
-	}
-	return id, nil
-}
-
-func (db *FakeDatabase) StagingStatus(id uuid.UUID) (databases.StagingStatus, error) {
-	if info, found := db.Staging[id]; found {
-		if time.Now().Sub(info.Time) >= stagingDuration {
-			return databases.StagingStatusSucceeded, nil
-		}
-		return databases.StagingStatusActive, nil
-	} else {
-		return databases.StagingStatusUnknown, nil
-	}
-}
-
-func (db *FakeDatabase) Endpoint() (Endpoint, error) {
-	return db.Endpt, nil
-}
-
-func (db *FakeDatabase) LocalUser(orcid string) (string, error) {
-	return "fakeuser", nil
-}
-
-type TransferInfo struct {
-	Time   time.Time // transfer initiation time
-	Status TransferStatus
-}
-
-// This type implements endpoints.Endpoint with only enough behavior
-// to test the task manager.
-type FakeEndpoint struct {
-	Database         *FakeDatabase // fake database attached to endpoint
-	TransferDuration time.Duration // time it takes to "transfer files"
-	Xfers            map[uuid.UUID]TransferInfo
-}
-
-// creates a new fake source endpoint that transfers a fictional payload in 1
-// second
-func NewFakeEndpoint(name string) (endpoints.Endpoint, error) {
-	return &FakeEndpoint{
-		TransferDuration: transferDuration,
-		Xfers:            make(map[uuid.UUID]TransferInfo),
-	}, nil
-}
-
-func (ep *FakeEndpoint) Root() string {
-	root, _ := os.Getwd()
-	return root
-}
-
-func (ep *FakeEndpoint) FilesStaged(files []DataResource) (bool, error) {
-	if ep.Database != nil {
-		// are there any unrecognized files?
-		for _, file := range files {
-			if _, found := testResources[file.Id]; !found {
-				return false, fmt.Errorf("Unrecognized file: %s\n", file.Id)
-			}
-		}
-		// the source endpoint should report true for the staged files as long
-		// as the source database has had time to stage them
-		for _, req := range ep.Database.Staging {
-			if time.Now().Sub(req.Time) < stagingDuration {
-				return false, nil
-			}
-		}
-	}
-	return true, nil
-}
-
-func (ep *FakeEndpoint) Transfers() ([]uuid.UUID, error) {
-	xfers := make([]uuid.UUID, 0)
-	for xferId, _ := range ep.Xfers {
-		xfers = append(xfers, xferId)
-	}
-	return xfers, nil
-}
-
-func (ep *FakeEndpoint) Transfer(dst Endpoint, files []FileTransfer) (uuid.UUID, error) {
-	xferId := uuid.New()
-	ep.Xfers[xferId] = TransferInfo{
-		Time: time.Now(),
-		Status: TransferStatus{
-			Code:                TransferStatusActive,
-			NumFiles:            len(files),
-			NumFilesTransferred: 0,
-		},
-	}
-	return xferId, nil
-}
-
-func (ep *FakeEndpoint) Status(id uuid.UUID) (TransferStatus, error) {
-	if info, found := ep.Xfers[id]; found {
-		if info.Status.Code != TransferStatusSucceeded && time.Now().Sub(info.Time) >= transferDuration { // update if needed
-			info.Status.Code = TransferStatusSucceeded
-			ep.Xfers[id] = info
-		}
-		return info.Status, nil
-	} else {
-		return TransferStatus{}, fmt.Errorf("Invalid transfer ID: %s", id.String())
-	}
-}
-
-func (ep *FakeEndpoint) Cancel(id uuid.UUID) error {
-	// not used (yet)
-	return nil
 }

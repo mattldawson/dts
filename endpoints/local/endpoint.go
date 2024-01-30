@@ -225,3 +225,9 @@ func (ep *Endpoint) Cancel(id uuid.UUID) error {
 		return fmt.Errorf("Transfer %s not found!", id.String())
 	}
 }
+
+// this method is specific to local endpoints and gives access to the
+// local filesystem
+func (ep *Endpoint) FS() (fs.FS, error) {
+	return os.DirFS(filepath.Join("/", ep.root)), nil
+}

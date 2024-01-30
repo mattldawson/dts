@@ -25,7 +25,6 @@
 package tasks
 
 import (
-	//	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -36,9 +35,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/kbase/dts/config"
-	//	"github.com/kbase/dts/databases"
 	"github.com/kbase/dts/dtstest"
-	// "github.com/kbase/dts/endpoints"
 )
 
 // temporary testing directory
@@ -141,11 +138,6 @@ func setup() {
 
 	// register test databases/endpoints referred to in config file
 	dtstest.RegisterTestFixturesFromConfig(endpointOptions, testResources)
-	/*
-		databases.RegisterDatabase("source", NewFakeSourceDatabase)
-		databases.RegisterDatabase("destination", NewFakeDestinationDatabase)
-		endpoints.RegisterEndpointProvider("fake", NewFakeEndpoint)
-	*/
 
 	// Create the data directory used to save/restore tasks
 	os.Mkdir(config.Service.DataDirectory, 0755)

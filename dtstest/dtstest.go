@@ -63,14 +63,14 @@ Did you call config.Init()?`)
 	// register endpoint fixtures
 	for endpointName, endpointConfig := range config.Endpoints {
 		if strings.Contains(endpointConfig.Provider, "test") {
-			RegisterEndpoint(endpointName, endpointOptions, resources)
+			RegisterEndpoint(endpointName, endpointOptions)
 		}
 	}
 
 	// register database fixtures
 	for databaseName, _ := range config.Databases {
 		if strings.Contains(databaseName, "test") {
-			RegisterDatabase(databaseName)
+			RegisterDatabase(databaseName, resources)
 		}
 	}
 
@@ -100,8 +100,6 @@ type Endpoint struct {
 	Database *Database
 	// endpoint testing options
 	Options EndpointOptions
-	// data resources "available", indexed by unique identifiers
-	Resources map[string]frictionless.DataResource
 	// a table of ongoing "file transfers"
 	Xfers map[uuid.UUID]transferInfo
 	// root path
@@ -111,15 +109,13 @@ type Endpoint struct {
 // Registers an endpoint test fixture with the given name in the configuration,
 // assigning it options that govern its testing behavior, and assigning it the
 // given set of Frictionless DataResources as "test files."
-func RegisterEndpoint(endpointName string, options EndpointOptions,
-	resources map[string]frictionless.DataResource) error {
+func RegisterEndpoint(endpointName string, options EndpointOptions) error {
 	slog.Debug(fmt.Sprintf("Registering test endpoint %s...", endpointName))
 	newEndpointFunc := func(name string) (endpoints.Endpoint, error) {
 		return &Endpoint{
-			Options:   options,
-			Resources: resources,
-			Xfers:     make(map[uuid.UUID]transferInfo),
-			RootPath:  config.Endpoints[endpointName].Root,
+			Options:  options,
+			Xfers:    make(map[uuid.UUID]transferInfo),
+			RootPath: config.Endpoints[endpointName].Root,
 		}, nil
 	}
 	provider := config.Endpoints[endpointName].Provider
@@ -134,7 +130,7 @@ func (ep *Endpoint) FilesStaged(files []frictionless.DataResource) (bool, error)
 	if ep.Database != nil {
 		// are there any unrecognized files?
 		for _, file := range files {
-			if _, found := ep.Resources[file.Id]; !found {
+			if _, found := ep.Database.resources[file.Id]; !found {
 				return false, fmt.Errorf("Unrecognized file: %s\n", file.Id)
 			}
 		}
@@ -198,12 +194,13 @@ type stagingRequest struct {
 
 // This type implements a databases.Database test fixture
 type Database struct {
-	Endpt   endpoints.Endpoint
-	Staging map[uuid.UUID]stagingRequest
+	Endpt     endpoints.Endpoint
+	resources map[string]frictionless.DataResource
+	Staging   map[uuid.UUID]stagingRequest
 }
 
 // Registers a database test fixture with the given name in the configuration.
-func RegisterDatabase(databaseName string) error {
+func RegisterDatabase(databaseName string, resources map[string]frictionless.DataResource) error {
 	slog.Debug(fmt.Sprintf("Registering test database %s...", databaseName))
 	newDatabaseFunc := func(orcid string) (databases.Database, error) {
 		endpoint, err := endpoints.NewEndpoint(config.Databases[databaseName].Endpoint)
@@ -211,33 +208,39 @@ func RegisterDatabase(databaseName string) error {
 			return nil, err
 		}
 		db := Database{
-			Endpt:   endpoint,
-			Staging: make(map[uuid.UUID]stagingRequest),
+			Endpt:     endpoint,
+			resources: resources,
+			Staging:   make(map[uuid.UUID]stagingRequest),
 		}
-		db.Endpt.(*Endpoint).Database = &db
+		if testEndpoint, isTestEndpoint := db.Endpt.(*Endpoint); isTestEndpoint {
+			testEndpoint.Database = &db
+		}
 		return &db, nil
 	}
 	return databases.RegisterDatabase(databaseName, newDatabaseFunc)
 }
 
 func (db *Database) Search(params databases.SearchParameters) (databases.SearchResults, error) {
-	// this method is unused, so we just need a placeholder
-	return databases.SearchResults{}, nil
+	// look for file IDs in the search query
+	results := databases.SearchResults{
+		Resources: make([]frictionless.DataResource, 0),
+	}
+	for fileId, resource := range db.resources {
+		if strings.Contains(params.Query, fileId) {
+			results.Resources = append(results.Resources, resource)
+		}
+	}
+	return results, nil
 }
 
 func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, error) {
 	resources := make([]frictionless.DataResource, 0)
-	var err error
-	endpoint := db.Endpt.(*Endpoint)
 	for _, fileId := range fileIds {
-		if resource, found := endpoint.Resources[fileId]; found {
+		if resource, found := db.resources[fileId]; found {
 			resources = append(resources, resource)
-		} else {
-			err = fmt.Errorf("Unrecognized File ID: %s", fileId)
-			break
 		}
 	}
-	return resources, err
+	return resources, nil
 }
 
 func (db *Database) StageFiles(fileIds []string) (uuid.UUID, error) {

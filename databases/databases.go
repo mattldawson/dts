@@ -84,7 +84,17 @@ type NotFoundError struct {
 }
 
 func (e NotFoundError) Error() string {
-	return fmt.Sprintf("The database '%s' was not found.", e.dbName)
+	return fmt.Sprintf("The database %s was not found.", e.dbName)
+}
+
+// This error type is returned when a database is already registered and
+// an attempt is made to register it again.
+type AlreadyRegisteredError struct {
+	dbName string
+}
+
+func (e AlreadyRegisteredError) Error() string {
+	return fmt.Sprintf("Cannot register database %s (already registered).", e.dbName)
 }
 
 // we maintain a table of database instances, identified by their names
@@ -97,7 +107,7 @@ var createDatabaseFuncs = make(map[string]func(name string) (Database, error))
 // to allow for e.g. test database implementations
 func RegisterDatabase(dbName string, createDb func(orcid string) (Database, error)) error {
 	if _, found := createDatabaseFuncs[dbName]; found {
-		return fmt.Errorf("Cannot register database %s (already registered)", dbName)
+		return AlreadyRegisteredError{dbName: dbName}
 	} else {
 		createDatabaseFuncs[dbName] = createDb
 		return nil

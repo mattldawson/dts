@@ -448,14 +448,14 @@ func processTasks() {
 				slog.Info(fmt.Sprintf("Task %s: received cancellation request", taskId.String()))
 				task.Cancel()
 			} else {
-				err := fmt.Errorf("Task %s not found!", taskId.String())
+				err := NotFoundError{Id: taskId}
 				errorChan <- err
 			}
 		case taskId := <-getTaskStatusChan: // Status() called
 			if task, found := tasks[taskId]; found {
 				returnTaskStatusChan <- task.Status
 			} else {
-				err := fmt.Errorf("Task %s not found!", taskId.String())
+				err := NotFoundError{Id: taskId}
 				errorChan <- err
 			}
 		case <-pollChan: // time to move things along
@@ -563,11 +563,36 @@ var running bool                // true if tasks are processing, false if not
 var taskChannels channelsType   // channels used for processing tasks
 var stopHeartbeat chan struct{} // send a pulse to this channel to halt polling
 
+// This error type is returned when a task is sought but not found.
+type NotFoundError struct {
+	Id uuid.UUID
+}
+
+func (t NotFoundError) Error() string {
+	return fmt.Sprintf("The task %s was not found.", t.Id.String())
+}
+
+// This error type is returned if Start() is called when tasks are being
+// processed
+type AlreadyRunningError struct{}
+
+func (t AlreadyRunningError) Error() string {
+	return fmt.Sprintf("Tasks are already running and cannot be started again.")
+}
+
+// This error type is returned if Stop() is called when tasks are not being
+// processed
+type NotRunningError struct{}
+
+func (t NotRunningError) Error() string {
+	return fmt.Sprintf("Tasks are not currently being processed.")
+}
+
 // Starts processing tasks according to the given configuration, returning an
 // informative error if anything prevents this.
 func Start() error {
 	if running {
-		return fmt.Errorf("Tasks are already running and cannot be started again.")
+		return AlreadyRunningError{}
 	}
 
 	// if this is the first call to Start(), register our built-in endpoint
@@ -622,9 +647,14 @@ func Start() error {
 // Stops processing tasks. Adding new tasks and requesting task statuses are
 // disallowed in a stopped state.
 func Stop() error {
-	taskChannels.Stop <- struct{}{}
-	err := <-taskChannels.Error
-	running = false
+	var err error
+	if running {
+		taskChannels.Stop <- struct{}{}
+		err = <-taskChannels.Error
+		running = false
+	} else {
+		err = NotRunningError{}
+	}
 	return err
 }
 

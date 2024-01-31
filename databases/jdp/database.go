@@ -219,7 +219,7 @@ func creditFromIdAndMetadata(id string, md Metadata) credit.CreditMetadata {
 
 func trimFileSuffix(filename string) string {
 	for _, suffix := range supportedSuffixes {
-		trimmedFilename, trimmed := strings.CutSuffix(filename, suffix)
+		trimmedFilename, trimmed := strings.CutSuffix(filename, "."+suffix)
 		if trimmed {
 			return trimmedFilename
 		}

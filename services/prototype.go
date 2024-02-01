@@ -334,7 +334,6 @@ func (service *prototype) createTransfer(w http.ResponseWriter,
 		}
 		return
 	}
-	slog.Info(fmt.Sprintf("Transfer requested: %s", taskId.String()))
 	jsonData, _ := json.Marshal(TransferResponse{Id: taskId})
 	writeJson(w, jsonData, http.StatusCreated)
 }

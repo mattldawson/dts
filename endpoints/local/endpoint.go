@@ -202,28 +202,25 @@ func (ep *Endpoint) Transfer(dst endpoints.Endpoint, files []endpoints.FileTrans
 		}
 		go ep.transferFiles(xferId, dst)
 		return xferId, nil
-	} else {
-		return xferId, fmt.Errorf("The files requested for transfer are not yet staged.")
 	}
+	return xferId, fmt.Errorf("The files requested for transfer are not yet staged.")
 }
 
 func (ep *Endpoint) Status(id uuid.UUID) (endpoints.TransferStatus, error) {
 	if xfer, found := ep.Xfers[id]; found {
 		return xfer.Status, nil
-	} else {
-		return endpoints.TransferStatus{
-			Code: endpoints.TransferStatusUnknown,
-		}, fmt.Errorf("Transfer %s not found!", id.String())
 	}
+	return endpoints.TransferStatus{
+		Code: endpoints.TransferStatusUnknown,
+	}, fmt.Errorf("Transfer %s not found!", id.String())
 }
 
 func (ep *Endpoint) Cancel(id uuid.UUID) error {
 	if xfer, found := ep.Xfers[id]; found {
 		xfer.Canceled = true
 		return nil
-	} else {
-		return fmt.Errorf("Transfer %s not found!", id.String())
 	}
+	return fmt.Errorf("Transfer %s not found!", id.String())
 }
 
 // this method is specific to local endpoints and gives access to the

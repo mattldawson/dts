@@ -174,9 +174,8 @@ func (ep *Endpoint) Status(id uuid.UUID) (endpoints.TransferStatus, error) {
 			ep.Xfers[id] = info
 		}
 		return info.Status, nil
-	} else {
-		return endpoints.TransferStatus{}, fmt.Errorf("Invalid transfer ID: %s", id.String())
 	}
+	return endpoints.TransferStatus{}, fmt.Errorf("Invalid transfer ID: %s", id.String())
 }
 
 func (ep *Endpoint) Cancel(id uuid.UUID) error {
@@ -259,9 +258,8 @@ func (db *Database) StagingStatus(id uuid.UUID) (databases.StagingStatus, error)
 			return databases.StagingStatusSucceeded, nil
 		}
 		return databases.StagingStatusActive, nil
-	} else {
-		return databases.StagingStatusUnknown, nil
 	}
+	return databases.StagingStatusUnknown, nil
 }
 
 func (db *Database) Endpoint() (endpoints.Endpoint, error) {

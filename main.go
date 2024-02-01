@@ -45,7 +45,7 @@ import (
 // gives it an endpoint prefix of "docs". To enable these endpoints, you must
 // use the "docs" build: go build -tags docs
 
-// Prints usage info.
+// prints usage info
 func usage() {
 	fmt.Fprintf(os.Stderr, "%s: usage:\n", os.Args[0])
 	fmt.Fprintf(os.Stderr, "%s <config_file>\n", os.Args[0])
@@ -97,16 +97,8 @@ func main() {
 		log.Panicf("Couldn't create the service: %s\n", err.Error())
 	}
 
-	// Start the service in a goroutine so it doesn't block.
-	go func() {
-		err = service.Start(config.Service.Port)
-		if err != nil {
-			log.Println(err.Error())
-		}
-	}()
-
-	// Intercept the SIGINT, SIGHUP, SIGTERM, and SIGQUIT signals, shutting down
-	// the service as gracefully as possible if they are encountered.
+	// intercept the SIGINT, SIGHUP, SIGTERM, and SIGQUIT signals so we can shut
+	// down the service gracefully if they are encountered
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan,
 		syscall.SIGINT,
@@ -114,14 +106,24 @@ func main() {
 		syscall.SIGTERM,
 		syscall.SIGQUIT)
 
-	// Block till we receive one of the above signals.
+	// start the service in a goroutine so it doesn't block
+	go func() {
+		err = service.Start(config.Service.Port)
+		if err != nil { // on error, log the error message and issue a SIGINT
+			log.Println(err.Error())
+			thisProcess, _ := os.FindProcess(os.Getpid())
+			thisProcess.Signal(os.Interrupt)
+		}
+	}()
+
+	// block till we receive one of the above signals
 	<-sigChan
 
-	// Create a deadline to wait for.
+	// create a deadline to wait for
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Wait for connections to close until the deadline elapses.
+	// wait for connections to close until the deadline elapses
 	service.Shutdown(ctx)
 	log.Println("Shutting down")
 	os.Exit(0)

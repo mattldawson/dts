@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"slices"
@@ -98,12 +98,12 @@ func (service *prototype) getRoot(w http.ResponseWriter,
 
 	_, _, err := getAuthInfo(r.Header)
 	if err != nil {
-		log.Print(err.Error())
+		slog.Error(err.Error())
 		writeError(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
 
-	log.Printf("Querying root endpoint...")
+	slog.Info("Querying root endpoint...")
 	data := RootResponse{
 		Name:    service.Name,
 		Version: service.Version,
@@ -129,12 +129,12 @@ func (service *prototype) getDatabases(w http.ResponseWriter,
 
 	_, _, err := getAuthInfo(r.Header)
 	if err != nil {
-		log.Print(err.Error())
+		slog.Error(err.Error())
 		writeError(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
 
-	log.Printf("Querying organizational databases...")
+	slog.Info("Querying organizational databases...")
 	dbs := make([]dbMetadata, 0)
 	for dbName, db := range config.Databases {
 		dbs = append(dbs, dbMetadata{
@@ -156,7 +156,7 @@ func (service *prototype) getDatabase(w http.ResponseWriter,
 
 	_, _, err := getAuthInfo(r.Header)
 	if err != nil {
-		log.Print(err.Error())
+		slog.Error(err.Error())
 		writeError(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
@@ -164,11 +164,11 @@ func (service *prototype) getDatabase(w http.ResponseWriter,
 	vars := mux.Vars(r)
 	dbName := vars["db"]
 
-	log.Printf("Querying database %s...", dbName)
+	slog.Info(fmt.Sprintf("Querying database %s...", dbName))
 	db, ok := config.Databases[dbName]
 	if !ok {
 		errStr := fmt.Sprintf("Database %s not found", dbName)
-		log.Print(errStr)
+		slog.Error(errStr)
 		writeError(w, errStr, http.StatusNotFound)
 	} else {
 		data, _ := json.Marshal(dbMetadata{
@@ -231,7 +231,7 @@ func (service *prototype) searchDatabase(w http.ResponseWriter,
 
 	_, orcid, err := getAuthInfo(r.Header)
 	if err != nil {
-		log.Print(err.Error())
+		slog.Error(err.Error())
 		writeError(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
@@ -243,7 +243,7 @@ func (service *prototype) searchDatabase(w http.ResponseWriter,
 	_, ok := config.Databases[dbName]
 	if !ok {
 		errStr := fmt.Sprintf("Database %s not found", dbName)
-		log.Print(errStr)
+		slog.Error(errStr)
 		writeError(w, errStr, http.StatusNotFound)
 		return
 	}
@@ -255,7 +255,7 @@ func (service *prototype) searchDatabase(w http.ResponseWriter,
 		return
 	}
 
-	log.Printf("Searching database %s for files...", dbName)
+	slog.Info(fmt.Sprintf("Searching database %s for files...", dbName))
 	db, err := databases.NewDatabase(orcid, dbName)
 	if err != nil {
 		writeError(w, err.Error(), http.StatusNotFound)
@@ -334,6 +334,7 @@ func (service *prototype) createTransfer(w http.ResponseWriter,
 		}
 		return
 	}
+	slog.Info(fmt.Sprintf("Transfer requested: %s", taskId.String()))
 	jsonData, _ := json.Marshal(TransferResponse{Id: taskId})
 	writeJson(w, jsonData, http.StatusCreated)
 }
@@ -363,7 +364,7 @@ func (service *prototype) getTransferStatus(w http.ResponseWriter,
 
 	_, _, err := getAuthInfo(r.Header)
 	if err != nil {
-		log.Print(err.Error())
+		slog.Error(err.Error())
 		writeError(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
@@ -402,7 +403,7 @@ func (service *prototype) deleteTransfer(w http.ResponseWriter,
 
 	_, _, err := getAuthInfo(r.Header)
 	if err != nil {
-		log.Print(err.Error())
+		slog.Error(err.Error())
 		writeError(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
@@ -482,8 +483,8 @@ func NewDTSPrototype() (TransferService, error) {
 
 // starts the prototype data transfer service
 func (service *prototype) Start(port int) error {
-	log.Printf("Starting %s service on port %d...", service.Name, port)
-	log.Printf("(Accepting up to %d connections)", config.Service.MaxConnections)
+	slog.Info(fmt.Sprintf("Starting %s service on port %d...", service.Name, port))
+	slog.Info(fmt.Sprintf("(Accepting up to %d connections)", config.Service.MaxConnections))
 
 	service.StartTime = time.Now()
 
@@ -497,7 +498,10 @@ func (service *prototype) Start(port int) error {
 	listener = netutil.LimitListener(listener, config.Service.MaxConnections)
 
 	// start tasks processing
-	tasks.Start()
+	err = tasks.Start()
+	if err != nil {
+		return err
+	}
 
 	// start the server
 	service.Server = &http.Server{
@@ -507,19 +511,23 @@ func (service *prototype) Start(port int) error {
 	// we don't report the server closing as an error
 	if err != http.ErrServerClosed {
 		return err
-	} else {
-		return nil
 	}
+	return nil
 }
 
 // gracefully shuts down the service without interrupting active connections
 func (service *prototype) Shutdown(ctx context.Context) error {
 	tasks.Stop()
-	return service.Server.Shutdown(ctx)
+	if service.Server != nil {
+		return service.Server.Shutdown(ctx)
+	}
+	return nil
 }
 
 // closes down the service abruptly, freeing all resources
 func (service *prototype) Close() {
 	tasks.Stop()
-	service.Server.Close()
+	if service.Server != nil {
+		service.Server.Close()
+	}
 }

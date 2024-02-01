@@ -10,6 +10,7 @@ service:
   data_dir: /path/to/dir # directory DTS uses for data storage
   delete_after: 604800   # period after which info about completed transfers
                          # is deleted (seconds)
+  debug: true            # set to enable debug-level logging and other tools
 
 endpoints: # file transfer endpoints
   globus-local:

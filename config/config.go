@@ -49,6 +49,8 @@ type serviceConfig struct {
 	// time after which information about a completed transfer is deleted (seconds)
 	// default: 7 days
 	DeleteAfter int `json:"delete_after" yaml:"delete_after"`
+	// flag indicating whether debug logging and other tools are enabled
+	Debug bool `json:"debug" yaml:"debug"`
 }
 
 // global config variables

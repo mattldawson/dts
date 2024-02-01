@@ -53,36 +53,45 @@ func usage() {
 	os.Exit(1)
 }
 
+func enableLogging() {
+	logLevel := new(slog.LevelVar)
+	if config.Service.Debug {
+		logLevel.Set(slog.LevelDebug)
+	} else {
+		logLevel.Set(slog.LevelInfo)
+	}
+	handler := slog.NewJSONHandler(os.Stdout,
+		&slog.HandlerOptions{Level: logLevel})
+	slog.SetDefault(slog.New(handler))
+	slog.Debug("Debug logging enabled.")
+}
+
 func main() {
 
-	// The only argument is the configuration filename.
+	// the only argument is the configuration filename
 	if len(os.Args) < 2 {
 		usage()
 	}
 	configFile := os.Args[1]
 
-	// enables a default structured logger with JSON output
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	slog.SetDefault(logger)
-
-	// Read the configuration file.
+	// read the configuration file and initialize the config package
 	log.Printf("Reading configuration from '%s'...\n", configFile)
 	file, err := os.Open(configFile)
 	if err != nil {
 		log.Panicf("Couldn't open %s: %s\n", configFile, err.Error())
 	}
 	defer file.Close()
-
 	b, err := io.ReadAll(file)
 	if err != nil {
 		log.Panicf("Couldn't read configuration data: %s\n", err.Error())
 	}
-
-	// Initialize our configuration and create the service.
 	err = config.Init(b)
 	if err != nil {
 		log.Panicf("Couldn't initialize the configuration: %s\n", err.Error())
 	}
+
+	enableLogging()
+
 	service, err := services.NewDTSPrototype()
 	if err != nil {
 		log.Panicf("Couldn't create the service: %s\n", err.Error())

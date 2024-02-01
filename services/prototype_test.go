@@ -6,6 +6,7 @@ package services
 import (
 	"bytes"
 	"context"
+	"crypto/md5"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -19,14 +20,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/kbase/dts/config"
-	"github.com/kbase/dts/core"
-	"github.com/kbase/dts/databases"
 	"github.com/kbase/dts/dtstest"
-	"github.com/kbase/dts/endpoints"
+	"github.com/kbase/dts/frictionless"
 )
 
 // working directory from which the tests were invoked
@@ -95,96 +93,8 @@ endpoints:
     root: DESTINATION2_ROOT
 `
 
-//===============================
-// Test Database Implementations
-//===============================
-
-type testDatabase struct {
-	endpoint core.Endpoint
-	rootDir  string
-}
-
-func newSourceTestDatabase(orcid string) (core.Database, error) {
-	ep, err := endpoints.NewEndpoint("source-endpoint")
-	return &testDatabase{
-		endpoint: ep,
-		rootDir:  sourceRoot,
-	}, err
-}
-
-func newDestination1TestDatabase(orcid string) (core.Database, error) {
-	ep, err := endpoints.NewEndpoint("destination-endpoint1")
-	return &testDatabase{
-		endpoint: ep,
-		rootDir:  destination1Root,
-	}, err
-}
-
-func newDestination2TestDatabase(orcid string) (core.Database, error) {
-	ep, err := endpoints.NewEndpoint("destination-endpoint2")
-	return &testDatabase{
-		endpoint: ep,
-		rootDir:  destination2Root,
-	}, err
-}
-
-func (db *testDatabase) Search(params core.SearchParameters) (core.SearchResults, error) {
-	// the test database returns the query as the file ID for IDs "1", "2", and "3".
-	if params.Query == "1" || params.Query == "2" || params.Query == "3" {
-		return core.SearchResults{
-			Resources: []core.DataResource{
-				core.DataResource{
-					Id:        params.Query,
-					Name:      fmt.Sprintf("file%s", params.Query),
-					Path:      fmt.Sprintf("file%s.txt", params.Query),
-					Format:    "text",
-					MediaType: "text/plain",
-					Bytes:     4,
-				},
-			},
-		}, nil
-	} else {
-		return core.SearchResults{}, nil
-	}
-}
-
-func (db *testDatabase) Resources(fileIds []string) ([]core.DataResource, error) {
-	results := make([]core.DataResource, 0)
-	for _, id := range fileIds {
-		if id == "1" || id == "2" || id == "3" {
-			results = append(results, core.DataResource{
-				Id:        id,
-				Name:      fmt.Sprintf("file%s", id),
-				Path:      fmt.Sprintf("file%s.txt", id),
-				Format:    "text",
-				MediaType: "text/plain",
-				Bytes:     4,
-			})
-		} else {
-			return nil, fmt.Errorf("Unrecognized file ID: %s", id)
-		}
-	}
-	return results, nil
-}
-
-func (db *testDatabase) StageFiles(fileIds []string) (uuid.UUID, error) {
-	// no need to stage files, since they're already in place; just return
-	// a UUID.
-	return uuid.NewUUID()
-}
-
-func (db *testDatabase) StagingStatus(stagingId uuid.UUID) (core.StagingStatus, error) {
-	// the files are already in place, so staging has always "succeeded".
-	return core.StagingStatusSucceeded, nil
-}
-
-func (db *testDatabase) Endpoint() (core.Endpoint, error) {
-	return db.endpoint, nil
-}
-
-func (db *testDatabase) LocalUser(orcid string) (string, error) {
-	return testUser, nil
-}
+// file test metadata
+var testResources map[string]frictionless.DataResource
 
 // performs testing setup
 func setup() {
@@ -217,13 +127,28 @@ func setup() {
 			log.Panicf("Couldn't create destination directory: %s", err)
 		}
 	}
-	// create source files
+
+	// create source files and corresponding data resources
+	testResources = make(map[string]frictionless.DataResource)
 	for i := 1; i <= 3; i++ {
-		err = os.WriteFile(filepath.Join(sourceRoot, fmt.Sprintf("file%d.txt", i)),
-			[]byte(fmt.Sprintf("This is the content of file %d.", i)), 0600)
+		id := fmt.Sprintf("%d", i)
+		name := fmt.Sprintf("file%d", i)
+		path := name + ".txt"
+		data := []byte(fmt.Sprintf("This is the content of file %d.", i))
+		hash := md5.Sum(data)
+		err = os.WriteFile(filepath.Join(sourceRoot, path), data, 0600)
 		if err != nil {
 			log.Panicf("Couldn't create source file: %s", err)
 			break
+		}
+		testResources[id] = frictionless.DataResource{
+			Id:        id,
+			Name:      name,
+			Path:      path,
+			Format:    "text",
+			MediaType: "text/plain",
+			Bytes:     len(data),
+			Hash:      string(hash[:]),
 		}
 	}
 
@@ -237,6 +162,11 @@ func setup() {
 		log.Panicf("Couldn't initialize configuration: %s", err)
 	}
 
+	// register test databases referred to in config file
+	dtstest.RegisterDatabase("source", testResources)
+	dtstest.RegisterDatabase("destination1", nil)
+	dtstest.RegisterDatabase("destination2", nil)
+
 	// create the DTS data directory
 	os.Mkdir(config.Service.DataDirectory, 0755)
 
@@ -247,9 +177,6 @@ func setup() {
 		if err != nil {
 			log.Panicf("Couldn't construct the service: %s", err.Error())
 		}
-		databases.RegisterDatabase("source", newSourceTestDatabase)
-		databases.RegisterDatabase("destination1", newDestination1TestDatabase)
-		databases.RegisterDatabase("destination2", newDestination2TestDatabase)
 		err = service.Start(config.Service.Port)
 		if err != nil {
 			log.Panicf("Couldn't start search service: %s", err.Error())
@@ -333,7 +260,7 @@ func TestQueryRoot(t *testing.T) {
 	err = json.Unmarshal(respBody, &root)
 	assert.Nil(err)
 	assert.Equal("DTS prototype", root.Name)
-	assert.Equal(core.Version, root.Version)
+	assert.Equal(version, root.Version)
 }
 
 // queries the service's databases endpoint

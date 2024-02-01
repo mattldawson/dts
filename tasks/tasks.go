@@ -34,28 +34,32 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/kbase/dts/config"
-	"github.com/kbase/dts/core"
 	"github.com/kbase/dts/databases"
+	"github.com/kbase/dts/databases/jdp"
+	"github.com/kbase/dts/databases/kbase"
 	"github.com/kbase/dts/endpoints"
+	"github.com/kbase/dts/endpoints/globus"
+	"github.com/kbase/dts/endpoints/local"
+	"github.com/kbase/dts/frictionless"
 )
 
 // useful type aliases
-type Database = core.Database
-type DataPackage = core.DataPackage
-type DataResource = core.DataResource
-type Endpoint = core.Endpoint
-type FileTransfer = core.FileTransfer
-type TransferStatus = core.TransferStatus
+type Database = databases.Database
+type DataPackage = frictionless.DataPackage
+type DataResource = frictionless.DataResource
+type Endpoint = endpoints.Endpoint
+type FileTransfer = endpoints.FileTransfer
+type TransferStatus = endpoints.TransferStatus
 
 // useful constants
 const (
-	TransferStatusUnknown    = core.TransferStatusUnknown
-	TransferStatusStaging    = core.TransferStatusStaging
-	TransferStatusActive     = core.TransferStatusActive
-	TransferStatusFailed     = core.TransferStatusFailed
-	TransferStatusFinalizing = core.TransferStatusFinalizing
-	TransferStatusInactive   = core.TransferStatusInactive
-	TransferStatusSucceeded  = core.TransferStatusSucceeded
+	TransferStatusUnknown    = endpoints.TransferStatusUnknown
+	TransferStatusStaging    = endpoints.TransferStatusStaging
+	TransferStatusActive     = endpoints.TransferStatusActive
+	TransferStatusFailed     = endpoints.TransferStatusFailed
+	TransferStatusFinalizing = endpoints.TransferStatusFinalizing
+	TransferStatusInactive   = endpoints.TransferStatusInactive
+	TransferStatusSucceeded  = endpoints.TransferStatusSucceeded
 )
 
 // this type holds multiple (possibly null) UUIDs corresponding to different
@@ -314,7 +318,7 @@ func (task *taskType) Cancel() {
 	task.Canceled = true // mark as canceled
 
 	// fetch the source endpoint
-	var endpoint core.Endpoint
+	var endpoint endpoints.Endpoint
 	source, err := databases.NewDatabase(task.Orcid, task.Source)
 	if err != nil {
 		goto errorOccurred
@@ -444,14 +448,14 @@ func processTasks() {
 				slog.Info(fmt.Sprintf("Task %s: received cancellation request", taskId.String()))
 				task.Cancel()
 			} else {
-				err := fmt.Errorf("Task %s not found!", taskId.String())
+				err := NotFoundError{Id: taskId}
 				errorChan <- err
 			}
 		case taskId := <-getTaskStatusChan: // Status() called
 			if task, found := tasks[taskId]; found {
 				returnTaskStatusChan <- task.Status
 			} else {
-				err := fmt.Errorf("Task %s not found!", taskId.String())
+				err := NotFoundError{Id: taskId}
 				errorChan <- err
 			}
 		case <-pollChan: // time to move things along
@@ -554,15 +558,51 @@ func validateDataDirectory(dir string) error {
 }
 
 // global variables for managing tasks
+var firstCall = true            // indicates first call to Start()
 var running bool                // true if tasks are processing, false if not
 var taskChannels channelsType   // channels used for processing tasks
 var stopHeartbeat chan struct{} // send a pulse to this channel to halt polling
+
+// This error type is returned when a task is sought but not found.
+type NotFoundError struct {
+	Id uuid.UUID
+}
+
+func (t NotFoundError) Error() string {
+	return fmt.Sprintf("The task %s was not found.", t.Id.String())
+}
+
+// This error type is returned if Start() is called when tasks are being
+// processed
+type AlreadyRunningError struct{}
+
+func (t AlreadyRunningError) Error() string {
+	return fmt.Sprintf("Tasks are already running and cannot be started again.")
+}
+
+// This error type is returned if Stop() is called when tasks are not being
+// processed
+type NotRunningError struct{}
+
+func (t NotRunningError) Error() string {
+	return fmt.Sprintf("Tasks are not currently being processed.")
+}
 
 // Starts processing tasks according to the given configuration, returning an
 // informative error if anything prevents this.
 func Start() error {
 	if running {
-		return fmt.Errorf("Tasks are already running and cannot be started again.")
+		return AlreadyRunningError{}
+	}
+
+	// if this is the first call to Start(), register our built-in endpoint
+	// and database providers
+	if firstCall {
+		endpoints.RegisterEndpointProvider("globus", globus.NewEndpoint)
+		endpoints.RegisterEndpointProvider("local", local.NewEndpoint)
+		databases.RegisterDatabase("jdp", jdp.NewDatabase)
+		databases.RegisterDatabase("kbase", kbase.NewDatabase)
+		firstCall = false
 	}
 
 	// does the directory exist and is it writable/readable?
@@ -607,9 +647,14 @@ func Start() error {
 // Stops processing tasks. Adding new tasks and requesting task statuses are
 // disallowed in a stopped state.
 func Stop() error {
-	taskChannels.Stop <- struct{}{}
-	err := <-taskChannels.Error
-	running = false
+	var err error
+	if running {
+		taskChannels.Stop <- struct{}{}
+		err = <-taskChannels.Error
+		running = false
+	} else {
+		err = NotRunningError{}
+	}
 	return err
 }
 

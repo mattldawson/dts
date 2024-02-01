@@ -36,7 +36,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/kbase/dts/config"
-	"github.com/kbase/dts/core"
+	"github.com/kbase/dts/endpoints"
+	"github.com/kbase/dts/frictionless"
 )
 
 // This file implements a Globus endpoint. It uses the Globus Transfer API
@@ -56,7 +57,7 @@ type globusResult struct {
 	Message string `json:"message"`
 }
 
-// this type satisfies the core.Endpoint interface for Globus endpoints
+// this type satisfies the endpoints.Endpoint interface for Globus endpoints
 type Endpoint struct {
 	// descriptive endpoint name (obtained from config)
 	Name string
@@ -72,7 +73,7 @@ type Endpoint struct {
 
 // creates a new Globus endpoint using the information supplied in the
 // DTS configuration file under the given endpoint name
-func NewEndpoint(endpointName string) (core.Endpoint, error) {
+func NewEndpoint(endpointName string) (endpoints.Endpoint, error) {
 	epConfig, found := config.Endpoints[endpointName]
 	if !found {
 		return nil, fmt.Errorf("'%s' is not an endpoint", endpointName)
@@ -230,7 +231,7 @@ func (ep *Endpoint) Root() string {
 	return ep.root
 }
 
-func (ep *Endpoint) FilesStaged(files []core.DataResource) (bool, error) {
+func (ep *Endpoint) FilesStaged(files []frictionless.DataResource) (bool, error) {
 	// find all the directories in which these files reside
 	filesInDir := make(map[string][]string)
 	for _, resource := range files {
@@ -340,7 +341,7 @@ func (ep *Endpoint) getSubmissionId() (uuid.UUID, error) {
 
 // https://docs.globus.org/api/transfer/task_submit/#submit_transfer_task
 // https://docs.globus.org/api/transfer/task_submit/#transfer_item_fields
-func (ep *Endpoint) submitTransfer(destination core.Endpoint, submissionId uuid.UUID, files []core.FileTransfer) (uuid.UUID, error) {
+func (ep *Endpoint) submitTransfer(destination endpoints.Endpoint, submissionId uuid.UUID, files []endpoints.FileTransfer) (uuid.UUID, error) {
 	var xferId uuid.UUID
 
 	type TransferItem struct {
@@ -420,10 +421,10 @@ func (ep *Endpoint) submitTransfer(destination core.Endpoint, submissionId uuid.
 	return xferId, nil
 }
 
-func (ep *Endpoint) Transfer(destination core.Endpoint, files []core.FileTransfer) (uuid.UUID, error) {
+func (ep *Endpoint) Transfer(destination endpoints.Endpoint, files []endpoints.FileTransfer) (uuid.UUID, error) {
 	// check that all requested files are staged on this endpoint
 	// (Globus does not perform this check by itself)
-	requestedFiles := make([]core.DataResource, len(files))
+	requestedFiles := make([]frictionless.DataResource, len(files))
 	for i, file := range files {
 		requestedFiles[i].Path = file.SourcePath // only the Path field is required
 	}
@@ -446,23 +447,23 @@ func (ep *Endpoint) Transfer(destination core.Endpoint, files []core.FileTransfe
 }
 
 // mapping of Globus status code strings to DTS status codes
-var statusCodesForStrings = map[string]core.TransferStatusCode{
-	"ACTIVE":    core.TransferStatusActive,
-	"INACTIVE":  core.TransferStatusInactive,
-	"SUCCEEDED": core.TransferStatusSucceeded,
-	"FAILED":    core.TransferStatusFailed,
+var statusCodesForStrings = map[string]endpoints.TransferStatusCode{
+	"ACTIVE":    endpoints.TransferStatusActive,
+	"INACTIVE":  endpoints.TransferStatusInactive,
+	"SUCCEEDED": endpoints.TransferStatusSucceeded,
+	"FAILED":    endpoints.TransferStatusFailed,
 }
 
-func (ep *Endpoint) Status(id uuid.UUID) (core.TransferStatus, error) {
+func (ep *Endpoint) Status(id uuid.UUID) (endpoints.TransferStatus, error) {
 	resource := fmt.Sprintf("task/%s", id.String())
 	resp, err := ep.get(resource, url.Values{})
 	if err != nil {
-		return core.TransferStatus{}, err
+		return endpoints.TransferStatus{}, err
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return core.TransferStatus{}, err
+		return endpoints.TransferStatus{}, err
 	}
 	type TaskResponse struct {
 		Files            int    `json:"files"`
@@ -477,12 +478,12 @@ func (ep *Endpoint) Status(id uuid.UUID) (core.TransferStatus, error) {
 	var response TaskResponse
 	err = json.Unmarshal(body, &response)
 	if err != nil {
-		return core.TransferStatus{}, err
+		return endpoints.TransferStatus{}, err
 	}
 	if strings.Contains(response.Code, "ClientError") { // e.g. not found
-		return core.TransferStatus{}, fmt.Errorf(response.Message)
+		return endpoints.TransferStatus{}, fmt.Errorf(response.Message)
 	}
-	return core.TransferStatus{
+	return endpoints.TransferStatus{
 		Code:                statusCodesForStrings[response.Status],
 		NumFiles:            response.Files,
 		NumFilesSkipped:     response.FilesSkipped,

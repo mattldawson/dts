@@ -21,10 +21,18 @@ import (
 
 	"github.com/kbase/dts/auth"
 	"github.com/kbase/dts/config"
-	"github.com/kbase/dts/core"
 	"github.com/kbase/dts/databases"
+	"github.com/kbase/dts/endpoints"
 	"github.com/kbase/dts/tasks"
 )
+
+// Version numbers
+var majorVersion = 0
+var minorVersion = 1
+var patchVersion = 0
+
+// Version string
+var version = fmt.Sprintf("%d.%d.%d", majorVersion, minorVersion, patchVersion)
 
 // This type implements the TransferService interface, allowing file transfers
 // from JGI (via the JGI Data Portal) to KBase via Globus.
@@ -175,7 +183,7 @@ func (service *prototype) getDatabase(w http.ResponseWriter,
 // this helper translates an array of engines.SearchResults to a JSON object
 // containing search results for the query (including the database name)
 func jsonFromSearchResults(dbName string,
-	query string, results core.SearchResults) ([]byte, error) {
+	query string, results databases.SearchResults) ([]byte, error) {
 
 	data := ElasticSearchResponse{
 		Database:  dbName,
@@ -187,8 +195,8 @@ func jsonFromSearchResults(dbName string,
 }
 
 // helper for extracting search parameters
-func extractSearchParams(r *http.Request) (core.SearchParameters, error) {
-	var params core.SearchParameters
+func extractSearchParams(r *http.Request) (databases.SearchParameters, error) {
+	var params databases.SearchParameters
 	params.Query = r.FormValue("query")
 	if params.Query == "" {
 		return params, fmt.Errorf("Query string not given!")
@@ -331,19 +339,19 @@ func (service *prototype) createTransfer(w http.ResponseWriter,
 }
 
 // convert a transfer status code to a nice human-friendly string
-func statusAsString(statusCode core.TransferStatusCode) string {
+func statusAsString(statusCode endpoints.TransferStatusCode) string {
 	switch statusCode {
-	case core.TransferStatusStaging:
+	case endpoints.TransferStatusStaging:
 		return "staging"
-	case core.TransferStatusActive:
+	case endpoints.TransferStatusActive:
 		return "active"
-	case core.TransferStatusInactive:
+	case endpoints.TransferStatusInactive:
 		return "inactive"
-	case core.TransferStatusFinalizing:
+	case endpoints.TransferStatusFinalizing:
 		return "finalizing"
-	case core.TransferStatusSucceeded:
+	case endpoints.TransferStatusSucceeded:
 		return "succeeded"
-	case core.TransferStatusFailed:
+	case endpoints.TransferStatusFailed:
 		return "failed"
 	}
 	return "unknown"
@@ -440,7 +448,7 @@ func NewDTSPrototype() (TransferService, error) {
 
 	service := new(prototype)
 	service.Name = "DTS prototype"
-	service.Version = core.Version
+	service.Version = version
 	service.Port = -1
 
 	// set up routing

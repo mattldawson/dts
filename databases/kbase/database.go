@@ -29,18 +29,19 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/kbase/dts/config"
-	"github.com/kbase/dts/core"
+	"github.com/kbase/dts/databases"
 	"github.com/kbase/dts/endpoints"
+	"github.com/kbase/dts/frictionless"
 )
 
 // file database appropriate for handling KBase searches and transfers
-// (implements the core.Database interface)
+// (implements the databases.Database interface)
 type Database struct {
 	// database identifier
 	Id string
 }
 
-func NewDatabase(orcid string) (core.Database, error) {
+func NewDatabase(orcid string) (databases.Database, error) {
 	if orcid == "" {
 		return nil, fmt.Errorf("No ORCID ID was given")
 	}
@@ -50,12 +51,12 @@ func NewDatabase(orcid string) (core.Database, error) {
 	}, nil
 }
 
-func (db *Database) Search(params core.SearchParameters) (core.SearchResults, error) {
+func (db *Database) Search(params databases.SearchParameters) (databases.SearchResults, error) {
 	err := fmt.Errorf("Search not implemented for kbase database!")
-	return core.SearchResults{}, err
+	return databases.SearchResults{}, err
 }
 
-func (db *Database) Resources(fileIds []string) ([]core.DataResource, error) {
+func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, error) {
 	err := fmt.Errorf("Resources not implemented for kbase database!")
 	return nil, err
 }
@@ -65,12 +66,12 @@ func (db *Database) StageFiles(fileIds []string) (uuid.UUID, error) {
 	return uuid.UUID{}, err
 }
 
-func (db *Database) StagingStatus(id uuid.UUID) (core.StagingStatus, error) {
+func (db *Database) StagingStatus(id uuid.UUID) (databases.StagingStatus, error) {
 	err := fmt.Errorf("StagingStatus not implemented for kbase database!")
-	return core.StagingStatusUnknown, err
+	return databases.StagingStatusUnknown, err
 }
 
-func (db *Database) Endpoint() (core.Endpoint, error) {
+func (db *Database) Endpoint() (endpoints.Endpoint, error) {
 	return endpoints.NewEndpoint(config.Databases[db.Id].Endpoint)
 }
 

@@ -180,7 +180,7 @@ func (service *prototype) getDatabase(w http.ResponseWriter,
 	}
 }
 
-// this helper translates an array of engines.SearchResults to a JSON object
+// this helper translates an array of SearchResults to a JSON object
 // containing search results for the query (including the database name)
 func jsonFromSearchResults(dbName string,
 	query string, results databases.SearchResults) ([]byte, error) {

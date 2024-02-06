@@ -91,18 +91,32 @@ func (task *taskType) start() error {
 		return err
 	}
 
-	// tell the source DB to stage the files, stash the task, and return
-	// its new ID
-	task.Staging.UUID, err = source.StageFiles(task.FileIds)
-	task.Staging.Valid = true
+	// are the files already staged?
+	sourceEndpoint, err := source.Endpoint()
 	if err != nil {
 		return err
 	}
-	task.Status = TransferStatus{
-		Code:     TransferStatusStaging,
-		NumFiles: len(task.FileIds),
+	staged, err := sourceEndpoint.FilesStaged(task.Resources)
+	if err != nil {
+		return err
 	}
-	return nil
+
+	if staged {
+		err = task.beginTransfer()
+	} else {
+		// tell the source DB to stage the files, stash the task, and return
+		// its new ID
+		task.Staging.UUID, err = source.StageFiles(task.FileIds)
+		task.Staging.Valid = true
+		if err != nil {
+			return err
+		}
+		task.Status = TransferStatus{
+			Code:     TransferStatusStaging,
+			NumFiles: len(task.FileIds),
+		}
+	}
+	return err
 }
 
 // updates the status of a canceled task depending on where it is in its
@@ -129,6 +143,55 @@ func (task *taskType) checkCancellation() error {
 	return nil
 }
 
+// initiates a file transfer on a set of staged files
+func (task *taskType) beginTransfer() error {
+	source, err := databases.NewDatabase(task.Orcid, task.Source)
+	if err != nil {
+		return err
+	}
+	destination, err := databases.NewDatabase(task.Orcid, task.Destination)
+	if err != nil {
+		return err
+	}
+	destinationEndpoint, err := destination.Endpoint()
+	if err != nil {
+		return err
+	}
+
+	// construct the source/destination file paths
+	username, err := source.LocalUser(task.Orcid)
+	if err != nil {
+		return err
+	}
+	fileXfers := make([]FileTransfer, len(task.Resources))
+	for i, resource := range task.Resources {
+		destinationPath := filepath.Join(username, task.Id.String(), resource.Path)
+		fileXfers[i] = FileTransfer{
+			SourcePath:      resource.Path,
+			DestinationPath: destinationPath,
+			Hash:            resource.Hash,
+		}
+	}
+
+	// initiate the transfer
+	sourceEndpoint, err := source.Endpoint()
+	if err != nil {
+		return err
+	}
+	task.Transfer.UUID, err = sourceEndpoint.Transfer(destinationEndpoint, fileXfers)
+	if err != nil {
+		return err
+	}
+
+	task.Status = TransferStatus{
+		Code:     TransferStatusActive,
+		NumFiles: len(task.FileIds),
+	}
+	task.Staging = uuid.NullUUID{}
+	task.Transfer.Valid = true
+	return nil
+}
+
 // checks whether files for a task are finished staging and, if so,
 // initiates the transfer process
 func (task *taskType) checkStaging() error {
@@ -145,44 +208,9 @@ func (task *taskType) checkStaging() error {
 		return err
 	}
 	if staged {
-		destination, err := databases.NewDatabase(task.Orcid, task.Destination)
-		if err != nil {
-			return err
-		}
-		destinationEndpoint, err := destination.Endpoint()
-		if err != nil {
-			return err
-		}
-
-		// construct the source/destination file paths
-		username, err := source.LocalUser(task.Orcid)
-		if err != nil {
-			return err
-		}
-		fileXfers := make([]FileTransfer, len(task.Resources))
-		for i, resource := range task.Resources {
-			destinationPath := filepath.Join(username, task.Id.String(), resource.Path)
-			fileXfers[i] = FileTransfer{
-				SourcePath:      resource.Path,
-				DestinationPath: destinationPath,
-				Hash:            resource.Hash,
-			}
-		}
-
-		// initiate the transfer
-		task.Transfer.UUID, err = sourceEndpoint.Transfer(destinationEndpoint, fileXfers)
-		if err != nil {
-			return err
-		}
-
-		task.Status = TransferStatus{
-			Code:     TransferStatusActive,
-			NumFiles: len(task.FileIds),
-		}
-		task.Staging = uuid.NullUUID{}
-		task.Transfer.Valid = true
+		err = task.beginTransfer()
 	}
-	return nil
+	return err
 }
 
 // checks whether files for a task are finished transferring and, if so,

@@ -245,25 +245,32 @@ func (ep *Endpoint) FilesStaged(files []frictionless.DataResource) (bool, error)
 			return false, err
 		}
 		// https://docs.globus.org/api/transfer/file_operations/#dir_listing_response
-		slog.Debug(fmt.Sprintf("Response body: %s", string(body)))
 		type DirListingResponse struct {
 			Data []struct {
 				Name string `json:"name"`
 			} `json:"DATA"`
+
+			// these fields are only present for error responses
+			Code    string `json:"code"`
+			Message string `json:"message"`
 		}
 		var response DirListingResponse
 		err = json.Unmarshal(body, &response)
 		if err != nil {
 			return false, err
 		}
-		filesPresent := make(map[string]bool)
-		for _, data := range response.Data {
-			slog.Debug(fmt.Sprintf("Found %s", data.Name))
-			filesPresent[data.Name] = true
-		}
-		for _, file := range files {
-			if _, present := filesPresent[file]; !present {
-				return false, nil
+		if response.Code != "" { // error occurred
+			return false, fmt.Errorf("FilesStaged (%s): %s (%s)", ep.Name,
+				response.Message, response.Code)
+		} else {
+			filesPresent := make(map[string]bool)
+			for _, data := range response.Data {
+				filesPresent[data.Name] = true
+			}
+			for _, file := range files {
+				if _, present := filesPresent[file]; !present {
+					return false, nil
+				}
 			}
 		}
 	}

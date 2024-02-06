@@ -63,8 +63,8 @@ type Endpoint struct {
 	Name string
 	// endpoint UUID (obtained from config)
 	Id uuid.UUID
-	// root directory of endpoint (host_root)
-	root string
+	// root directory for endpoint
+	RootDir string
 	// HTTP client that caches queries
 	Client http.Client
 	// OAuth2 access token
@@ -81,9 +81,6 @@ func NewEndpoint(endpointName string) (endpoints.Endpoint, error) {
 	if epConfig.Provider != "globus" {
 		return nil, fmt.Errorf("'%s' is not a Globus endpoint", endpointName)
 	}
-	if epConfig.Root != "" {
-		return nil, fmt.Errorf("As a Globus endpoint, '%s' cannot have its root directory specified", endpointName)
-	}
 
 	ep := &Endpoint{
 		Name: epConfig.Name,
@@ -99,29 +96,16 @@ func NewEndpoint(endpointName string) (endpoints.Endpoint, error) {
 		}
 	}
 
-	// fetch the endpoint's root path
-	resource := fmt.Sprintf("endpoint/%s", ep.Id.String())
-	resp, err := ep.get(resource, url.Values{})
-	if err != nil {
-		return ep, err
+	// if present, the root entry overrides the endpoint's root, and is expressed
+	// as a path relative to it
+	if epConfig.Root != "" {
+		slog.Debug(fmt.Sprintf("Endpoint %s: root directory: %s",
+			endpointName, epConfig.Root))
+		ep.RootDir = epConfig.Root
+	} else {
+		ep.RootDir = "/"
 	}
-	if resp.StatusCode != 200 {
-		return ep, err
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return ep, err
-	}
-	type EndpointDocument struct {
-		HostRoot string `json:"host_root"`
-	}
-	var endpointResp EndpointDocument
-	err = json.Unmarshal(body, &endpointResp)
-	if err != nil {
-		return ep, err
-	}
-	ep.root = endpointResp.HostRoot
+
 	return ep, nil
 }
 
@@ -228,7 +212,7 @@ func (ep *Endpoint) post(resource string, body io.Reader) (*http.Response, error
 }
 
 func (ep *Endpoint) Root() string {
-	return ep.root
+	return ep.RootDir
 }
 
 func (ep *Endpoint) FilesStaged(files []frictionless.DataResource) (bool, error) {
@@ -236,6 +220,7 @@ func (ep *Endpoint) FilesStaged(files []frictionless.DataResource) (bool, error)
 	filesInDir := make(map[string][]string)
 	for _, resource := range files {
 		dir, file := filepath.Split(resource.Path)
+		dir = filepath.Join(ep.RootDir, dir)
 		if _, found := filesInDir[dir]; !found {
 			filesInDir[dir] = make([]string, 0)
 		}
@@ -260,6 +245,7 @@ func (ep *Endpoint) FilesStaged(files []frictionless.DataResource) (bool, error)
 			return false, err
 		}
 		// https://docs.globus.org/api/transfer/file_operations/#dir_listing_response
+		slog.Debug(fmt.Sprintf("Response body: %s", string(body)))
 		type DirListingResponse struct {
 			Data []struct {
 				Name string `json:"name"`
@@ -272,6 +258,7 @@ func (ep *Endpoint) FilesStaged(files []frictionless.DataResource) (bool, error)
 		}
 		filesPresent := make(map[string]bool)
 		for _, data := range response.Data {
+			slog.Debug(fmt.Sprintf("Found %s", data.Name))
 			filesPresent[data.Name] = true
 		}
 		for _, file := range files {

@@ -389,6 +389,7 @@ func (service *prototype) getTransferStatus(w http.ResponseWriter,
 	resp := TransferStatusResponse{
 		Id:                  xferId.String(),
 		Status:              statusAsString(status.Code),
+		Message:             status.Message,
 		NumFiles:            status.NumFiles,
 		NumFilesTransferred: status.NumFilesTransferred,
 	}

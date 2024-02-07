@@ -56,6 +56,8 @@ const (
 type TransferStatus struct {
 	// status code (see above)
 	Code TransferStatusCode
+	// message describing a failure status
+	Message string
 	// total number of files being transferred
 	NumFiles int
 	// number of files that have been transferred

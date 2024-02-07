@@ -25,7 +25,9 @@ import (
 	"bytes"
 	"encoding/gob"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -78,7 +80,7 @@ type taskType struct {
 	CompletionTime      time.Time      // time at which the transfer completed
 }
 
-// starts a task going, initiating staging
+// starts a task going, initiating staging if needed
 func (task *taskType) start() error {
 	source, err := databases.NewDatabase(task.Orcid, task.Source)
 	if err != nil {
@@ -133,9 +135,11 @@ func (task *taskType) checkCancellation() error {
 			return err
 		}
 		task.Status, err = endpoint.Status(task.Id)
+		return err
 	} else {
-		// at any other point in the lifecycle, cut and run
+		// at any other point in the lifecycle, terminate the task
 		task.Status.Code = TransferStatusFailed
+		task.Status.Message = "Task canceled at user request"
 	}
 	if task.Completed() {
 		task.CompletionTime = time.Now()
@@ -150,10 +154,6 @@ func (task *taskType) beginTransfer() error {
 		return err
 	}
 	destination, err := databases.NewDatabase(task.Orcid, task.Destination)
-	if err != nil {
-		return err
-	}
-	destinationEndpoint, err := destination.Endpoint()
 	if err != nil {
 		return err
 	}
@@ -175,6 +175,10 @@ func (task *taskType) beginTransfer() error {
 
 	// initiate the transfer
 	sourceEndpoint, err := source.Endpoint()
+	if err != nil {
+		return err
+	}
+	destinationEndpoint, err := destination.Endpoint()
 	if err != nil {
 		return err
 	}
@@ -319,6 +323,7 @@ func (task *taskType) checkManifest() error {
 		os.Remove(task.ManifestFile)
 		task.ManifestFile = ""
 		task.Status.Code = xferStatus.Code
+		task.Status.Message = ""
 		task.CompletionTime = time.Now()
 	}
 	return nil
@@ -326,7 +331,7 @@ func (task *taskType) checkManifest() error {
 
 // returns the duration since the task completed (successfully or otherwise),
 // or 0 if the task has not completed
-func (task *taskType) Age() time.Duration {
+func (task taskType) Age() time.Duration {
 	if task.Status.Code == TransferStatusSucceeded ||
 		task.Status.Code == TransferStatusFailed {
 		return time.Since(task.CompletionTime)
@@ -336,35 +341,28 @@ func (task *taskType) Age() time.Duration {
 }
 
 // returns true if the task has completed (successfully or not), false otherwise
-func (task *taskType) Completed() bool {
+func (task taskType) Completed() bool {
 	return task.Status.Code == TransferStatusSucceeded ||
 		task.Status.Code == TransferStatusFailed
 }
 
 // requests that the task be canceled
-func (task *taskType) Cancel() {
+func (task *taskType) Cancel() error {
 	task.Canceled = true // mark as canceled
 
 	// fetch the source endpoint
 	var endpoint endpoints.Endpoint
 	source, err := databases.NewDatabase(task.Orcid, task.Source)
 	if err != nil {
-		goto errorOccurred
+		return err
 	}
 	endpoint, err = source.Endpoint()
 	if err != nil {
-		goto errorOccurred
+		return err
 	}
 
 	// request that the task be canceled
-	err = endpoint.Cancel(task.Id)
-	if err != nil {
-		goto errorOccurred
-	}
-	return
-errorOccurred:
-	slog.Error(fmt.Sprintf("Task %s: error in cancellation: %s",
-		task.Id, err.Error()))
+	return endpoint.Cancel(task.Id)
 }
 
 // this function updates the state of a task, setting its status as necessary
@@ -425,6 +423,11 @@ func saveTasks(tasks map[uuid.UUID]taskType, dataFile string) error {
 			return fmt.Errorf("Writing task file %s: %s", dataFile, err.Error())
 		}
 		slog.Debug(fmt.Sprintf("Saved %d tasks to %s", len(tasks), dataFile))
+	} else {
+		_, err := os.Stat(dataFile)
+		if !errors.Is(err, fs.ErrNotExist) { // file exists
+			os.Remove(dataFile)
+		}
 	}
 	return nil
 }
@@ -474,7 +477,14 @@ func processTasks() {
 		case taskId := <-cancelTaskChan: // Cancel() called
 			if task, found := tasks[taskId]; found {
 				slog.Info(fmt.Sprintf("Task %s: received cancellation request", taskId.String()))
-				task.Cancel()
+				err := task.Cancel()
+				if err != nil {
+					task.Status.Code = TransferStatusUnknown
+					task.Status.Message = fmt.Sprintf("error in cancellation: %s", err.Error())
+					task.CompletionTime = time.Now()
+					slog.Error(fmt.Sprintf("Task %s: %s", task.Id.String(), task.Status.Message))
+					tasks[task.Id] = task
+				}
 			} else {
 				err := NotFoundError{Id: taskId}
 				errorChan <- err
@@ -492,8 +502,12 @@ func processTasks() {
 					oldStatus := task.Status
 					err := task.Update()
 					if err != nil {
-						// we log task update errors but do not propagate them
-						slog.Error(err.Error())
+						// We log task update errors but do not propagate them. All
+						// task errors result in a failed status.
+						task.Status.Code = TransferStatusFailed
+						task.Status.Message = err.Error()
+						task.CompletionTime = time.Now()
+						slog.Error(fmt.Sprintf("Task %s: %s", task.Id.String(), task.Status.Message))
 					}
 					if task.Status.Code != oldStatus.Code {
 						switch task.Status.Code {

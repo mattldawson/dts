@@ -7,12 +7,13 @@ package jdp
 
 import (
 	"bytes"
+	"crypto/md5"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
-	"os"
+	"strings"
 	"time"
 
 	"gopkg.in/dnaeon/go-vcr.v3/recorder"
@@ -76,26 +77,60 @@ type jamoPageQueryResponse struct {
 	Records     []jamoFileRecord `json:"records"`
 }
 
+// this flag is true until the first query to JAMO
+var jamoFirstQuery = true
+
+// this flag indicates whether JAMO is available (i.e. whether DTS is running
+// in the proper domain), and can only be trusted when jamoFirstQuery is false
+var jamoIsAvailable = false
+
+// this flag indicates whether we want to record JAMO queries (usually in a
+// testing environment, where it's set)
+var recordJamo = false
+
 // This function gathers and returns all jamo file records that correspond to
 // the given list of file IDs. The list of files is returned in the same order
 // as the list of file IDs.
 func queryJamo(fileIds []string) ([]jamoFileRecord, error) {
-	// fire up a recorder based on our testing needs (since we rely on JAMO
-	// for fetching file paths, and since JAMO only works within LBL's VPN)
-	var recordingMode recorder.Mode
-	if _, onVPN := os.LookupEnv("DTS_ON_LBL_VPN"); onVPN {
-		slog.Debug("Querying JAMO for file resource info")
-		recordingMode = recorder.ModeRecordOnly
-	} else {
-		slog.Debug("Using pre-recorded JAMO results for query")
-		recordingMode = recorder.ModeReplayOnly
+	const jamoBaseUrl = "https://jamo-dev.jgi.doe.gov/"
+
+	if jamoFirstQuery {
+		// poke JAMO to see whether it's available in the current domain
+		resp, err := http.Get(jamoBaseUrl)
+		if err != nil {
+			return nil, err
+		}
+		if resp.StatusCode == http.StatusOK { // success!
+			jamoIsAvailable = true
+		}
+		jamoFirstQuery = false
 	}
-	r, err := recorder.NewWithOptions(&recorder.Options{
-		CassetteName: "fixtures/dts-jamo-cassette",
-		Mode:         recordingMode,
+
+	// create a checksum that uniquely identifies the set of requested file IDs
+	checksum := md5.Sum([]byte(strings.Join(fileIds, ",")))
+
+	// set up a "VCR" to manage the recording and playback of JAMO queries
+	vcrMode := recorder.ModePassthrough // no recording or playback by default
+	cassetteName := fmt.Sprintf("fixtures/dts-jamo-cassette-%x", checksum)
+	if jamoIsAvailable {
+		slog.Debug("Querying JAMO for file resource info")
+		if recordJamo {
+			slog.Debug("Recording JAMO query")
+			vcrMode = recorder.ModeRecordOnly
+		}
+	} else { // JAMO not available -- playback
+		slog.Debug("JAMO unavailable -- using pre-recorded results for query")
+		vcrMode = recorder.ModeReplayOnly
+	}
+	vcr, err := recorder.NewWithOptions(&recorder.Options{
+		CassetteName: cassetteName,
+		Mode:         vcrMode,
 	})
-	defer r.Stop()
-	client := r.GetDefaultClient()
+	if err != nil {
+		return nil, fmt.Errorf("queryJamo: %s", err.Error())
+	}
+	defer vcr.Stop()
+	client := vcr.GetDefaultClient()
 
 	// prepare a JAMO query with the desired file IDs
 	// (also record the indices of each file ID so we can preserve their order)
@@ -120,9 +155,8 @@ func queryJamo(fileIds []string) ([]jamoFileRecord, error) {
 	}
 
 	// do the initial POST to JAMO and fetch results
-	const jamoBaseURL = "https://jamo-dev.jgi.doe.gov/api/metadata/"
-
-	const jamoPageQueryURL = jamoBaseURL + "pagequery"
+	const jamoApiUrl = jamoBaseUrl + "api/metadata/"
+	const jamoPageQueryURL = jamoApiUrl + "pagequery"
 	req, err := http.NewRequest(http.MethodPost, jamoPageQueryURL, bytes.NewReader(payload))
 	if err != nil {
 		return nil, err
@@ -161,8 +195,8 @@ func queryJamo(fileIds []string) ([]jamoFileRecord, error) {
 
 		// go back for more records
 		if results.End < results.RecordCount {
-			jamoNextPageURL := fmt.Sprintf("%snextpage/%s", jamoBaseURL, results.CursorId)
-			req, err = http.NewRequest(http.MethodGet, jamoNextPageURL, http.NoBody)
+			jamoNextPageUrl := fmt.Sprintf("%snextpage/%s", jamoApiUrl, results.CursorId)
+			req, err = http.NewRequest(http.MethodGet, jamoNextPageUrl, http.NoBody)
 			if err != nil {
 				break
 			}

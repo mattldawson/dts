@@ -1,6 +1,7 @@
 package jdp
 
 import (
+	"flag"
 	"os"
 	"testing"
 
@@ -39,6 +40,11 @@ func setup() {
 	config.Init([]byte(jdpConfig))
 	databases.RegisterDatabase("jdp", NewDatabase)
 	endpoints.RegisterEndpointProvider("globus", globus.NewEndpoint)
+
+	// check for a "record-jamo" flag and stash the result in the recordJamo
+	// global package variable
+	flag.BoolVar(&recordJamo, "record-jamo", false, "records JAMO test queries for use in CI system")
+	flag.Parse()
 }
 
 // this function gets called after all tests have been run

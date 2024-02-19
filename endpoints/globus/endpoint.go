@@ -48,13 +48,23 @@ const (
 	globusTransferApiVersion = "v0.10"
 )
 
-// this type captures results from Globus Transfer API responses, including
-// any errors encountered (https://docs.globus.org/api/transfer/overview/#errors)
-type globusResult struct {
-	// string indicating the Globus error condition (e.g. "EndpointNotFound")
-	Code string `json:"code"`
-	// error message
+// this error type is returned when a Globus operation fails for any reason
+type GlobusError struct {
+	Code    string `json:"code"`
 	Message string `json:"message"`
+
+	// ConsentRequired error field
+	RequiredScopes []string `json:"required_scopes"`
+}
+
+func (e GlobusError) Error() string {
+	return fmt.Sprintf("%s (%s)", e.Message, e.Code)
+}
+
+// returns true if a Globus response body matches an error
+func responseIsError(body []byte) bool {
+	return strings.Contains(string(body), "\"code\"") &&
+		strings.Contains(string(body), "\"message\"")
 }
 
 // this type satisfies the endpoints.Endpoint interface for Globus endpoints
@@ -187,16 +197,8 @@ func (ep *Endpoint) sendRequest(request *http.Request) ([]byte, error) {
 	resp.Body.Close()
 
 	// check the response for a Globus-style error code / message
-	if strings.Contains(string(body), "\"code\"") &&
-		strings.Contains(string(body), "\"message\"") {
-		type ErrorResponse struct {
-			Code    string `json:"code"`
-			Message string `json:"message"`
-
-			// ConsentRequired error field
-			RequiredScopes []string `json:"required_scopes"`
-		}
-		var errResp ErrorResponse
+	if responseIsError(body) {
+		var errResp GlobusError
 		err = json.Unmarshal(body, &errResp)
 		if err != nil {
 			return nil, err
@@ -217,7 +219,7 @@ func (ep *Endpoint) sendRequest(request *http.Request) ([]byte, error) {
 			resp.Body.Close()
 		} else {
 			// other errors are propagated
-			err = fmt.Errorf("%s (%s)", errResp.Message, errResp.Code)
+			err = &errResp
 		}
 	}
 	return body, err
@@ -286,18 +288,23 @@ func (ep *Endpoint) FilesStaged(files []frictionless.DataResource) (bool, error)
 		filesInDir[dir] = append(filesInDir[dir], file)
 	}
 
-	// for each directory, check that its files are present
+	// for each directory, check for its existence and that its files are present
 	// (https://docs.globus.org/api/transfer/file_operations/#list_directory_contents)
 	for dir, files := range filesInDir {
 		values := url.Values{}
 		values.Add("path", "/"+dir)
 		values.Add("orderby", "name ASC")
 		resource := fmt.Sprintf("operation/endpoint/%s/ls", ep.Id.String())
-
 		body, err := ep.get(resource, values)
 		if err != nil {
+			// it's okay if the directory doesn't exist -- it might need to be staged
+			globusErr := err.(*GlobusError)
+			if globusErr.Code == "ClientError.NotFound" {
+				return false, nil
+			}
 			return false, err
 		}
+
 		// https://docs.globus.org/api/transfer/file_operations/#dir_listing_response
 		type DirListingResponse struct {
 			Data []struct {
@@ -426,10 +433,16 @@ func (ep *Endpoint) submitTransfer(destination endpoints.Endpoint, submissionId 
 	if err != nil {
 		return xferId, err
 	}
+	if responseIsError(body) {
+		var globusErr GlobusError
+		err = json.Unmarshal(body, &globusErr)
+		if err == nil {
+			err = &globusErr
+		}
+		return xferId, err
+	}
 	type SubmissionResponse struct {
-		TaskId  uuid.UUID `json:"task_id"`
-		Code    string    `json:"code"`
-		Message string    `json:"message"`
+		TaskId uuid.UUID `json:"task_id"`
 	}
 
 	var gResp SubmissionResponse
@@ -438,10 +451,6 @@ func (ep *Endpoint) submitTransfer(destination endpoints.Endpoint, submissionId 
 		return xferId, err
 	}
 	xferId = gResp.TaskId
-	var zeroId uuid.UUID
-	if xferId == zeroId { // trouble!
-		return xferId, fmt.Errorf("%s (%s)", gResp.Message, gResp.Code)
-	}
 	return xferId, nil
 }
 
@@ -484,23 +493,25 @@ func (ep *Endpoint) Status(id uuid.UUID) (endpoints.TransferStatus, error) {
 	if err != nil {
 		return endpoints.TransferStatus{}, err
 	}
+	if responseIsError(body) {
+		var globusErr GlobusError
+		err := json.Unmarshal(body, &globusErr)
+		if err == nil {
+			err = &globusErr
+		}
+		return endpoints.TransferStatus{}, err
+	}
 	type TaskResponse struct {
 		Files            int    `json:"files"`
 		FilesSkipped     int    `json:"files_skipped"`
 		FilesTransferred int    `json:"files_transferred"`
 		IsPaused         bool   `json:"is_paused"`
 		Status           string `json:"status"`
-		// the following fields are present only when an error occurs
-		Code    string `json:"code"`
-		Message string `json:"message"`
 	}
 	var response TaskResponse
 	err = json.Unmarshal(body, &response)
 	if err != nil {
 		return endpoints.TransferStatus{}, err
-	}
-	if strings.Contains(response.Code, "ClientError") { // e.g. not found
-		return endpoints.TransferStatus{}, fmt.Errorf(response.Message)
 	}
 	return endpoints.TransferStatus{
 		Code:                statusCodesForStrings[response.Status],

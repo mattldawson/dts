@@ -88,7 +88,15 @@ func readConfig(bytes []byte) error {
 
 	// copy the config data into place, performing any needed conversions
 	Service = conf.Service
+
 	Endpoints = conf.Endpoints
+	for name, endpoint := range Endpoints {
+		if endpoint.Root == "" {
+			endpoint.Root = "/"
+			Endpoints[name] = endpoint
+		}
+	}
+
 	Databases = conf.Databases
 	MessageQueues = conf.MessageQueues
 

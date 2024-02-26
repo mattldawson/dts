@@ -379,7 +379,8 @@ func (ep *Endpoint) getSubmissionId() (uuid.UUID, error) {
 
 // https://docs.globus.org/api/transfer/task_submit/#submit_transfer_task
 // https://docs.globus.org/api/transfer/task_submit/#transfer_item_fields
-func (ep *Endpoint) submitTransfer(destination endpoints.Endpoint, submissionId uuid.UUID, files []endpoints.FileTransfer) (uuid.UUID, error) {
+func (ep *Endpoint) submitTransfer(destination endpoints.Endpoint,
+	submissionId uuid.UUID, files []endpoints.FileTransfer) (uuid.UUID, error) {
 	var xferId uuid.UUID
 
 	type TransferItem struct {
@@ -404,7 +405,7 @@ func (ep *Endpoint) submitTransfer(destination endpoints.Endpoint, submissionId 
 	for i, file := range files {
 		xferItems[i] = TransferItem{
 			DataType:          "transfer_item",
-			SourcePath:        file.SourcePath,
+			SourcePath:        filepath.Join(ep.RootDir, file.SourcePath),
 			DestinationPath:   file.DestinationPath,
 			ExternalChecksum:  file.Hash,
 			ChecksumAlgorithm: file.HashAlgorithm,
@@ -504,16 +505,53 @@ func (ep *Endpoint) Status(id uuid.UUID) (endpoints.TransferStatus, error) {
 		return endpoints.TransferStatus{}, err
 	}
 	type TaskResponse struct {
-		Files            int    `json:"files"`
-		FilesSkipped     int    `json:"files_skipped"`
-		FilesTransferred int    `json:"files_transferred"`
-		IsPaused         bool   `json:"is_paused"`
-		Status           string `json:"status"`
+		Files                      int    `json:"files"`
+		FilesSkipped               int    `json:"files_skipped"`
+		FilesTransferred           int    `json:"files_transferred"`
+		IsPaused                   bool   `json:"is_paused"`
+		NiceStatus                 string `json:"nice_status"`
+		NiceStatusShortDescription string `json:"nice_status_short_description"`
+		Status                     string `json:"status"`
 	}
 	var response TaskResponse
 	err = json.Unmarshal(body, &response)
 	if err != nil {
 		return endpoints.TransferStatus{}, err
+	}
+	// check for an error condition in NiceStatus
+	if response.NiceStatus != "OK" && response.NiceStatus != "Queued" {
+		// get the event list for this task
+		resource := fmt.Sprintf("task/%s/event_list", id.String())
+		body, err := ep.get(resource, url.Values{})
+		if err != nil {
+			// fine, we'll just use the "nice status"
+			return endpoints.TransferStatus{}, fmt.Errorf(response.NiceStatusShortDescription)
+		}
+		type Event struct {
+			DataType    string `json:"DATA_TYPE"`
+			Code        string `json:"code"`
+			IsError     bool   `json:"is_error"`
+			Description string `json:"description"`
+			Details     string `json:"details"`
+			Time        string `json:"time"`
+		}
+		type EventList struct {
+			Data []Event `json:"DATA"`
+		}
+		var eventList EventList
+		err = json.Unmarshal(body, &eventList)
+		if err == nil {
+			// find the first error event
+			for _, event := range eventList.Data {
+				if event.IsError {
+					return endpoints.TransferStatus{},
+						fmt.Errorf("%s (%s):\n%s", event.Description, event.Code,
+							event.Details)
+				}
+			}
+		}
+		// fall back to the "nice status"
+		return endpoints.TransferStatus{}, fmt.Errorf(response.NiceStatusShortDescription)
 	}
 	return endpoints.TransferStatus{
 		Code:                statusCodesForStrings[response.Status],

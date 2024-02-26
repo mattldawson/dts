@@ -31,6 +31,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+  "strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -507,7 +508,10 @@ func processTasks() {
 						task.Status.Code = TransferStatusFailed
 						task.Status.Message = err.Error()
 						task.CompletionTime = time.Now()
-						slog.Error(fmt.Sprintf("Task %s: %s", task.Id.String(), task.Status.Message))
+						errorLines := strings.Split(err.Error(), "\n")
+						for _, line := range errorLines {
+							slog.Error(fmt.Sprintf("Task %s: %s", task.Id.String(), line))
+						}
 					}
 					if task.Status.Code != oldStatus.Code {
 						switch task.Status.Code {

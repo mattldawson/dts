@@ -63,7 +63,9 @@ func (e GlobusError) Error() string {
 
 // returns true if a Globus response body matches an error
 func responseIsError(body []byte) bool {
-	return strings.Contains(string(body), "\"code\"") &&
+	bodyStr := string(body)
+	return strings.Contains(bodyStr, "\"code\"") &&
+		!strings.Contains(bodyStr, "\"code\": \"Accepted\"") &&
 		strings.Contains(string(body), "\"message\"")
 }
 

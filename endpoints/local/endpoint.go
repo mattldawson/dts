@@ -177,7 +177,7 @@ func (ep *Endpoint) Transfer(dst endpoints.Endpoint, files []endpoints.FileTrans
 	var xferId uuid.UUID
 	_, ok := dst.(*Endpoint)
 	if !ok {
-		return xferId, fmt.Errorf("Destination endpoint must be local!")
+		return xferId, fmt.Errorf("Cannot transfer files between a local endpoint and another type of endpoint!")
 	}
 
 	// first, we check that all requested files are staged on this endpoint

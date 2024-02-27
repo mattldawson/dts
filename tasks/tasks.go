@@ -272,6 +272,10 @@ func (task *taskType) checkTransfer() error {
 			}
 
 			// construct the source/destination file manifest paths
+			destination, err := databases.NewDatabase(task.Orcid, task.Destination)
+			if err != nil {
+				return err
+			}
 			username, err := destination.LocalUser(task.Orcid)
 			if err != nil {
 				return err
@@ -284,10 +288,6 @@ func (task *taskType) checkTransfer() error {
 			}
 
 			// begin transferring the manifest
-			destination, err := databases.NewDatabase(task.Orcid, task.Destination)
-			if err != nil {
-				return err
-			}
 			destinationEndpoint, err := destination.Endpoint()
 			if err != nil {
 				return err

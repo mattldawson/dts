@@ -519,7 +519,7 @@ func (ep *Endpoint) Status(id uuid.UUID) (endpoints.TransferStatus, error) {
 		return endpoints.TransferStatus{}, err
 	}
 	// check for an error condition in NiceStatus
-	if response.NiceStatus != "OK" && response.NiceStatus != "Queued" {
+	if response.NiceStatus != "" && response.NiceStatus != "OK" && response.NiceStatus != "Queued" {
 		// get the event list for this task
 		resource := fmt.Sprintf("task/%s/event_list", id.String())
 		body, err := ep.get(resource, url.Values{})

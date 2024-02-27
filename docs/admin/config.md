@@ -1,4 +1,4 @@
-# DTS Configuration File Specification
+# Configuring DTS
 
 You can configure a DTS instance by creating a [YAML](https://yaml.org/) text
 file similar to [dts.yaml.example](https://github.com/kbase/dts/blob/main/dts.yaml.example)

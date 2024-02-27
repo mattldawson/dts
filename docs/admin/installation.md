@@ -1,9 +1,9 @@
-# DTS Installation
+# Installing DTS Locally
 
-Here we describe how to build and deploy the Data Transfer Service in an
-appropriate environment.
+Here we describe how to build, test, and install the Data Transfer Service
+in a local environment.
 
-## Building and Testing DTS Locally
+## Building and Testing
 
 DTS is written in [Go](https://go.dev/), so you'll need a working Go compiler
 to build, test, and run it locally. If you have a Go compiler, you can clone
@@ -48,6 +48,8 @@ to do:
 * `DTS_JDP_SECRET`: a string containing a shared secret that allows the DTS to
   authenticate with the JGI Data Portal
 
-## Deploying in a Docker Container
+## Installation
 
-**TODO: More to come**
+The only remaining step is to copy the `dts` executable from your source
+directory to wherever you want it to reside. This executable is statically
+linked against all libraries, so it's completely portable.

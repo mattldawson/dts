@@ -1,4 +1,4 @@
-# DTS Globus Endpoint Configuration
+# Granting DTS Access to a  Globus Endpoint
 
 The Data Transfer Service relies heavily on [Globus](https://www.globus.org/)
 for performing file transfers between different databases. Here we describe how

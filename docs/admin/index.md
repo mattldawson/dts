@@ -1,7 +1,8 @@
 # DTS Administrator Guide
 
-* [DTS Installation](installation.md)
-* [DTS Configuration File Specification](config.md)
-* [DTS Globus Endpoint Configuration](globus.md)
+* [Installing DTS Locally](installation.md)
+* [Deploying DTS via Docker](docker.md)
+* [Configuring DTS](config.md)
+* [Granting DTS Access to a Globus Endpoint](globus.md)
 
 More soon!

@@ -287,7 +287,7 @@
   
     <li class="md-nav__item">
       <a href="../admin/installation.html" class="md-nav__link">
-        Installation
+        Installing DTS
       </a>
     </li>
   
@@ -301,7 +301,7 @@
   
     <li class="md-nav__item">
       <a href="../admin/config.html" class="md-nav__link">
-        Configuration
+        Configuring DTS
       </a>
     </li>
   
@@ -375,10 +375,172 @@
         
       
       
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          Overview
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
       <a href="index.html" class="md-nav__link md-nav__link--active">
         Overview
       </a>
       
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#code-organization" class="md-nav__link">
+    Code Organization
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_3_2" type="checkbox" id="__nav_3_2" >
+      
+      
+      
+      
+        <label class="md-nav__link" for="__nav_3_2">
+          Code Organization
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="Code Organization" data-md-level="2">
+        <label class="md-nav__title" for="__nav_3_2">
+          <span class="md-nav__icon md-icon"></span>
+          Code Organization
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="config.html" class="md-nav__link">
+        config package
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="credit.html" class="md-nav__link">
+        credit package
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="databases.html" class="md-nav__link">
+        databases package
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="endpoints.html" class="md-nav__link">
+        endpoints package
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="frictionless.html" class="md-nav__link">
+        frictionless package
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="services.html" class="md-nav__link">
+        services package
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="tasks.html" class="md-nav__link">
+        tasks package
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
     </li>
   
 
@@ -410,6 +572,21 @@
     
   
   
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#code-organization" class="md-nav__link">
+    Code Organization
+  </a>
+  
+</li>
+      
+    </ul>
+  
 </nav>
                   </div>
                 </div>
@@ -423,7 +600,30 @@
 
 
 <h1 id="dts-developer-guide">DTS Developer Guide</h1>
-<p>More to come!</p>
+<p>This guide explains the internal workings of the Data Transfer Service (DTS).</p>
+<h2 id="code-organization">Code Organization</h2>
+<p>The following <a href="https://go.dev/doc/code">packages</a> implement the features in
+the Data Transfer Service.</p>
+<ul>
+<li><a href="auth.html">auth</a>: handles the authorization of the DTS using KBase's
+  authentication/authorization server</li>
+<li><a href="config.html">config</a>: handles the parsing of the DTS <a href="../admin/config.html">YAML configuration
+  file</a>, placing the data into read-only global variables
+  for use by other packages</li>
+<li><a href="credit.html">credit</a>: defines metadata types used by the Credit Engine to
+  establish the provenance of transferred data</li>
+<li><a href="databases.html">databases</a>: defines database types that implement the
+  integration of DTS with database providers</li>
+<li><a href="endpoints.html">endpoints</a>: defines endpoint types for file transfer
+  providers used by DTS, such as <a href="https://globus.org">Globus</a></li>
+<li><a href="frictionless.html">frictionless</a>: defines <a href="https://frictionlessdata.io/">data structures</a>
+  that describe data for <a href="https://specs.frictionlessdata.io/data-resource/">individual files</a>
+  and <a href="https://specs.frictionlessdata.io/data-package/">packages containing multiple files</a></li>
+<li><a href="services.html">services</a>: defines types that implement the REST endpoints
+  provided by the DTS</li>
+<li><a href="tasks.html">tasks</a>: implements the "heart" of the DTS, which creates and
+  manages transfer tasks through their entire lifecycle</li>
+</ul>
 
 
 
@@ -461,6 +661,21 @@
           </div>
         </a>
       
+      
+        
+        <a href="config.html" class="md-footer__link md-footer__link--next" aria-label="Next: config package" rel="next">
+          <div class="md-footer__title">
+            <div class="md-ellipsis">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              config package
+            </div>
+          </div>
+          <div class="md-footer__button md-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11H4Z"/></svg>
+          </div>
+        </a>
       
     </nav>
   

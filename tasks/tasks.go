@@ -31,7 +31,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-  "strings"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -160,7 +160,7 @@ func (task *taskType) beginTransfer() error {
 	}
 
 	// construct the source/destination file paths
-	username, err := source.LocalUser(task.Orcid)
+	username, err := destination.LocalUser(task.Orcid)
 	if err != nil {
 		return err
 	}

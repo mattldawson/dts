@@ -13,7 +13,7 @@
     
     
       
-        <title>Installing DTS - DTS: A Data Transfer System</title>
+        <title>Installing DTS Locally - DTS: A Data Transfer System</title>
       
     
     
@@ -64,7 +64,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#dts-installation" class="md-skip">
+        <a href="#installing-dts-locally" class="md-skip">
           Skip to content
         </a>
       
@@ -97,7 +97,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Installing DTS
+              Installing DTS Locally
             
           </span>
         </div>
@@ -298,12 +298,12 @@
       
       
         <label class="md-nav__link md-nav__link--active" for="__toc">
-          Installing DTS
+          Installing DTS Locally
           <span class="md-nav__icon md-icon"></span>
         </label>
       
       <a href="installation.html" class="md-nav__link md-nav__link--active">
-        Installing DTS
+        Installing DTS Locally
       </a>
       
         
@@ -322,11 +322,11 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#building-and-testing-dts-locally" class="md-nav__link">
-    Building and Testing DTS Locally
+  <a href="#building-and-testing" class="md-nav__link">
+    Building and Testing
   </a>
   
-    <nav class="md-nav" aria-label="Building and Testing DTS Locally">
+    <nav class="md-nav" aria-label="Building and Testing">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -342,8 +342,8 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#deploying-in-a-docker-container" class="md-nav__link">
-    Deploying in a Docker Container
+  <a href="#installation" class="md-nav__link">
+    Installation
   </a>
   
 </li>
@@ -352,6 +352,20 @@
   
 </nav>
       
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="docker.html" class="md-nav__link">
+        Deploying DTS via Docker
+      </a>
     </li>
   
 
@@ -378,7 +392,7 @@
   
     <li class="md-nav__item">
       <a href="globus.html" class="md-nav__link">
-        Globus Endpoint Configuration
+        Granting DTS Access to a Globus Endpoint
       </a>
     </li>
   
@@ -599,11 +613,11 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#building-and-testing-dts-locally" class="md-nav__link">
-    Building and Testing DTS Locally
+  <a href="#building-and-testing" class="md-nav__link">
+    Building and Testing
   </a>
   
-    <nav class="md-nav" aria-label="Building and Testing DTS Locally">
+    <nav class="md-nav" aria-label="Building and Testing">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -619,8 +633,8 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#deploying-in-a-docker-container" class="md-nav__link">
-    Deploying in a Docker Container
+  <a href="#installation" class="md-nav__link">
+    Installation
   </a>
   
 </li>
@@ -639,10 +653,10 @@
                 
 
 
-<h1 id="dts-installation">DTS Installation</h1>
-<p>Here we describe how to build and deploy the Data Transfer Service in an
-appropriate environment.</p>
-<h2 id="building-and-testing-dts-locally">Building and Testing DTS Locally</h2>
+<h1 id="installing-dts-locally">Installing DTS Locally</h1>
+<p>Here we describe how to build, test, and install the Data Transfer Service
+in a local environment.</p>
+<h2 id="building-and-testing">Building and Testing</h2>
 <p>DTS is written in <a href="https://go.dev/">Go</a>, so you'll need a working Go compiler
 to build, test, and run it locally. If you have a Go compiler, you can clone
 this repository and build it from the top-level directory:</p>
@@ -678,8 +692,10 @@ to do:</p>
 <li><code>DTS_JDP_SECRET</code>: a string containing a shared secret that allows the DTS to
   authenticate with the JGI Data Portal</li>
 </ul>
-<h2 id="deploying-in-a-docker-container">Deploying in a Docker Container</h2>
-<p><strong>TODO: More to come</strong></p>
+<h2 id="installation">Installation</h2>
+<p>The only remaining step is to copy the <code>dts</code> executable from your source
+directory to wherever you want it to reside. This executable is statically
+linked against all libraries, so it's completely portable.</p>
 
 
 
@@ -719,13 +735,13 @@ to do:</p>
       
       
         
-        <a href="config.html" class="md-footer__link md-footer__link--next" aria-label="Next: Configuring DTS" rel="next">
+        <a href="docker.html" class="md-footer__link md-footer__link--next" aria-label="Next: Deploying DTS via Docker" rel="next">
           <div class="md-footer__title">
             <div class="md-ellipsis">
               <span class="md-footer__direction">
                 Next
               </span>
-              Configuring DTS
+              Deploying DTS via Docker
             </div>
           </div>
           <div class="md-footer__button md-icon">

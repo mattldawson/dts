@@ -13,7 +13,7 @@
     
     
       
-        <title>Configuring DTS - DTS: A Data Transfer System</title>
+        <title>Deploying DTS via Docker - DTS: A Data Transfer System</title>
       
     
     
@@ -64,7 +64,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#configuring-dts" class="md-skip">
+        <a href="#deploying-dts-via-docker" class="md-skip">
           Skip to content
         </a>
       
@@ -97,7 +97,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Configuring DTS
+              Deploying DTS via Docker
             
           </span>
         </div>
@@ -300,20 +300,6 @@
               
   
   
-  
-    <li class="md-nav__item">
-      <a href="docker.html" class="md-nav__link">
-        Deploying DTS via Docker
-      </a>
-    </li>
-  
-
-            
-          
-            
-              
-  
-  
     
   
   
@@ -326,12 +312,12 @@
       
       
         <label class="md-nav__link md-nav__link--active" for="__toc">
-          Configuring DTS
+          Deploying DTS via Docker
           <span class="md-nav__icon md-icon"></span>
         </label>
       
-      <a href="config.html" class="md-nav__link md-nav__link--active">
-        Configuring DTS
+      <a href="docker.html" class="md-nav__link md-nav__link--active">
+        Deploying DTS via Docker
       </a>
       
         
@@ -350,30 +336,29 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#configuration-file-sections" class="md-nav__link">
-    Configuration File Sections
+  <a href="#deploying-to-nerscs-spin-environment" class="md-nav__link">
+    Deploying to NERSC's Spin Environment
+  </a>
+  
+    <nav class="md-nav" aria-label="Deploying to NERSC's Spin Environment">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-update-and-push-a-new-docker-image-to-spin" class="md-nav__link">
+    1. Update and Push a New Docker Image to Spin
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#service" class="md-nav__link">
-    service
+        
+          <li class="md-nav__item">
+  <a href="#2-edit-the-deployment-in-rancher-2-and-restart-the-service" class="md-nav__link">
+    2. Edit the Deployment in Rancher 2 and Restart the Service
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#endpoints" class="md-nav__link">
-    endpoints
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#databases" class="md-nav__link">
-    databases
-  </a>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -381,6 +366,20 @@
   
 </nav>
       
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="config.html" class="md-nav__link">
+        Configuring DTS
+      </a>
     </li>
   
 
@@ -614,30 +613,29 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#configuration-file-sections" class="md-nav__link">
-    Configuration File Sections
+  <a href="#deploying-to-nerscs-spin-environment" class="md-nav__link">
+    Deploying to NERSC's Spin Environment
+  </a>
+  
+    <nav class="md-nav" aria-label="Deploying to NERSC's Spin Environment">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-update-and-push-a-new-docker-image-to-spin" class="md-nav__link">
+    1. Update and Push a New Docker Image to Spin
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#service" class="md-nav__link">
-    service
+        
+          <li class="md-nav__item">
+  <a href="#2-edit-the-deployment-in-rancher-2-and-restart-the-service" class="md-nav__link">
+    2. Edit the Deployment in Rancher 2 and Restart the Service
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#endpoints" class="md-nav__link">
-    endpoints
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#databases" class="md-nav__link">
-    databases
-  </a>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -655,73 +653,81 @@
                 
 
 
-<h1 id="configuring-dts">Configuring DTS</h1>
-<p>You can configure a DTS instance by creating a <a href="https://yaml.org/">YAML</a> text
-file similar to <a href="https://github.com/kbase/dts/blob/main/dts.yaml.example">dts.yaml.example</a>
-in the repository. Typically this file is named <code>dts.yaml</code>, and is passed as an
-argument to the <code>dts</code> executable. Here we describe the different sections in
-this file and how they affect your DTS instance.</p>
-<h2 id="configuration-file-sections">Configuration File Sections</h2>
-<p>Click on any of the links below to see the relevant details for a section.</p>
+<h1 id="deploying-dts-via-docker">Deploying DTS via Docker</h1>
+<p>You can use the <code>Dockerfile</code> and <code>dts.yaml</code> files in this directory to build
+your Docker image.</p>
+<p><strong>TODO: maybe say more?</strong></p>
+<h2 id="deploying-to-nerscs-spin-environment">Deploying to NERSC's Spin Environment</h2>
+<p>DTS is hosted in NERSC's <a href="https://www.nersc.gov/systems/spin/">Spin</a>
+environment under <a href="https://rancher2.spin.nersc.gov/login">Rancher 2</a>.
+It runs in the <code>Production</code> environment under the <code>kbase</code> organization.
+You can read about Spin in NERSC's documentation, and Rancher 2
+<a href="https://rancher.com/docs/rancher/v2.x/en/">here</a>. The documentation
+isn't great, but fortunately there's not a lot to know--most of the
+materials you'll need are right here in this directory.</p>
+<p>Deploying DTS to Spin involves</p>
+<ol>
+<li>updating and pushing a new Docker image with any code changes and
+   documentation updates</li>
+<li>editing the <code>dts</code> Spin deployment via NERSC's
+   <a href="https://rancher2.spin.nersc.gov/login">Rancher 2</a> console</li>
+</ol>
+<p>Each of these steps are fairly simple.</p>
+<p>Before you perform an update, take some time to familiarize yourself
+with the Rancher 2 console and the <code>dts</code> production deployment.
+The most important details are:</p>
 <ul>
-<li><a href="config.html#service">service</a>: configureѕ settings for the DTS web service
-  such as the port on which it listens, the maximum number of connections,
-  intervals for polling and scrubbing completed tasks, data directories, and
-  diagnostics</li>
-<li><a href="config.html#endpoints">endpoints</a>: configures the endpoints used to transfer
-  files from one place to another</li>
-<li><a href="config.html#databases">databases</a>: configures databases for organizations that
-  integrate with the DTS</li>
+<li>The service and its supporting executables and configuration data are
+  supplied by its Docker image</li>
+<li>The DTS data directory (used for keeping track of ongoing tasks and for
+  generating transfer manifests) resides on the NERSC Community File System
+  (CFS) under <code>/global/cfs/cdirs/kbase/dts/</code>. This volume is visible to the
+  service as <code>/data</code>.</li>
 </ul>
-<p>Each of these sections is described below, with a motivating example.</p>
-<h2 id="service"><code>service</code></h2>
-<div class="highlight"><pre><span></span><code><span class="nt">service</span><span class="p">:</span><span class="w"></span>
-<span class="w">  </span><span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8080</span><span class="w"></span>
-<span class="w">  </span><span class="nt">max_connections</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span><span class="w"></span>
-<span class="w">  </span><span class="nt">poll_interval</span><span class="p">:</span><span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">60000</span><span class="w"></span>
-<span class="w">  </span><span class="nt">endpoint</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">globus-local</span><span class="w"></span>
-<span class="w">  </span><span class="nt">data_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/path/to/dir</span><span class="w"></span>
-<span class="w">  </span><span class="nt">delete_after</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">604800</span><span class="w"></span>
-<span class="w">  </span><span class="nt">debug</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w"></span>
+<p>Let's walk through the process of updating and redeploying the DTS in Spin.</p>
+<h3 id="1-update-and-push-a-new-docker-image-to-spin">1. Update and Push a New Docker Image to Spin</h3>
+<p>From within a clone of the <a href="https://github.com/kbase/dit">DTS git repo</a>, make
+sure the repo is up to date by typing <code>git pull</code> in the <code>main</code> branch.</p>
+<p>Then, sitting in the top-level source directory of your <code>dts</code> folder, execute
+the <code>deploy-to-spin.sh</code> script in the directory containing this <code>README.md</code>
+file, passing as arguments</p>
+<ol>
+<li>the name of a tag to identify the new Docker image</li>
+<li>the name of the NERSC user whose permissions are used for CFS</li>
+<li>the UID of the NERSC user</li>
+<li>the group used to determine the user's group permissions</li>
+<li>the GID of the above group</li>
+</ol>
+<p>For example,</p>
+<div class="highlight"><pre><span></span><code>./path/to/this/dir/deploy-to-spin.sh v1.1 johnson 52710 kbase 54643
 </code></pre></div>
-<p><strong>TODO: write some stuff!</strong></p>
-<h2 id="endpoints"><code>endpoints</code></h2>
-<div class="highlight"><pre><span></span><code><span class="nt">endpoints</span><span class="p">:</span><span class="w"></span>
-<span class="w">  </span><span class="nt">globus-local</span><span class="p">:</span><span class="w"></span>
-<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">name-of-local-endpoint</span><span class="w"></span>
-<span class="w">    </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</span><span class="w"></span>
-<span class="w">    </span><span class="nt">provider</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">globus</span><span class="w"></span>
-<span class="w">    </span><span class="nt">auth</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="nt">client_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;ID of client with authentication secret&gt;</span><span class="w"></span>
-<span class="w">      </span><span class="nt">client_secret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;secret&gt;</span><span class="w"></span>
-<span class="w">  </span><span class="nt">globus-jdp</span><span class="p">:</span><span class="w"></span>
-<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">name-of-jdp-endpoint</span><span class="w"></span>
-<span class="w">    </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</span><span class="w"></span>
-<span class="w">    </span><span class="nt">provider</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">globus</span><span class="w"></span>
-<span class="w">    </span><span class="nt">auth</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="nt">client_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;ID of client with authentication secret&gt;</span><span class="w"></span>
-<span class="w">      </span><span class="nt">client_secret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;secret&gt;</span><span class="w"></span>
-<span class="w">  </span><span class="nt">globus-kbase</span><span class="p">:</span><span class="w"></span>
-<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">name-of-kbase-endpoint</span><span class="w"></span>
-<span class="w">    </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</span><span class="w"></span>
-<span class="w">    </span><span class="nt">provider</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">globus</span><span class="w"></span>
-<span class="w">    </span><span class="nt">auth</span><span class="p">:</span><span class="w"></span>
-<span class="w">      </span><span class="nt">client_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;ID of client with authentication secret&gt;</span><span class="w"></span>
-<span class="w">      </span><span class="nt">client_secret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;secret&gt;</span><span class="w"></span>
-</code></pre></div>
-<p><strong>TODO: Things and stuff</strong></p>
-<h2 id="databases"><code>databases</code></h2>
-<div class="highlight"><pre><span></span><code><span class="nt">databases</span><span class="p">:</span><span class="w"></span>
-<span class="w">  </span><span class="nt">jdp</span><span class="p">:</span><span class="w"></span>
-<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">JGI Data Portal</span><span class="w"></span>
-<span class="w">    </span><span class="nt">organization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Joint Genome Institute</span><span class="w"></span>
-<span class="w">    </span><span class="nt">endpoint</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">globus-jdp</span><span class="w"></span>
-<span class="w">  </span><span class="nt">kbase</span><span class="p">:</span><span class="w"></span>
-<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">KBase Workspace Service (KSS)</span><span class="w"></span>
-<span class="w">    </span><span class="nt">organization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">KBase</span><span class="w"></span>
-<span class="w">    </span><span class="nt">endpoint</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">globus-kbase</span><span class="w"></span>
-</code></pre></div>
-<p><strong>TODO: Alll the things</strong></p>
+<p>builds a new DTS Docker image for to be run as the user <code>johnson</code>,
+with the tag <code>v1.1</code>. The script pushes the Docker image to the
+<a href="https://registry.spin.nersc.gov">Spin Docker registry</a>. Make sure the tag
+indicates the current version of <code>dts</code> for clarity.</p>
+<p>After building the Docker image and tagging it, the script prompts you for the
+NERSC password for the user you specified. This allows it to push the image to
+NERSC's Docker image registry, where it can be accessed via the Rancher 2
+console.</p>
+<h3 id="2-edit-the-deployment-in-rancher-2-and-restart-the-service">2. Edit the Deployment in Rancher 2 and Restart the Service</h3>
+<p>Now log in to <a href="https://rancher2.spin.nersc.gov/login">Rancher 2</a> and
+navigate to the <code>dts</code> deployment.</p>
+<ol>
+<li>Click on the <code>dts</code> pod to view its status and information</li>
+<li>Click on the three dots near the right side of the screen and select
+   <code>Edit</code> to update its configuration.</li>
+<li>If needed, navigate to the <code>Volumes</code> section and edit the CFS directory for
+   the volume mounted at <code>/data</code>. Usually, this is set to <code>/global/cfs/cdirs/kbase/dts/</code>,
+   so you don't need to edit this unless you want to place your mapping data
+   store file in a different directory.</li>
+<li>Edit the Docker image for the deployment, changing the tag after the colon
+   to match the tag of the Docker image pushed by <code>deploy-to-spin.sh</code> above.</li>
+<li>Make sure that the Scaling/Upgrade Policy is set to <code>Rolling: stop old pods, then start new</code>.
+   This prevents a new pod from trying to acquire locks on the mapping data
+   stores before the old one has released it.</li>
+<li>Click <code>Save</code> to restart the deployment with this new information.</li>
+</ol>
+<p>That's it! You've now updated the service with new features and bugfixes.</p>
 
 
 
@@ -745,7 +751,7 @@ this file and how they affect your DTS instance.</p>
     <nav class="md-footer__inner md-grid" aria-label="Footer" >
       
         
-        <a href="docker.html" class="md-footer__link md-footer__link--prev" aria-label="Previous: Deploying DTS via Docker" rel="prev">
+        <a href="installation.html" class="md-footer__link md-footer__link--prev" aria-label="Previous: Installing DTS Locally" rel="prev">
           <div class="md-footer__button md-icon">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
           </div>
@@ -754,20 +760,20 @@ this file and how they affect your DTS instance.</p>
               <span class="md-footer__direction">
                 Previous
               </span>
-              Deploying DTS via Docker
+              Installing DTS Locally
             </div>
           </div>
         </a>
       
       
         
-        <a href="globus.html" class="md-footer__link md-footer__link--next" aria-label="Next: Granting DTS Access to a Globus Endpoint" rel="next">
+        <a href="config.html" class="md-footer__link md-footer__link--next" aria-label="Next: Configuring DTS" rel="next">
           <div class="md-footer__title">
             <div class="md-ellipsis">
               <span class="md-footer__direction">
                 Next
               </span>
-              Granting DTS Access to a Globus Endpoint
+              Configuring DTS
             </div>
           </div>
           <div class="md-footer__button md-icon">

@@ -272,7 +272,7 @@ func (task *taskType) checkTransfer() error {
 			}
 
 			// construct the source/destination file manifest paths
-			username, err := source.LocalUser(task.Orcid)
+			username, err := destination.LocalUser(task.Orcid)
 			if err != nil {
 				return err
 			}

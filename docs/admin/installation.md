@@ -1,6 +1,6 @@
 # DTS Installation
 
-Here we describe how to build and deploy the Data Transfer System in an
+Here we describe how to build and deploy the Data Transfer Service in an
 appropriate environment.
 
 ## Building and Testing DTS Locally

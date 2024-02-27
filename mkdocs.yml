@@ -4,10 +4,19 @@ nav:
   - 'Home': 'index.md'
   - 'Administrator Guide':
     - 'Overview': 'admin/index.md'
-    - 'Installation': 'admin/installation.md'
-    - 'Configuration': 'admin/config.md'
+    - 'Installing DTS': 'admin/installation.md'
+    - 'Configuring DTS': 'admin/config.md'
+    - 'Globus Endpoint Configuration': 'admin/globus.md'
   - 'Developer Guide':
     - 'Overview': 'developer/index.md'
+    - 'Code Organization':
+      - 'config package': 'developer/config.md'
+      - 'credit package': 'developer/credit.md'
+      - 'databases package': 'developer/databases.md'
+      - 'endpoints package': 'developer/endpoints.md'
+      - 'frictionless package': 'developer/frictionless.md'
+      - 'services package': 'developer/services.md'
+      - 'tasks package': 'developer/tasks.md'
 
 edit_uri: ""
 

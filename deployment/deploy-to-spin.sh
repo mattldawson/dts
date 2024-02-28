@@ -26,7 +26,7 @@ fi
 
 # Build the image locally. It's a multi-stage build (see Dockerfile up top), so
 # make sure we prune the "builder" image afterward.
-docker build -f spin/Dockerfile -t dts:$TAG --network=host \
+docker build -f deployment/Dockerfile -t dts:$TAG --network=host \
   --build-arg CONTACT_NAME="Jeffrey N. Johnson" \
   --build-arg CONTACT_EMAIL="jeff@cohere-llc.com" \
   --build-arg SERVER_URL="https:\/\/dts.kbase.us" \
@@ -43,11 +43,11 @@ docker image prune -f --filter label=stage=builder
 
 # Tag the image as instructed in Lesson 2 of the NERSC Spin Overview
 # (https://docs.nersc.gov/services/spin/getting_started/lesson-2/)
-docker image tag dts:$TAG registry.spin.nersc.gov/dts/dts:$TAG
+docker image tag dts:$TAG registry.nersc.gov/kbase/dts:$TAG
 
 # Log in to the NERSC Spin Registry, push the image, and log out.
 echo "Please enter $USERNAME's NERSC password (without a one-time token) below."
-docker login -u $USERNAME https://registry.spin.nersc.gov/
-docker image push registry.spin.nersc.gov/dts/dts:$TAG
-docker logout https://registry.spin.nersc.gov/
+docker login -u $USERNAME https://registry.nersc.gov/
+docker image push registry.nersc.gov/kbase/dts:$TAG
+docker logout https://registry.nersc.gov/
 

@@ -19,7 +19,7 @@ It runs in the `Production` environment under the `kbase` organization.
 You can read about Spin in NERSC's documentation, and Rancher 2
 [here](https://rancher.com/docs/rancher/v2.x/en/). The documentation
 isn't great, but fortunately there's not a lot to know--most of the
-materials you'll need are right here in this directory.
+materials you'll need are right here in the `deployment` folder.
 
 Deploying DTS to Spin involves
 
@@ -39,7 +39,8 @@ The most important details are:
 * The DTS data directory (used for keeping track of ongoing tasks and for
   generating transfer manifests) resides on the NERSC Community File System
   (CFS) under `/global/cfs/cdirs/kbase/dts/`. This volume is visible to the
-  service as `/data`.
+  service as `/data`, so the `DATA_DIRECTORY` environment variable should be
+  set to `/data`.
 
 Let's walk through the process of updating and redeploying the DTS in Spin.
 
@@ -48,9 +49,8 @@ Let's walk through the process of updating and redeploying the DTS in Spin.
 From within a clone of the [DTS git repo](https://github.com/kbase/dit), make
 sure the repo is up to date by typing `git pull` in the `main` branch.
 
-Then, sitting in the top-level source directory of your `dts` folder, execute
-the `deploy-to-spin.sh` script in the directory containing this `README.md`
-file, passing as arguments
+Then, sitting in the top-level `dts` source folder of your `dts`, execute
+the `deploy-to-spin.sh` script, passing as arguments
 
 1. the name of a tag to identify the new Docker image
 2. the name of the NERSC user whose permissions are used for CFS
@@ -61,7 +61,7 @@ file, passing as arguments
 For example,
 
 ```
-./path/to/this/dir/deploy-to-spin.sh v1.1 johnson 52710 kbase 54643
+./deployment/deploy-to-spin.sh v1.1 johnson 52710 kbase 54643
 ```
 
 builds a new DTS Docker image for to be run as the user `johnson`,
@@ -84,8 +84,7 @@ navigate to the `dts` deployment.
    `Edit` to update its configuration.
 3. If needed, navigate to the `Volumes` section and edit the CFS directory for
    the volume mounted at `/data`. Usually, this is set to `/global/cfs/cdirs/kbase/dts/`,
-   so you don't need to edit this unless you want to place your mapping data
-   store file in a different directory.
+   so you usually don't need to edit this.
 4. Edit the Docker image for the deployment, changing the tag after the colon
    to match the tag of the Docker image pushed by `deploy-to-spin.sh` above.
 5. Make sure that the Scaling/Upgrade Policy is set to `Rolling: stop old pods, then start new`.

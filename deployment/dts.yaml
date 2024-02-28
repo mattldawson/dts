@@ -4,6 +4,7 @@
 #
 # DATA_DIRECTORY: an absolute path to the directory used by DTS to manage its
 #                 own data
+# DEBUG: true to enable debug-level logging, false to disable
 # GLOBUS_CLIENT_ID: the Globus client ID registered for the DTS application
 # GLOBUS_CLIENT_SECRET: the Globus client secret associated with the client ID
 # JDP_ENDPOINT_ID: a UUID identifying the JGI Data Portal Globus endpoint
@@ -27,7 +28,7 @@ service:
   delete_after: ${PURGE_INTERVAL}
   debug: ${DEBUG}
 
-endpoints: # file transfer endpoints
+endpoints:
   globus-local:
     name: DTS Local Endpoint
     id: ${LOCAL_ENDPOINT_ID}
@@ -42,8 +43,8 @@ endpoints: # file transfer endpoints
     provider: globus
     root: /dm_archive
     auth:
-      client_id: ${DTS_GLOBUS_CLIENT_ID}
-      client_secret: ${DTS_GLOBUS_CLIENT_SECRET}
+      client_id: ${GLOBUS_CLIENT_ID}
+      client_secret: ${GLOBUS_CLIENT_SECRET}
   globus-kbase:
     name: KBase Bulk Share
     id: ${KBASE_ENDPOINT_ID}

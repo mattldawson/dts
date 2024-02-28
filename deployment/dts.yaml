@@ -38,7 +38,7 @@ endpoints:
       client_id: ${GLOBUS_CLIENT_ID}
       client_secret: ${GLOBUS_CLIENT_SECRET}
   globus-jdp:
-    name: NERSC /global/dna
+    name: DTS JGI Share
     id: ${JDP_ENDPOINT_ID}
     provider: globus
     root: /dm_archive

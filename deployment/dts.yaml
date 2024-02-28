@@ -1,0 +1,64 @@
+# This file defines a configuration for the Data Transfer Service (DTS)
+# running in a Docker container. The host environment must define the following
+# environment variables:
+#
+# DATA_DIRECTORY: an absolute path to the directory used by DTS to manage its
+#                 own data
+# GLOBUS_CLIENT_ID: the Globus client ID registered for the DTS application
+# GLOBUS_CLIENT_SECRET: the Globus client secret associated with the client ID
+# JDP_ENDPOINT_ID: a UUID identifying the JGI Data Portal Globus endpoint
+# KBASE_ENDPOINT_ID: a UUID identifying the KBase Globus endpoint
+# LOCAL_ENDPOINT_ID: a UUID identifying the DTS local Globus endpoint
+#                    (for writing transfer manifests)
+# MAX_CONNECTIONS: the maximum number of connections allowed for accepting
+#                  and queueing queries. Any additional connections are
+#                  rejected.
+# POLL_INTERVAL: the interval at which DTS updates tasks (milliseconds)
+# PORT: the port on which the service listens
+# PURGE_INTERVAL: the interval at which DTS purges completed task records
+#                 (seconds)
+
+service:
+  port: ${PORT}
+  max_connections: ${MAX_CONNECTIONS}
+  poll_interval: ${POLL_INTERVAL}
+  endpoint: globus-local
+  data_dir: ${DATA_DIRECTORY}
+  delete_after: ${PURGE_INTERVAL}
+  debug: ${DEBUG}
+
+endpoints: # file transfer endpoints
+  globus-local:
+    name: DTS Local Endpoint
+    id: ${LOCAL_ENDPOINT_ID}
+    provider: globus
+    root: /data
+    auth:
+      client_id: ${GLOBUS_CLIENT_ID}
+      client_secret: ${GLOBUS_CLIENT_SECRET}
+  globus-jdp:
+    name: NERSC: /global/dna
+    id: ${JDP_ENDPOINT_ID}
+    provider: globus
+    root: /dm_archive
+    auth:
+      client_id: ${DTS_GLOBUS_CLIENT_ID}
+      client_secret: ${DTS_GLOBUS_CLIENT_SECRET}
+  globus-kbase:
+    name: KBase Bulk Share
+    id: ${KBASE_ENDPOINT_ID}
+    provider: globus
+    root: /jeff_cohere
+    auth:
+      client_id: ${GLOBUS_CLIENT_ID}
+      client_secret: ${GLOBUS_CLIENT_SECRET}
+
+databases: # databases between which files can be transferred
+  jdp:
+    name: JGI Data Portal
+    organization: Joint Genome Institute
+    endpoint: globus-jdp
+  kbase:
+    name: KBase Workspace Service (KSS)
+    organization: KBase
+    endpoint: globus-kbase

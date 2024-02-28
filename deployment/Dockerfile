@@ -1,5 +1,5 @@
 # This is the DTS Docker file. It's a multi-ѕtage build that results in a
-# minimal-esque image with a small number of statically linked applications:
+# minimal-esque image with a small number of files:
 #
 # 1. /bin/dts (statically linked)
 # 2. /etc/dts.yaml

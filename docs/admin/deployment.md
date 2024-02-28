@@ -1,9 +1,15 @@
 # Deploying DTS via Docker
 
-You can use the `Dockerfile` and `dts.yaml` files in this directory to build
-your Docker image.
+You can use the `Dockerfile` and `dts.yaml` files in the `deployment` folder to
+build a Docker image for DTS. The Docker image contains two files:
 
-**TODO: maybe say more?**
+1. `/bin/dts`: the statically-linked `dts` executable
+2. `/etc/dts.yaml`: a [DTS configuration file](config.md) with embedded
+   environment variables that control parameters of interest
+
+This image can be deployed in any Docker-friendly environment. The use of
+environment variables in the configuration file allows you to configure
+DTS without regenerating the image.
 
 ## Deploying to NERSC's Spin Environment
 

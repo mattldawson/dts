@@ -5,7 +5,7 @@ nav:
   - 'Administrator Guide':
     - 'Overview': 'admin/index.md'
     - 'Installing DTS Locally': 'admin/installation.md'
-    - 'Deploying DTS via Docker': 'admin/docker.md'
+    - 'Deploying DTS via Docker': 'admin/deployment.md'
     - 'Configuring DTS': 'admin/config.md'
     - 'Granting DTS Access to a Globus Endpoint': 'admin/globus.md'
   - 'Developer Guide':

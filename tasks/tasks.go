@@ -300,6 +300,7 @@ func (task *taskType) checkTransfer() error {
 			task.Status = TransferStatus{
 				Code: TransferStatusFinalizing,
 			}
+			task.Transfer.Valid = false
 			task.Manifest.Valid = true
 		}
 	}

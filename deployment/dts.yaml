@@ -36,7 +36,6 @@ endpoints:
     name: DTS Local Endpoint
     id: ${LOCAL_ENDPOINT_ID}
     provider: globus
-    root: /data
     auth:
       client_id: ${GLOBUS_CLIENT_ID}
       client_secret: ${GLOBUS_CLIENT_SECRET}

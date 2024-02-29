@@ -253,21 +253,21 @@ func (task *taskType) checkTransfer() error {
 			var manifestBytes []byte
 			manifestBytes, err = json.Marshal(manifest)
 			if err != nil {
-				return err
+        return fmt.Errorf("marshalling manifest content: %s", err.Error())
 			}
 			var manifestFile *os.File
 			manifestFile, err = os.CreateTemp(localEndpoint.Root(), "manifest.json")
 			if err != nil {
-				return err
+        return fmt.Errorf("creating manifest file: %s", err.Error())
 			}
 			_, err = manifestFile.Write(manifestBytes)
 			if err != nil {
-				return err
+        return fmt.Errorf("writing manifest file content: %s", err.Error())
 			}
 			task.ManifestFile = manifestFile.Name()
 			err = manifestFile.Close()
 			if err != nil {
-				return err
+        return fmt.Errorf("closing manifest file: %s", err.Error())
 			}
 
 			// construct the source/destination file manifest paths
@@ -293,7 +293,7 @@ func (task *taskType) checkTransfer() error {
 			}
 			task.Manifest.UUID, err = localEndpoint.Transfer(destinationEndpoint, fileXfers)
 			if err != nil {
-				return err
+        return fmt.Errorf("transferring manifest file: %s", err.Error())
 			}
 
 			task.Status = TransferStatus{

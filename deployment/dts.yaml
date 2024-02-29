@@ -4,6 +4,8 @@
 #
 # DATA_DIRECTORY: an absolute path to the directory used by DTS to manage its
 #                 own data
+# MANIFEST_DIRECTORY: an absolute path to the directory used by DTS to write
+#                     transfer manifests (must be visible to an endpoint)
 # DEBUG: true to enable debug-level logging, false to disable
 # GLOBUS_CLIENT_ID: the Globus client ID registered for the DTS application
 # GLOBUS_CLIENT_SECRET: the Globus client secret associated with the client ID
@@ -25,6 +27,7 @@ service:
   poll_interval: ${POLL_INTERVAL}
   endpoint: globus-local
   data_dir: ${DATA_DIRECTORY}
+  manifest_dir: ${MANIFEST_DIRECTORY}
   delete_after: ${PURGE_INTERVAL}
   debug: ${DEBUG}
 

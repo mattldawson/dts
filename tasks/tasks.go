@@ -256,7 +256,8 @@ func (task *taskType) checkTransfer() error {
 				return fmt.Errorf("marshalling manifest content: %s", err.Error())
 			}
 			var manifestFile *os.File
-			manifestFile, err = os.CreateTemp(localEndpoint.Root(), "manifest.json")
+			manifestFile, err = os.CreateTemp(config.Service.ManifestDirectory,
+				"manifest.json")
 			if err != nil {
 				return fmt.Errorf("creating manifest file: %s", err.Error())
 			}
@@ -281,7 +282,7 @@ func (task *taskType) checkTransfer() error {
 			}
 			fileXfers := []FileTransfer{
 				FileTransfer{
-					SourcePath:      filepath.Base(task.ManifestFile), // relative to root!
+					SourcePath:      task.ManifestFile,
 					DestinationPath: filepath.Join(username, task.Id.String(), "manifest.json"),
 				},
 			}
@@ -558,7 +559,7 @@ func heartbeat(pollInterval time.Duration, pollChan chan<- struct{}) {
 // this function checks for the existence of the data directory and whether it
 // is readable/writeable, returning a non-nil error if any of these conditions
 // are not met
-func validateDataDirectory(dir string) error {
+func validateDirectory(dir string) error {
 	if dir == "" {
 		return fmt.Errorf("no data directory was specified!")
 	}
@@ -568,7 +569,7 @@ func validateDataDirectory(dir string) error {
 	}
 	if !info.IsDir() {
 		return &os.PathError{
-			Op:   "validateDataDirectory",
+			Op:   "validateDirectory",
 			Path: dir,
 			Err:  fmt.Errorf("%s is not a directory!", dir),
 		}
@@ -580,7 +581,7 @@ func validateDataDirectory(dir string) error {
 	err = os.WriteFile(testFile, writtenTestData, 0644)
 	if err != nil {
 		return &os.PathError{
-			Op:   "validateDataDirectory",
+			Op:   "validateDirectory",
 			Path: dir,
 			Err:  fmt.Errorf("Could not write to data directory %s!", dir),
 		}
@@ -591,7 +592,7 @@ func validateDataDirectory(dir string) error {
 	}
 	if err != nil || !bytes.Equal(readTestData, writtenTestData) {
 		return &os.PathError{
-			Op:   "validateDataDirectory",
+			Op:   "validateDirectory",
 			Path: dir,
 			Err:  fmt.Errorf("Could not read from data directory %s!", dir),
 		}
@@ -647,8 +648,12 @@ func Start() error {
 		firstCall = false
 	}
 
-	// does the directory exist and is it writable/readable?
-	err := validateDataDirectory(config.Service.DataDirectory)
+	// do the necessary directories exist, and are they writable/readable?
+	err := validateDirectory(config.Service.DataDirectory)
+	if err != nil {
+		return err
+	}
+	err = validateDirectory(config.Service.ManifestDirectory)
 	if err != nil {
 		return err
 	}

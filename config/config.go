@@ -44,8 +44,10 @@ type serviceConfig struct {
 	// (for generating and transferring manifests)
 	Endpoint string `json:"endpoint" yaml:"endpoint"`
 	// name of existing directory in which DTS can store persistent data
-	// default: none (persistent storage disabled)
-	DataDirectory string `json:"data_dir,omitempty" yaml:"data_dir,omitempty"`
+	DataDirectory string `json:"data_dir" yaml:"data_dir,omitempty"`
+	// name of existing directory in which DTS writes manifest files (must be
+	// visible to endpoints)
+	ManifestDirectory string `json:"manifest_dir" yaml:"manifest_dir"`
 	// time after which information about a completed transfer is deleted (seconds)
 	// default: 7 days
 	DeleteAfter int `json:"delete_after" yaml:"delete_after"`

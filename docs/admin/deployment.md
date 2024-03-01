@@ -36,17 +36,25 @@ The most important details are:
 
 * The service and its supporting executables and configuration data are
   supplied by its Docker image
+* Configurable settings for the service are stored in environment variables
+  that can be set in the Rancher 2 console
 * The DTS data directory (used for keeping track of ongoing tasks and for
   generating transfer manifests) resides on the NERSC Community File System
   (CFS) under `/global/cfs/cdirs/kbase/dts/`. This volume is visible to the
   service as `/data`, so the `DATA_DIRECTORY` environment variable should be
   set to `/data`.
+* The DTS manifest directory (used for writing transfer manifest files that
+  get transferred to destination endpoints) also resides on the NERSC
+  Community File System (CFS), but under `/global/cfs/cdirs/kbase/gsharing/dts/`
+  so that it is accessible via a Globus endpoint. This volume is visible to
+  the service as `/manifests`, so the `MANIFEST_DIRECTORY` environment variable
+  should be set to `/manifests`.
 
 Let's walk through the process of updating and redeploying the DTS in Spin.
 
 ### 1. Update and Push a New Docker Image to Spin
 
-From within a clone of the [DTS git repo](https://github.com/kbase/dit), make
+From within a clone of the [DTS GitHub repo](https://github.com/kbase/dts), make
 sure the repo is up to date by typing `git pull` in the `main` branch.
 
 Then, sitting in the top-level `dts` source folder of your `dts`, execute
@@ -65,14 +73,13 @@ For example,
 ```
 
 builds a new DTS Docker image for to be run as the user `johnson`,
-with the tag `v1.1`. The script pushes the Docker image to the
-[Spin Docker registry](https://registry.spin.nersc.gov). Make sure the tag
-indicates the current version of `dts` for clarity.
+with the tag `v1.1`. The script pushes the Docker image to [Harbor, the
+NERSC Docker registry](https://registry.nersc.gov). Make sure the tag
+indicates the current version of `dts` (e.g. `v1.1`) for clarity.
 
 After building the Docker image and tagging it, the script prompts you for the
 NERSC password for the user you specified. This allows it to push the image to
-NERSC's Docker image registry, where it can be accessed via the Rancher 2
-console.
+Harbor so it can be accessed via the Rancher 2 console.
 
 ### 2. Edit the Deployment in Rancher 2 and Restart the Service
 
@@ -84,12 +91,14 @@ navigate to the `dts` deployment.
    `Edit` to update its configuration.
 3. If needed, navigate to the `Volumes` section and edit the CFS directory for
    the volume mounted at `/data`. Usually, this is set to `/global/cfs/cdirs/kbase/dts/`,
-   so you usually don't need to edit this.
+   so you usually don't need to edit this. Similarly, check the volume mounted
+   at `/manifests` (usually set to `/global/cfs/cdirs/kbase/gsharing/manifests/`).
 4. Edit the Docker image for the deployment, changing the tag after the colon
    to match the tag of the Docker image pushed by `deploy-to-spin.sh` above.
-5. Make sure that the Scaling/Upgrade Policy is set to `Rolling: stop old pods, then start new`.
-   This prevents a new pod from trying to acquire locks on the mapping data
-   stores before the old one has released it.
+5. Make sure that the Scaling/Upgrade Policy on the Deployment is set to
+   `Recreate: KILL ALL pods, then start new pods.` This ensures that the
+   service in the existing pod can save a record of its ongoing tasks before a
+   service in a new pod tries to restore them.
 6. Click `Save` to restart the deployment with this new information.
 
 That's it! You've now updated the service with new features and bugfixes.

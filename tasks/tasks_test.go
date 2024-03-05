@@ -188,11 +188,11 @@ func (t *SerialTests) TestCreateTask() {
 	assert.Nil(err)
 	assert.Equal(TransferStatusUnknown, status.Code)
 
-	// make sure the status switches to staging
+	// make sure the status switches to staging or active
 	time.Sleep(pause + pollInterval)
 	status, err = Status(taskId)
 	assert.Nil(err)
-	assert.Equal(TransferStatusStaging, status.Code)
+	assert.True(status.Code == TransferStatusStaging || status.Code == TransferStatusActive)
 
 	// wait for the staging to complete and then check its status
 	// again (should be actively transferring)

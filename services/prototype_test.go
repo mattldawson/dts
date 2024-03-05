@@ -55,6 +55,7 @@ service:
   max_connections: 100
   poll_interval: 100
   data_dir: TESTING_DIR/data
+  manifest_dir: TESTING_DIR/manifests
   delete_after: 24
   endpoint: local-endpoint
 databases:
@@ -75,7 +76,6 @@ endpoints:
     name: Local endpoint
     id: 8816ec2d-4a48-4ded-b68a-5ab46a4417b6
     provider: local
-    root: TESTING_DIR
   source-endpoint:
     name: Endpoint 1
     id: 26d61236-39f6-4742-a374-8ec709347f2f
@@ -167,8 +167,9 @@ func setup() {
 	dtstest.RegisterDatabase("destination1", nil)
 	dtstest.RegisterDatabase("destination2", nil)
 
-	// create the DTS data directory
+	// create the DTS data and manifest directories
 	os.Mkdir(config.Service.DataDirectory, 0755)
+	os.Mkdir(config.Service.ManifestDirectory, 0755)
 
 	// Start the service.
 	log.Print("Starting test mapping service...\n")

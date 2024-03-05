@@ -61,7 +61,7 @@ var suffixToFormat = map[string]string{
 	"fasta.gz": "fasta",
 	"fastq":    "fastq",
 	"fastq.gz": "fastq",
-	"fna":      "fna",
+	"fna":      "fasta",
 	"gff":      "gff",
 	"gff3":     "gff3",
 	"gz":       "gz",
@@ -120,13 +120,17 @@ func formatFromFileName(fileName string) string {
 		}
 	}
 
-	// determine whether the file matches any of the supported suffixes
+	// determine whether the file matches any of the supported suffixes,
+	// selecting the longest matching suffix
+	format := "unknown"
+	longestSuffix := 0
 	for _, suffix := range supportedSuffixes {
-		if strings.HasSuffix(fileName, suffix) {
-			return suffixToFormat[suffix]
+		if strings.HasSuffix(fileName, suffix) && len(suffix) > longestSuffix {
+			format = suffixToFormat[suffix]
+			longestSuffix = len(suffix)
 		}
 	}
-	return "unknown"
+	return format
 }
 
 // extracts the file format from the name and type of the file

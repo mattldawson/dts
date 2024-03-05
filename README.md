@@ -91,4 +91,5 @@ go test ./databases/jdp/... -args -record-jamo
 
 This places one or more "cassette" files in the `databases/jdp/fixtures` folder,
 where they can be accessed by the testing system. Make sure to commit this
-folder to the repository after recording the JAMO queries.
+folder to the repository after recording the JAMO queries. You should also
+delete any old fixture replaced by a new one.

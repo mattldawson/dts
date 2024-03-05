@@ -60,6 +60,7 @@ service:
   max_connections: 100
   poll_interval: 50  # milliseconds
   data_dir: TESTING_DIR/data
+  manifest_dir: TESTING_DIR/manifests
   delete_after: 2    # seconds
   endpoint: local-endpoint
 databases:
@@ -76,7 +77,6 @@ endpoints:
     name: Local endpoint
     id: 8816ec2d-4a48-4ded-b68a-5ab46a4417b6
     provider: test
-    root: TESTING_DIR
   source-endpoint:
     name: Endpoint 1
     id: 26d61236-39f6-4742-a374-8ec709347f2f
@@ -139,8 +139,9 @@ func setup() {
 	// register test databases/endpoints referred to in config file
 	dtstest.RegisterTestFixturesFromConfig(endpointOptions, testResources)
 
-	// Create the data directory used to save/restore tasks
+	// Create the data and manifest directories
 	os.Mkdir(config.Service.DataDirectory, 0755)
+	os.Mkdir(config.Service.ManifestDirectory, 0755)
 }
 
 // this function gets called after all tests have been run

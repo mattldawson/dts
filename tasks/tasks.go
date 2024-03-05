@@ -560,9 +560,9 @@ func heartbeat(pollInterval time.Duration, pollChan chan<- struct{}) {
 // this function checks for the existence of the data directory and whether it
 // is readable/writeable, returning a non-nil error if any of these conditions
 // are not met
-func validateDirectory(dir string) error {
+func validateDirectory(dirType, dir string) error {
 	if dir == "" {
-		return fmt.Errorf("no data directory was specified!")
+		return fmt.Errorf("no %s directory was specified!", dirType)
 	}
 	info, err := os.Stat(dir)
 	if err != nil {
@@ -572,7 +572,7 @@ func validateDirectory(dir string) error {
 		return &os.PathError{
 			Op:   "validateDirectory",
 			Path: dir,
-			Err:  fmt.Errorf("%s is not a directory!", dir),
+			Err:  fmt.Errorf("%s is not a valid %s directory!", dir, dirType),
 		}
 	}
 
@@ -584,7 +584,7 @@ func validateDirectory(dir string) error {
 		return &os.PathError{
 			Op:   "validateDirectory",
 			Path: dir,
-			Err:  fmt.Errorf("Could not write to data directory %s!", dir),
+			Err:  fmt.Errorf("Could not write to %s directory %s!", dirType, dir),
 		}
 	}
 	readTestData, err := os.ReadFile(testFile)
@@ -595,7 +595,7 @@ func validateDirectory(dir string) error {
 		return &os.PathError{
 			Op:   "validateDirectory",
 			Path: dir,
-			Err:  fmt.Errorf("Could not read from data directory %s!", dir),
+			Err:  fmt.Errorf("Could not read from %s directory %s!", dirType, dir),
 		}
 	}
 	return nil
@@ -650,11 +650,11 @@ func Start() error {
 	}
 
 	// do the necessary directories exist, and are they writable/readable?
-	err := validateDirectory(config.Service.DataDirectory)
+	err := validateDirectory("data", config.Service.DataDirectory)
 	if err != nil {
 		return err
 	}
-	err = validateDirectory(config.Service.ManifestDirectory)
+	err = validateDirectory("manifest", config.Service.ManifestDirectory)
 	if err != nil {
 		return err
 	}

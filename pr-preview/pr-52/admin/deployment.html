@@ -867,10 +867,13 @@ The most important details are:</p>
   set to <code>/data</code>.</li>
 <li>The DTS manifest directory (used for writing transfer manifest files that
   get transferred to destination endpoints) also resides on the NERSC
-  Community File System (CFS), but under <code>/global/cfs/cdirs/kbase/gsharing/dts/</code>
+  Community File System (CFS), but under <code>/global/cfs/cdirs/kbase/gsharing/dts/manifests</code>
   so that it is accessible via a Globus endpoint. This volume is visible to
   the service as <code>/manifests</code>, so the <code>MANIFEST_DIRECTORY</code> environment variable
-  should be set to <code>/manifests</code>.</li>
+  should be set to <code>/manifests</code>. <strong>NOTE: the directory must be the same when
+  viewed by the service and the Globus Collection! If there is a mismatch,
+  the service will not be able to write the manifest OR Globus will not be
+  able to transfer it.</strong></li>
 </ul>
 <p>Let's walk through the process of updating and redeploying the DTS in Spin.</p>
 <h3 id="1-update-and-push-a-new-docker-image-to-spin">1. Update and Push a New Docker Image to Spin</h3>

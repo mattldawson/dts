@@ -127,9 +127,9 @@ COPY --from=builder /go/dts/deployment/dts.yaml /etc/dts.yaml
 ENV PATH=/bin:/usr/bin:/usr/sbin
 
 # Add the user and group for this image and set it up.
-RUN /usr/sbin/adduser -u $UID -H -D $USERNAME
-RUN /usr/sbin/addgroup -g $GID $GROUP
-RUN /usr/sbin/addgroup $USERNAME $GROUP
+RUN /usr/sbin/adduser -u $UID -H -D $USERNAME && \
+    /usr/sbin/addgroup -g $GID $GROUP && \
+    /usr/sbin/addgroup $USERNAME $GROUP
 USER $USERNAME
 
 # Run the service on the given port with the given config file.

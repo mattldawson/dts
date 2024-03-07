@@ -29,15 +29,19 @@ must be able to connect to and utilize these resources. Accordingly, you must
 set the following environment variables to make sure DTS can do what it needs
 to do:
 
-* `DTS_KBASE_DEV_TOKEN`: a KBase development token (available to
-  [KBase developers](https://docs.kbase.us/development/create-a-kbase-developer-account)
+* `DTS_KBASE_DEV_TOKEN`: a developer token for the KBase **production**
+  environment (available to [KBase developers](https://docs.kbase.us/development/create-a-kbase-developer-account)
   used to connect to the KBase Auth Server, which provides a context for
-  authenticating and authorizing DTS for its basic operations
+  authenticating and authorizing DTS for its basic operations. You can create
+  a token [from your KBase developer account](https://kbase.github.io/kb_sdk_docs/tutorial/3_initialize.html#set-up-your-developer-credentials).
 * `DTS_KBASE_TEST_ORCID`: an [ORCID](https://orcid.org/) identifier that can be
   used to run DTS's unit test. This identifier must match a registered ORCID ID
   associated with a [KBase user account](https://narrative.kbase.us/#signup).
 * `DTS_KBASE_TEST_USER`: the KBase user associated with the ORCID specified
-  by `DTS_KBASE_TEST_ORCID`.
+  by `DTS_KBASE_TEST_ORCID`. **NOTE: at the time of writing, KBase does not have
+  a mechanism for mapping ORCID IDs to local users, so the DTS uses a file in
+  its data directory called `kbase_users.json` consisting of a single JSON
+  object whose keys are ORCID IDs and whose values are local usernames.**
 * `DTS_GLOBUS_CLIENT_ID`: a client ID registered using the
   [Globus Developers](https://docs.globus.org/globus-connect-server/v5/use-client-credentials/#register-application)
   web interface. This ID must be registered specifically for an instance of DTS.

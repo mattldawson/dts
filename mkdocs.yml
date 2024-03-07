@@ -1,0 +1,61 @@
+site_name: "DTS: A Data Transfer System"
+
+nav:
+  - 'Home': 'index.md'
+  - 'Administrator Guide':
+    - 'Overview': 'admin/index.md'
+    - 'Installing DTS Locally': 'admin/installation.md'
+    - 'Deploying DTS via Docker': 'admin/deployment.md'
+    - 'Configuring DTS': 'admin/config.md'
+    - 'Granting DTS Access to a Globus Endpoint': 'admin/globus.md'
+  - 'Developer Guide':
+    - 'Overview': 'developer/index.md'
+    - 'Code Organization':
+      - 'config package': 'developer/config.md'
+      - 'credit package': 'developer/credit.md'
+      - 'databases package': 'developer/databases.md'
+      - 'endpoints package': 'developer/endpoints.md'
+      - 'frictionless package': 'developer/frictionless.md'
+      - 'services package': 'developer/services.md'
+      - 'tasks package': 'developer/tasks.md'
+
+edit_uri: ""
+
+theme:
+  name: material
+  palette:
+  palette:
+  - media: "(prefers-color-scheme: light)"
+    scheme: default
+    toggle:
+      icon: material/weather-sunny
+      name: Switch to dark mode
+  - media: "(prefers-color-scheme: dark)"
+    scheme: slate
+    primary: cyan
+    toggle:
+      icon: material/weather-night
+      name: Switch to light mode
+  features:
+    - navigation.indices
+    - navigation.instant
+    - navigation.sections
+    - navigation.top
+#    - navigation.tabs
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.arithmatex:
+      generic: true
+  - tables
+
+extra_javascript:
+  - https://polyfill.io/v3/polyfill.min.js?features=es6
+
+repo_url: https://github.com/kbase/dts
+
+use_directory_urls: false

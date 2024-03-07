@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/google/uuid"
 
@@ -76,12 +77,13 @@ func (db *Database) Endpoint() (endpoints.Endpoint, error) {
 }
 
 // FIXME: currently we store a mapping of orcid IDs -> KBase user names
-// FIXME: in a file called "kbase_users.json" in the DTS's working dir.
+// FIXME: in a file called "kbase_users.json" in the DTS's data folder
 var kbaseUsers map[string]string
 
 func (db *Database) LocalUser(orcid string) (string, error) {
 	if kbaseUsers == nil {
-		data, err := os.ReadFile("kbase_users.json")
+		kbaseUsersFile := filepath.Join(config.Service.DataDirectory, "kbase_users.json")
+		data, err := os.ReadFile(kbaseUsersFile)
 		if err == nil {
 			err = json.Unmarshal(data, &kbaseUsers)
 		} else {

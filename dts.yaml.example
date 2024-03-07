@@ -3,13 +3,15 @@
 
 # service parameters
 service:
-  port: 8080             # port on which the service listenѕ
-  max_connections: 100   # maximum number of incoming HTTP connections
-  poll_interval:   60000 # interval at which DTS checks transfer statuses (ms)
-  endpoint: globus-local # name of endpoint used for manifest generation
-  data_dir: /path/to/dir # directory DTS uses for data storage
-  delete_after: 604800   # period after which info about completed transfers
-                         # is deleted (seconds)
+  port: 8080                 # port on which the service listenѕ
+  max_connections: 100       # maximum number of incoming HTTP connections
+  poll_interval:   60000     # interval at which DTS checks transfer statuses (ms)
+  endpoint: globus-local     # name of endpoint used for manifest generation
+  data_dir: /path/to/dir     # directory DTS uses for internal data storage
+  manifest_dir: /path/to/dir # directory DTS uses for writing transfer manifests
+  delete_after: 604800       # period after which info about completed transfers
+                             # is deleted (seconds)
+  debug: true                # set to enable debug-level logging and other tools
 
 endpoints: # file transfer endpoints
   globus-local:

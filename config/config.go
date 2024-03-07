@@ -44,11 +44,15 @@ type serviceConfig struct {
 	// (for generating and transferring manifests)
 	Endpoint string `json:"endpoint" yaml:"endpoint"`
 	// name of existing directory in which DTS can store persistent data
-	// default: none (persistent storage disabled)
-	DataDirectory string `json:"data_dir,omitempty" yaml:"data_dir,omitempty"`
+	DataDirectory string `json:"data_dir" yaml:"data_dir,omitempty"`
+	// name of existing directory in which DTS writes manifest files (must be
+	// visible to endpoints)
+	ManifestDirectory string `json:"manifest_dir" yaml:"manifest_dir"`
 	// time after which information about a completed transfer is deleted (seconds)
 	// default: 7 days
 	DeleteAfter int `json:"delete_after" yaml:"delete_after"`
+	// flag indicating whether debug logging and other tools are enabled
+	Debug bool `json:"debug" yaml:"debug"`
 }
 
 // global config variables
@@ -86,7 +90,15 @@ func readConfig(bytes []byte) error {
 
 	// copy the config data into place, performing any needed conversions
 	Service = conf.Service
+
 	Endpoints = conf.Endpoints
+	for name, endpoint := range Endpoints {
+		if endpoint.Root == "" {
+			endpoint.Root = "/"
+			Endpoints[name] = endpoint
+		}
+	}
+
 	Databases = conf.Databases
 	MessageQueues = conf.MessageQueues
 

@@ -25,7 +25,9 @@ import (
 	"bytes"
 	"encoding/gob"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -78,7 +80,7 @@ type taskType struct {
 	CompletionTime      time.Time      // time at which the transfer completed
 }
 
-// starts a task going, initiating staging
+// starts a task going, initiating staging if needed
 func (task *taskType) start() error {
 	source, err := databases.NewDatabase(task.Orcid, task.Source)
 	if err != nil {
@@ -91,18 +93,32 @@ func (task *taskType) start() error {
 		return err
 	}
 
-	// tell the source DB to stage the files, stash the task, and return
-	// its new ID
-	task.Staging.UUID, err = source.StageFiles(task.FileIds)
-	task.Staging.Valid = true
+	// are the files already staged?
+	sourceEndpoint, err := source.Endpoint()
 	if err != nil {
 		return err
 	}
-	task.Status = TransferStatus{
-		Code:     TransferStatusStaging,
-		NumFiles: len(task.FileIds),
+	staged, err := sourceEndpoint.FilesStaged(task.Resources)
+	if err != nil {
+		return err
 	}
-	return nil
+
+	if staged {
+		err = task.beginTransfer()
+	} else {
+		// tell the source DB to stage the files, stash the task, and return
+		// its new ID
+		task.Staging.UUID, err = source.StageFiles(task.FileIds)
+		task.Staging.Valid = true
+		if err != nil {
+			return err
+		}
+		task.Status = TransferStatus{
+			Code:     TransferStatusStaging,
+			NumFiles: len(task.FileIds),
+		}
+	}
+	return err
 }
 
 // updates the status of a canceled task depending on where it is in its
@@ -119,13 +135,64 @@ func (task *taskType) checkCancellation() error {
 			return err
 		}
 		task.Status, err = endpoint.Status(task.Id)
+		return err
 	} else {
-		// at any other point in the lifecycle, cut and run
+		// at any other point in the lifecycle, terminate the task
 		task.Status.Code = TransferStatusFailed
+		task.Status.Message = "Task canceled at user request"
 	}
 	if task.Completed() {
 		task.CompletionTime = time.Now()
 	}
+	return nil
+}
+
+// initiates a file transfer on a set of staged files
+func (task *taskType) beginTransfer() error {
+	source, err := databases.NewDatabase(task.Orcid, task.Source)
+	if err != nil {
+		return err
+	}
+	destination, err := databases.NewDatabase(task.Orcid, task.Destination)
+	if err != nil {
+		return err
+	}
+
+	// construct the source/destination file paths
+	username, err := destination.LocalUser(task.Orcid)
+	if err != nil {
+		return err
+	}
+	fileXfers := make([]FileTransfer, len(task.Resources))
+	for i, resource := range task.Resources {
+		destinationPath := filepath.Join(username, task.Id.String(), resource.Path)
+		fileXfers[i] = FileTransfer{
+			SourcePath:      resource.Path,
+			DestinationPath: destinationPath,
+			Hash:            resource.Hash,
+		}
+	}
+
+	// initiate the transfer
+	sourceEndpoint, err := source.Endpoint()
+	if err != nil {
+		return err
+	}
+	destinationEndpoint, err := destination.Endpoint()
+	if err != nil {
+		return err
+	}
+	task.Transfer.UUID, err = sourceEndpoint.Transfer(destinationEndpoint, fileXfers)
+	if err != nil {
+		return err
+	}
+
+	task.Status = TransferStatus{
+		Code:     TransferStatusActive,
+		NumFiles: len(task.FileIds),
+	}
+	task.Staging = uuid.NullUUID{}
+	task.Transfer.Valid = true
 	return nil
 }
 
@@ -145,44 +212,9 @@ func (task *taskType) checkStaging() error {
 		return err
 	}
 	if staged {
-		destination, err := databases.NewDatabase(task.Orcid, task.Destination)
-		if err != nil {
-			return err
-		}
-		destinationEndpoint, err := destination.Endpoint()
-		if err != nil {
-			return err
-		}
-
-		// construct the source/destination file paths
-		username, err := source.LocalUser(task.Orcid)
-		if err != nil {
-			return err
-		}
-		fileXfers := make([]FileTransfer, len(task.Resources))
-		for i, resource := range task.Resources {
-			destinationPath := filepath.Join(username, task.Id.String(), resource.Path)
-			fileXfers[i] = FileTransfer{
-				SourcePath:      resource.Path,
-				DestinationPath: destinationPath,
-				Hash:            resource.Hash,
-			}
-		}
-
-		// initiate the transfer
-		task.Transfer.UUID, err = sourceEndpoint.Transfer(destinationEndpoint, fileXfers)
-		if err != nil {
-			return err
-		}
-
-		task.Status = TransferStatus{
-			Code:     TransferStatusActive,
-			NumFiles: len(task.FileIds),
-		}
-		task.Staging = uuid.NullUUID{}
-		task.Transfer.Valid = true
+		err = task.beginTransfer()
 	}
-	return nil
+	return err
 }
 
 // checks whether files for a task are finished transferring and, if so,
@@ -221,52 +253,54 @@ func (task *taskType) checkTransfer() error {
 			var manifestBytes []byte
 			manifestBytes, err = json.Marshal(manifest)
 			if err != nil {
-				return err
+				return fmt.Errorf("marshalling manifest content: %s", err.Error())
 			}
 			var manifestFile *os.File
-			manifestFile, err = os.CreateTemp(localEndpoint.Root(), "manifest.json")
+			manifestFile, err = os.CreateTemp(config.Service.ManifestDirectory,
+				"manifest.json")
 			if err != nil {
-				return err
+				return fmt.Errorf("creating manifest file: %s", err.Error())
 			}
 			_, err = manifestFile.Write(manifestBytes)
 			if err != nil {
-				return err
+				return fmt.Errorf("writing manifest file content: %s", err.Error())
 			}
 			task.ManifestFile = manifestFile.Name()
 			err = manifestFile.Close()
 			if err != nil {
-				return err
+				return fmt.Errorf("closing manifest file: %s", err.Error())
 			}
 
 			// construct the source/destination file manifest paths
-			username, err := source.LocalUser(task.Orcid)
+			destination, err := databases.NewDatabase(task.Orcid, task.Destination)
+			if err != nil {
+				return err
+			}
+			username, err := destination.LocalUser(task.Orcid)
 			if err != nil {
 				return err
 			}
 			fileXfers := []FileTransfer{
 				FileTransfer{
-					SourcePath:      filepath.Base(task.ManifestFile), // relative to root!
+					SourcePath:      task.ManifestFile,
 					DestinationPath: filepath.Join(username, task.Id.String(), "manifest.json"),
 				},
 			}
 
 			// begin transferring the manifest
-			destination, err := databases.NewDatabase(task.Orcid, task.Destination)
-			if err != nil {
-				return err
-			}
 			destinationEndpoint, err := destination.Endpoint()
 			if err != nil {
 				return err
 			}
 			task.Manifest.UUID, err = localEndpoint.Transfer(destinationEndpoint, fileXfers)
 			if err != nil {
-				return err
+				return fmt.Errorf("transferring manifest file: %s", err.Error())
 			}
 
 			task.Status = TransferStatus{
 				Code: TransferStatusFinalizing,
 			}
+			task.Transfer.Valid = false
 			task.Manifest.Valid = true
 		}
 	}
@@ -291,6 +325,7 @@ func (task *taskType) checkManifest() error {
 		os.Remove(task.ManifestFile)
 		task.ManifestFile = ""
 		task.Status.Code = xferStatus.Code
+		task.Status.Message = ""
 		task.CompletionTime = time.Now()
 	}
 	return nil
@@ -298,7 +333,7 @@ func (task *taskType) checkManifest() error {
 
 // returns the duration since the task completed (successfully or otherwise),
 // or 0 if the task has not completed
-func (task *taskType) Age() time.Duration {
+func (task taskType) Age() time.Duration {
 	if task.Status.Code == TransferStatusSucceeded ||
 		task.Status.Code == TransferStatusFailed {
 		return time.Since(task.CompletionTime)
@@ -308,35 +343,28 @@ func (task *taskType) Age() time.Duration {
 }
 
 // returns true if the task has completed (successfully or not), false otherwise
-func (task *taskType) Completed() bool {
+func (task taskType) Completed() bool {
 	return task.Status.Code == TransferStatusSucceeded ||
 		task.Status.Code == TransferStatusFailed
 }
 
 // requests that the task be canceled
-func (task *taskType) Cancel() {
+func (task *taskType) Cancel() error {
 	task.Canceled = true // mark as canceled
 
 	// fetch the source endpoint
 	var endpoint endpoints.Endpoint
 	source, err := databases.NewDatabase(task.Orcid, task.Source)
 	if err != nil {
-		goto errorOccurred
+		return err
 	}
 	endpoint, err = source.Endpoint()
 	if err != nil {
-		goto errorOccurred
+		return err
 	}
 
 	// request that the task be canceled
-	err = endpoint.Cancel(task.Id)
-	if err != nil {
-		goto errorOccurred
-	}
-	return
-errorOccurred:
-	slog.Error(fmt.Sprintf("Task %s: error in cancellation: %s",
-		task.Id, err.Error()))
+	return endpoint.Cancel(task.Id)
 }
 
 // this function updates the state of a task, setting its status as necessary
@@ -397,6 +425,11 @@ func saveTasks(tasks map[uuid.UUID]taskType, dataFile string) error {
 			return fmt.Errorf("Writing task file %s: %s", dataFile, err.Error())
 		}
 		slog.Debug(fmt.Sprintf("Saved %d tasks to %s", len(tasks), dataFile))
+	} else {
+		_, err := os.Stat(dataFile)
+		if !errors.Is(err, fs.ErrNotExist) { // file exists
+			os.Remove(dataFile)
+		}
 	}
 	return nil
 }
@@ -446,7 +479,14 @@ func processTasks() {
 		case taskId := <-cancelTaskChan: // Cancel() called
 			if task, found := tasks[taskId]; found {
 				slog.Info(fmt.Sprintf("Task %s: received cancellation request", taskId.String()))
-				task.Cancel()
+				err := task.Cancel()
+				if err != nil {
+					task.Status.Code = TransferStatusUnknown
+					task.Status.Message = fmt.Sprintf("error in cancellation: %s", err.Error())
+					task.CompletionTime = time.Now()
+					slog.Error(fmt.Sprintf("Task %s: %s", task.Id.String(), task.Status.Message))
+					tasks[task.Id] = task
+				}
 			} else {
 				err := NotFoundError{Id: taskId}
 				errorChan <- err
@@ -464,8 +504,12 @@ func processTasks() {
 					oldStatus := task.Status
 					err := task.Update()
 					if err != nil {
-						// we log task update errors but do not propagate them
-						slog.Error(err.Error())
+						// We log task update errors but do not propagate them. All
+						// task errors result in a failed status.
+						task.Status.Code = TransferStatusFailed
+						task.Status.Message = err.Error()
+						task.CompletionTime = time.Now()
+						slog.Error(fmt.Sprintf("Task %s: %s", task.Id.String(), err.Error()))
 					}
 					if task.Status.Code != oldStatus.Code {
 						switch task.Status.Code {
@@ -516,9 +560,9 @@ func heartbeat(pollInterval time.Duration, pollChan chan<- struct{}) {
 // this function checks for the existence of the data directory and whether it
 // is readable/writeable, returning a non-nil error if any of these conditions
 // are not met
-func validateDataDirectory(dir string) error {
+func validateDirectory(dirType, dir string) error {
 	if dir == "" {
-		return fmt.Errorf("no data directory was specified!")
+		return fmt.Errorf("no %s directory was specified!", dirType)
 	}
 	info, err := os.Stat(dir)
 	if err != nil {
@@ -526,9 +570,9 @@ func validateDataDirectory(dir string) error {
 	}
 	if !info.IsDir() {
 		return &os.PathError{
-			Op:   "validateDataDirectory",
+			Op:   "validateDirectory",
 			Path: dir,
-			Err:  fmt.Errorf("%s is not a directory!", dir),
+			Err:  fmt.Errorf("%s is not a valid %s directory!", dir, dirType),
 		}
 	}
 
@@ -538,9 +582,9 @@ func validateDataDirectory(dir string) error {
 	err = os.WriteFile(testFile, writtenTestData, 0644)
 	if err != nil {
 		return &os.PathError{
-			Op:   "validateDataDirectory",
+			Op:   "validateDirectory",
 			Path: dir,
-			Err:  fmt.Errorf("Could not write to data directory %s!", dir),
+			Err:  fmt.Errorf("Could not write to %s directory %s!", dirType, dir),
 		}
 	}
 	readTestData, err := os.ReadFile(testFile)
@@ -549,9 +593,9 @@ func validateDataDirectory(dir string) error {
 	}
 	if err != nil || !bytes.Equal(readTestData, writtenTestData) {
 		return &os.PathError{
-			Op:   "validateDataDirectory",
+			Op:   "validateDirectory",
 			Path: dir,
-			Err:  fmt.Errorf("Could not read from data directory %s!", dir),
+			Err:  fmt.Errorf("Could not read from %s directory %s!", dirType, dir),
 		}
 	}
 	return nil
@@ -605,8 +649,12 @@ func Start() error {
 		firstCall = false
 	}
 
-	// does the directory exist and is it writable/readable?
-	err := validateDataDirectory(config.Service.DataDirectory)
+	// do the necessary directories exist, and are they writable/readable?
+	err := validateDirectory("data", config.Service.DataDirectory)
+	if err != nil {
+		return err
+	}
+	err = validateDirectory("manifest", config.Service.ManifestDirectory)
 	if err != nil {
 		return err
 	}

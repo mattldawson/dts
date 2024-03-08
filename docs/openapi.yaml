@@ -9,8 +9,8 @@ info:
     name: Jeffrey N. Johnson
     email: jeff@cohere-llc.com
   license:
-    name: BSD 3-clause
-    url: https://opensource.org/licenses/BSD-3-Clause
+    name: MIT
+    url: https://opensource.org/license/mit
   version: 1.0.0
 servers:
   - url: http://dts.kbase.us
@@ -18,7 +18,7 @@ paths:
   /:
     get:
       summary: Retrieve API/service information
-      description: Retrieve API/service information
+      description: Returns information about the DTS instance
       operationId: getRoot
       responses:
         200:
@@ -30,6 +30,89 @@ paths:
               examples:
                 get-root:
                   $ref: "#/components/examples/get-root"
+        401:
+          description: Client is not authorized to access DTS
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                get-root:
+                  $ref: "#/components/examples/unauthorized-error"
+        5XX:
+          description: An unexpected error occurred
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                internal-server-error:
+                  $ref: "#/components/examples/internal-server-error"
+  /api/v1/databases:
+    get:
+      summary: Query databases available to the DTS
+      description: |
+        Returns a list of metadata for available databases
+      operationId: getQuery
+      responses:
+        200:
+          description: An array of database metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatabaseResults"
+              examples:
+                databases:
+                  $ref: "#/components/examples/databases"
+        401:
+          description: Client is not authorized to access DTS
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                get-root:
+                  $ref: "#/components/examples/unauthorized-error"
+        5XX:
+          description: An unexpected error occurred
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                internal-server-error:
+                  $ref: "#/components/examples/internal-server-error"
+  /api/v1/databases/{db}:
+    get:
+      summary: Request metadata for a specific database available to the DTS
+      description: |
+        Returns metadata for a specific database available to the DTS
+      operationId: getQuery
+      responses:
+        200:
+          description: A record containing specific database metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatabaseResult"
+              examples:
+                databases:
+                  $ref: "#/components/examples/database"
+        401:
+          description: Client is not authorized to access DTS
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                get-root:
+                  $ref: "#/components/examples/unauthorized-error"
+        404:
+          description: Specified database not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         5XX:
           description: An unexpected error occurred
           content:
@@ -41,20 +124,30 @@ paths:
                   $ref: "#/components/examples/internal-server-error"
   /api/v1/files:
     get:
-      summary: Queries available files in an ElasticSearch endpoint
+      summary: Queries available files in a specific database
       description: |
-        Returns a set of results for an ElasticSearch-backed query
+        Returns a set of Frictionless DataResources describing results from
+        the database query
       operationId: getQuery
       responses:
         200:
-          description: An array of ElasticSearch results
+          description: An array of Frictionless DataResource results
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ESResults"
+                $ref: "#/components/schemas/ЅearchResults"
               examples:
                 databases:
                   $ref: "#/components/examples/files"
+        401:
+          description: Client is not authorized to access DTS
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                get-root:
+                  $ref: "#/components/examples/unauthorized-error"
         5XX:
           description: An unexpected error occurred
           content:
@@ -100,6 +193,15 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        401:
+          description: Client is not authorized to access DTS
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                get-root:
+                  $ref: "#/components/examples/unauthorized-error"
         404:
           description: Source file(s) or destination not found
           content:
@@ -137,6 +239,15 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        401:
+          description: Client is not authorized to access DTS
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                get-root:
+                  $ref: "#/components/examples/unauthorized-error"
         404:
           description: Transfer ID not found
           content:
@@ -171,6 +282,15 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        401:
+          description: Client is not authorized to access DTS
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                get-root:
+                  $ref: "#/components/examples/unauthorized-error"
         404:
           description: Transfer ID not found
           content:
@@ -212,31 +332,149 @@ components:
             A URI to live OpenAPI documentation for the service. This is
             available only if the service's documentation endpoints were
             generated.
-    ESResult:
+    Database:
       type: object
-      description: An ElasticSearch result
+      description: A JSON object containing metadata describing a database
+        available to the DTS
       required:
         - id
       properties:
         id:
           type: string
-          description: A unique identifier for a sequence database
-        institution:
+          description: A unique identifier for the database
+        name:
           type: string
-          description: The name of the institution maintaining the database
+          description: A human-readable name for the database
+        organization:
+          type: string
+          description: The name of the organization maintaining the database
+    Databases:
+      type: array
+      description: An array of metadata for databases available to the DTS
+      items:
+        $ref: "#/components/schemas/Database"
+    DataSource:
+      type: object
+      description: information about the source of a DataResource
+      required:
+        - title
+      properties:
+        title:
+          type: string
+          description: a descriptive title for the data source
+        path:
+          type: string
+          description: a URI or relative path pointing to the source
+        email:
+          type: string
+          description: >
+            an email address identifying a contact associated with the source
+    DataLicense:
+      type: object
+      description: information about a license associated with a DataResource
+      required:
+        - name
+        - path
+      properties:
+        name:
+          type: string
+          description: the abbreviated name of the license
+        path:
+          type: string
+          description: >
+            a URI or relative path at which the license text may be retrieved
+        title:
+          type: string
+          description: the descriptive title of the license
+    DataResource:
+      type: object
+      description: >
+        A Frictionless DataResource representing a file matching a search
+      required:
+        - id
+        - name
+        - path
+        - format
+        - bytes
+        - hash
+      properties:
+        id:
+          type: string
+          description: a unique identifier for the resource
+        name:
+          type: string
+          description: >
+            the name of the resource's file, with any suffix stripped off
+        path:
+          type: string
+          description: >
+            a relative path to the file described by the resource, on the database's underlying filesystem
+        title:
+          type: string
+          description: a title or label for the resource
         description:
           type: string
-          description: An optional text description of the database
-        lastUpdated:
-          type: integer
-          description: |
-            The time at which the data was last updated, expressed in the number
-            of seconds since 1/1/1970 UTC
-    ESResults:
-      type: array
-      description: An array of ESResult objects
-      items:
-        $ref: "#/components/schemas/ESResult"
+          description: An optional text description of the resource
+        format:
+          type: string
+          description: >
+            indicates the format of the resource's file, often used as an
+            extension
+        media_type:
+          type: string
+          description: the mediatype/mimetype of the resource (e.g. "test/csv")
+        encoding:
+          type: string
+          description: >
+            the character encoding for the resource's file (UTF-8 by default)
+        bytes:
+          type: number
+          description: the size of the resource's file in bytes
+        hash:
+          type: string
+          description: >
+            the checksum used for the resource's file (algorithms other than
+            MD5 are indicated with a prefix to the hash delimited by a colon)
+        sources:
+          type: array
+          description: a list identifying the sources for this resource
+          items:
+            $ref: "#/components/schemas/DataSource"
+        licenses:
+          type: array
+          description: >
+            a list identifying the license or licenses under which this
+            resource is managed
+          items:
+            $ref: "#/components/schemas/DataLicense"
+        credit:
+          type:
+            $ref: "#/components/schemas/CreditMetadata"
+          description: credit metadata associated with the resource
+        metadata:
+          type: object
+          description: any unstructured metadata reported by the DTS
+	Metadata json.RawMessage `json:"metadata,omitempty"`
+    SearchResults:
+      type: object
+      description: a set of results for a file search query
+      required:
+        - database
+        - query
+        - resources
+      properties:
+        database:
+          type: string
+          description: the ID of the queried database
+        query:
+          type: string
+          description: the query string passed to the database
+        resources:
+          type: array
+          description: An array of Frictionless DataResource objects describing
+            the results of the query
+          items:
+            $ref: "#/components/schemas/DataResource"
     Error:
       type: object
       description: An object containing information about an error
@@ -291,8 +529,8 @@ components:
     get-root:
       description: A response to a successful root query
       value: |
-        name: "Sequence ID Mapping"
-        version: "1.0.0"
+        name: "DTS prototype"
+        version: "0.1"
         uptime: 345600
     database:
       description: A database

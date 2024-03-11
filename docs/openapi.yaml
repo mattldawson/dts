@@ -39,15 +39,6 @@ paths:
               examples:
                 get-root:
                   $ref: "#/components/examples/unauthorized-error"
-        5XX:
-          description: An unexpected error occurred
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-              examples:
-                internal-server-error:
-                  $ref: "#/components/examples/internal-server-error"
   /api/v1/databases:
     get:
       summary: Query databases available to the DTS
@@ -60,7 +51,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/DatabaseResults"
+                $ref: "#/components/schemas/Databases"
               examples:
                 databases:
                   $ref: "#/components/examples/databases"
@@ -73,15 +64,6 @@ paths:
               examples:
                 get-root:
                   $ref: "#/components/examples/unauthorized-error"
-        5XX:
-          description: An unexpected error occurred
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-              examples:
-                internal-server-error:
-                  $ref: "#/components/examples/internal-server-error"
   /api/v1/databases/{db}:
     get:
       summary: Request metadata for a specific database available to the DTS
@@ -94,7 +76,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/DatabaseResult"
+                $ref: "#/components/schemas/Database"
               examples:
                 databases:
                   $ref: "#/components/examples/database"
@@ -113,15 +95,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-        5XX:
-          description: An unexpected error occurred
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-              examples:
-                internal-server-error:
-                  $ref: "#/components/examples/internal-server-error"
   /api/v1/files:
     get:
       summary: Queries available files in a specific database
@@ -135,7 +108,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ЅearchResults"
+                $ref: "#/components/schemas/SearchResults"
               examples:
                 databases:
                   $ref: "#/components/examples/files"
@@ -148,15 +121,6 @@ paths:
               examples:
                 get-root:
                   $ref: "#/components/examples/unauthorized-error"
-        5XX:
-          description: An unexpected error occurred
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-              examples:
-                internal-server-error:
-                  $ref: "#/components/examples/internal-server-error"
   /api/v1/transfers:
     post:
       summary: Initiates a file transfer
@@ -182,8 +146,6 @@ paths:
             the file transfer
           content:
             application/json:
-              schema:
-                $ref: "#/components/schemas/TransferId"
               examples:
                 sequence-ids:
                   $ref: "#/components/examples/transfer-id"
@@ -208,15 +170,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-        5XX:
-          description: An unexpected error occurred
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-              examples:
-                internal-server-error:
-                  $ref: "#/components/examples/internal-server-error"
   /api/v1/transfers/{Id}:
     get:
       summary: Queries the status of a file transfer with the given ID
@@ -254,15 +207,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-        5XX:
-          description: An unexpected error occurred
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-              examples:
-                internal-server-error:
-                  $ref: "#/components/examples/internal-server-error"
     delete:
       summary: Cancels the file transfer with the given ID
       description: |
@@ -297,41 +241,127 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-        5XX:
-          description: An unexpected error occurred
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-              examples:
-                internal-server-error:
-                  $ref: "#/components/examples/internal-server-error"
 
 components:
   schemas:
-    ServiceInfo:
+    Contributor:
       type: object
-      description: Service/API metadata
-      required:
-        - name
-        - version
-        - uptime
+      description: >
+        Represents a contributor to the resource. Contributors must have a
+        'contributor_type', either 'Person' or 'Organization', and a 'name'.
+
+        The 'credit_name' field is used to store the name of a person as it
+        would appear in a citation. If there is no 'credit_name' supplied, the
+        'name' field would be used in citations.
+
+        The 'contributor_role' field takes values from the DataCite and CRediT
+        contributor roles vocabularies. For more information on these resources
+        and choosing the appropriate roles, please see the following links:
+
+        1. DataCite contributor roles - https://support.datacite.org/docs/datacite-metadata-schema-v44-recommended-and-optional-properties#7a-contributortype
+        2. CRediT contributor role taxonomy - https://credit.niso.org
       properties:
+        contributor_type:
+          type: string
+          description: Must be either 'Person' or 'Organization'
+        contributor_id:
+          type: string
+          description: >
+            Persistent unique identifier for the contributor; this might be an
+            ORCID for an individual, or a ROR ID for an organization.
         name:
           type: string
-          description: The name of the Service API
+          description: >
+            Contributor name. For organizations, this should be the full
+            (unabbreviated) name; for a person, the full name should be
+            entered.
+        credit_name:
+          type: string
+          description: >
+            For a person, how the name should appear in a citation
+        affiliations:
+          type:
+            $ref: "#/components/schemas/Organizations"
+          description: >
+            List of organizations with which the contributor is affiliated.
+            For contributors that represent an organization, this may be a
+            parent organization (e.g. KBase, US DOE; Arkin lab, LBNL).
+        contributor_roles:
+          type: string
+          description: >
+            List of roles played by the contributor when working on the resource
+    Contributors:
+      type: array
+      description: An array of Contributor objects
+      items:
+        $ref: "#/components/schemas/Contributor"
+    CreditMetadata:
+      type: object
+      description: >
+        A record of all the credit metadata associated with a file
+      properties:
+        comment:
+          type: string
+          description: >
+            Freeform text providing extra information about this credit metadata
+        description:
+          type: string
+          description: >
+            A brief description of abstract for the resource being represented
+        identifier:
+          type: string
+          description: >
+            A resolvable persistent unique identifier for the resource. Should
+            be in the format <database-name>:<identifier-within-database>.
+        license:
+          type: string
+          description: >
+            Usage license for the resource. May be a text string or an URL.
+            Abbreviations should be spelled out where possible (e.g.
+            'Creative Commons 4.0' instead of 'CC-BY-4.0'). The license is
+            interpreted as an URL and checked for well-formedness if it starts
+            with a series of letters, a colon, and slashes, e.g.
+            "http://"; "https://"; "ftp://".
+        resource_type:
+          type: string
+          description: >
+            The broad type of the source data for the related workspace object.
+            'dataset' is the only valid value currently.
         version:
           type: string
-          description: The version string (MAJOR.MINOR.PATCH)
-        uptime:
-          type: integer
-          description: The uptime of the service (seconds)
-        documentation:
-          type: string
-          description: |
-            A URI to live OpenAPI documentation for the service. This is
-            available only if the service's documentation endpoints were
-            generated.
+          description: >
+            The version of the resource. This must be an absolute version, not
+            a relative version like 'latest'
+        contributors:
+          type:
+            $ref: "#/components/schemas/Contributors"
+          description: >
+            A list of people and/or organizations who contributed to the
+            resource
+        dates:
+          type:
+            $ref: "#/components/schemas/EventDates"
+          description: >
+            A list of relevant lifecycle events for the resource
+        funding:
+          type:
+            $ref: "#/components/schemas/FundingReferences"
+          description: Funding sources for the resource
+        related_identifiers:
+          type:
+            $ref: "#/components/schemas/PermanentIDs"
+          description: >
+            Other resolvable persistent unique IDs related to the resource.
+        repository:
+          type:
+            $ref: "#/components/schemas/Organization"
+          description: Online repository for a dataset
+        titles:
+          type:
+            $ref: "#/components/schemas/Titles"
+          description: >
+            One or more titles for the resource. At least one title of
+            title_type "title" must be provided.
     Database:
       type: object
       description: A JSON object containing metadata describing a database
@@ -350,7 +380,7 @@ components:
           description: The name of the organization maintaining the database
     Databases:
       type: array
-      description: An array of metadata for databases available to the DTS
+      description: An array of Database objects
       items:
         $ref: "#/components/schemas/Database"
     DataSource:
@@ -454,7 +484,129 @@ components:
         metadata:
           type: object
           description: any unstructured metadata reported by the DTS
-	Metadata json.RawMessage `json:"metadata,omitempty"`
+    Error:
+      type: object
+      description: An object containing information about an error
+      required:
+        - code
+        - error
+      properties:
+        code:
+          type: integer
+          description: The HTTP status code associated with the error
+        error:
+          type: string
+          description: A description of the error
+    EventDate:
+      type: object
+      description: >
+        Represents an event in the lifecycle of a resource and the date it
+        occurred on. See https://support.datacite.org/docs/datacite-metadata-schema-v44-recommended-and-optional-properties#8-date
+        for more information on the events.
+      properties:
+        date:
+          type: string
+          description: >
+            The date associated with the event. The date may be in the format
+            YYYY, YYYY-MM, or YYYY-MM-DD.
+        event:
+          type: string
+          description: >
+            The nature of the resource-related event that occurred on that date
+    EventDates:
+      type: array
+      description: An array of EventDate objects
+      items:
+        $ref: "#/components/schemas/EventDate"
+    FundingReference:
+      type: object
+      description: >
+        Represents a funding source for a resource, including the funding body
+        and the grant awarded. Recommended resources for organization
+        identifiers include
+        1. Research Organization Registry, http://ror.org
+        2. International Standard Name Identifier, https://isni.org
+        3. Crossref Funder Registry, https://www.crossref.org/services/funder-registry/
+        Some organizations may have a digital object identifier (DOI).
+      required:
+        - funder_name
+      properties:
+        grant_id:
+          type: string
+          description: Code for the grant, assigned by the funder
+        grant_title:
+          type: string
+          description: Title for the grant
+        grant_url:
+          type: string
+          description: URL for the grant
+        funder:
+          type:
+            $ref: "#/components/schemas/Organization"
+          description: The funder for the grant or award
+    FundingReferences:
+      type: array
+      description: An array of FundingReference objects
+      items:
+        $ref: "#/components/schemas/FundingReference"
+    Organization:
+      type: object
+      description: >
+        Represents an organization. Recommended resources for organization
+        identifiers and canonical organization names include
+        1. Research Organization Registry, http://ror.org
+        2. International Standard Name Identifier, https://isni.org
+        3. Crossref Funder Registry, https://www.crossref.org/services/funder-registry/
+      properties:
+        organization_id:
+          type: string
+          description: >
+            Persistent unique identifier for the organization in the format
+            "<database name>:<identifier within database>"
+        organization_name:
+          type: string
+          description: >
+            Common name of the organization; use the name recommended by ROR if
+            possible.
+    Organizations:
+      type: array
+      description: An array of Organization objects
+      items:
+        $ref: "#/components/schemas/Organization"
+    PermanentID:
+      type: object
+      description: |
+        Represents a persistent unique identifier for an entity, with an
+        optional relationship to some other entity. The values in the
+        'relationship_type' field come from controlled vocabularies maintained
+        by DataCite and Crossref. See the documentation links below for more
+        details.
+        1. DataCite relation types - https://support.datacite.org/docs/datacite-metadata-schema-v44-recommended-and-optional-properties#12b-relationtype
+        2. Crossref relation types - https://www.crossref.org/documentation/schema-library/markup-guide-metadata-segments/relationships/
+      required:
+        - id
+      properties:
+        id:
+          type: string
+          description: >
+            Persistent unique ID for an entity. Should be in the format
+            "<database-name>:<identifier-within-database>".
+        description:
+          type: string
+          description: Description of that entity
+        relationship_type:
+          type: string
+          description: >
+            The relationship between the ID and some other entity. For example,
+            when a PermanentID class is used to represent objects in the
+            CreditMetadata field 'related_identifiers', the 'relationship_type'
+            field captures the relationship between the CreditMetadata and this
+            ID.
+    PermanentIDs:
+      type: array
+      description: An array of PermanentID objects
+      items:
+        $ref: "#/components/schemas/PermanentID"
     SearchResults:
       type: object
       description: a set of results for a file search query
@@ -475,56 +627,102 @@ components:
             the results of the query
           items:
             $ref: "#/components/schemas/DataResource"
-    Error:
+    ServiceInfo:
       type: object
-      description: An object containing information about an error
+      description: Service/API metadata
       required:
-        - code
-        - error
+        - name
+        - version
+        - uptime
       properties:
-        code:
+        name:
+          type: string
+          description: The name of the Service API
+        version:
+          type: string
+          description: The version string (MAJOR.MINOR.PATCH)
+        uptime:
           type: integer
-          description: The HTTP status code associated with the error
-        error:
+          description: The uptime of the service (seconds)
+        documentation:
           type: string
-          description: A description of the error
-    IdRequest:
-      description: The body of a request for an ID mapping
+          description: |
+            A URI to live OpenAPI documentation for the service. This is
+            available only if the service's documentation endpoints were
+            generated.
+    Title:
       type: object
+      description: >
+        Represents the title or name of a resource. If the title is in a
+        language other than English, the 'title_type' should be set to
+        'translated_title', and the appropriate BCP-47 tag supplied in the
+        'title_language' field.
       required:
-        - sourceDb
-        - targetDb
-        - ids
+        - title_string
       properties:
-        sourceDb:
+        title_string:
           type: string
-          description: |
-            The identifier for the sequence database from which the sequence IDs
-            are mapped
-        targetDb:
+          description: A string used as a title for a resource
+        title_type:
           type: string
-          description: |
-            The identifier for the sequence database to which the sequence IDs
-            are mapped
-        ids:
-          description: |
-            An array of sequence IDs to be mapped from the source database to
-            the target database
-          $ref: "#/components/schemas/SequenceIds"
-    SequenceId:
-      type: string
-      description: |
-        A string that uniquely identifies a sequence within a database
-    SequenceIds:
+          description: >
+            A descriptor for the title. Defaults to 'title' if not provided.
+        title_language:
+          type: string
+          description: Language that the title is in, as a IETF BCP-47 tag
+    Titles:
       type: array
-      description: An array of sequence identifier strings
+      description: An array of Title objects
       items:
-        $ref: "#/components/schemas/SequenceId"
-    SequenceIdSets:
-      type: array
-      description: An array of arrays of sequence identifier strings
-      items:
-        $ref: "#/components/schemas/SequenceIds"
+        $ref: "#/components/schemas/Title"
+    TransferRequest:
+      type: object
+      description: The body of a POST request for a file transfer
+      required:
+        - source
+        - file_ids
+        - destination
+        - orcid
+      properties:
+        source:
+          type: string
+          description: source database identifier
+        file_ids:
+          type: array
+          description: source-specific identifiers for files to be transferred
+          items: string
+        destination:
+          type: string
+          description: destination database identifier
+        orcid:
+          type: string
+          description: ORCID identifier associated with the request
+    TransferStatus:
+      type: object
+      description: a response for a file transfer status GET request
+      required:
+        - id
+        - status
+        - num_files
+        - num_files_transferred
+      properties:
+        id:
+          type: string
+          description: transfer job ID
+        status:
+          type: string
+          description: >
+            transfer job status ("staging", "active", "inactive",
+            "finalizing", "succeeded", "failed")
+        message:
+          type: string
+          description: message (if any) related to transfer task status
+        num_files:
+          type: number
+          description: number of files being transferred
+        num_files_transferred:
+          type: number
+          description: number of files already transferred
   examples:
     get-root:
       description: A response to a successful root query
@@ -535,46 +733,87 @@ components:
     database:
       description: A database
       value: |
-        id: uniref100
-        inѕtitution: UniProt
-        description: The Uniprot Uniref100 clusters
-        lastUpdated: 2021-Jan-01
+        id: jdp
+        name: JGI Data Portal
+        organization: Joint Genome Institute
+        url: https://data.jgi.doe.gov
     databases:
-      description: Information about available sequence databases
+      description: Information about available databases
       value:
-        - id: uniref100
-          description: The Uniref 100% identity clusters
-          institution: UniProt
-          lastUpdated: 2021-Jan-1
-        - id: ncbi_nr
-          institution: NCBI
-          description: The NCBI Non-redundant database
-          lastUpdated: 2021-Jan-1
-    id-request:
-      description: A request to map IDs from a source to a target database
+        - id: jdp
+          name: JGI Data Portal
+          organization: Joint Genome Institute
+          url: https://data.jgi.doe.gov
+        - id: kbase
+          name: KBase Workspace Service
+          organization: Department of Energy Systems Biology Knowledgebase
+          url: https://narrative.kbase.us
+    files:
+      description: >
+        Search results containing matching files that match the given query
       value:
-        sourceDb: ncbi_nr
-        targetDb: uniref100
-        ids:
-        - "XP_002281555.2"
-        - "XP_023920825.1"
-        - "YOU WON'T FIND ME"
-    internal-server-error:
-      description: An internal server error
+        database: jdp
+        query: prochlorococcus
+        resources:
+          id: JDP:57f9e03f7ded5e3135bc069e
+          name: 10927.1.183804.CTCTCTA-AGGCTTA.QC
+          path: rqc/10927.1.183804.CTCTCTA-AGGCTTA.QC.pdf
+          format: pdf
+          bytes: 227745
+          hash: 71a60d25af7b35227e8b0f3428b49687
+          sources:
+            - title: Stewart, Frank (Georgia Institute of Technology, United States)
+              path: https://doi.org/10.46936/10.25585/60000893
+              email: frank.stewart@biology.gatech.edu
+          credit:
+            comment: ""
+            description: ""
+            identifier: JDP:57f9e03f7ded5e3135bc069e
+            license: ""
+            resource_type: dataset
+            version: ""
+            contributors:
+              - contributor_type: Person
+                contributor_id: ""
+                name: Stewart, Frank
+                credit_name: Stewart, Frank
+                affiliations:
+                  - organization_id: ""
+                    organization_name: Georgia Institute of Technology
+                contributor_roles: PI
+            dates:
+              - date: "2013-09-20"
+                event: approval
+            funding: null
+            related_identifiers: null
+            repository:
+              organization_id: ""
+              organization_name: ""
+            titles: null
+    transfer-id:
+      description: >
+        a unique ID used to fetch status information for a file transfer
       value:
-        code: 500
-        message: Internal server error
-    sequence-id:
-      description: A unique identifier for a sequence
-      value: VIOA_CHRV4
-    sequence-ids:
-      description: An array of unique sequence identifiers
+        id: de9a2d6a-f5c9-4322-b8a7-8121d83fdfc2
+    transfer-request:
+      description: >
+        a request to transfer a file with the ID "JDP:61412246cc4ff44f36c8913f"
+        from the "jdp" database to "kbase"
       value:
-        - "AA_S_1_contig_1_1"
-        - "AA_S_1_contig_1_2"
-    sequence-id-sets:
-      description: An array of arrays of unique sequence identifiers
+        source: jdp
+        destination: kbase
+        file_ids:
+        - JDP:61412246cc4ff44f36c8913f
+    transfer-status:
+      description: A status message for the transfer task with the given ID
       value:
-        - ["UniRef100_D7SMN4"]
-        - ["UniRef100_UPI000CE18A79"]
-        - []
+        id: de9a2d6a-f5c9-4322-b8a7-8121d83fdfc2
+        status: active
+        message: ""
+        num_files: 1
+        num_files_transferred: 0
+    unauthorized-error:
+      description: Indicates that a client is not authorized to use the DTS
+      value:
+        code: 401
+        message: Unauthorized

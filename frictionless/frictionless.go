@@ -63,8 +63,8 @@ type DataResource struct {
 	Encoding string `json:"encoding,omitempty"`
 	// the size of the resource's file in bytes
 	Bytes int `json:"bytes"`
-	// the hash for the resource's file (other algorithms are indicated with
-	// a prefix to the hash delimited by a colon)
+	// the hash for the resource's file (algorithms other than MD5 are indicated
+	// with a prefix to the hash delimited by a colon)
 	Hash string `json:"hash"`
 	// a list identifying the sources for this resource (optional)
 	Sources []DataSource `json:"sources,omitempty"`

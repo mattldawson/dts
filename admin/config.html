@@ -857,10 +857,43 @@ this file and how they affect your DTS instance.</p>
 <span class="w">  </span><span class="nt">poll_interval</span><span class="p">:</span><span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">60000</span>
 <span class="w">  </span><span class="nt">endpoint</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">globus-local</span>
 <span class="w">  </span><span class="nt">data_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/path/to/dir</span>
+<span class="w">  </span><span class="nt">manifest_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/path/to/dir</span>
 <span class="w">  </span><span class="nt">delete_after</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">604800</span>
 <span class="w">  </span><span class="nt">debug</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 </code></pre></div>
-<p><strong>TODO: write some stuff!</strong></p>
+<p>The <code>service</code> section contains parameters that control nuts-and-bolts behavior
+of the web service portion of the Data Transfer Service. The fields in this
+section are:</p>
+<ul>
+<li><code>port</code>: the port on which the service listens</li>
+<li><code>max_connections</code>: the maximum number of connections that are simultaneously
+  available for DTS clients. If a client sends a request to the DTS when all
+  connections are occupied, the request is denied.</li>
+<li><code>poll_interval</code>: the interval (in milliseconds) at which the DTS checks for
+  progress in any ongoing transfers. Because the file transfers orchestrated by
+  the DTS typically take a long time, it's reasonable to set this parameter to
+  a minute (60000 ms) or even longer. However, sometimes it's useful to have a
+  smaller polling interval, like when you're testing a feature. This parameter
+  is optional and defaults to 60000 ms.</li>
+<li><code>endpoint</code>: the name of an endpoint (defined in the <a href="config.html#endpoints">endpoints</a>
+  section) used by the DTS to generate and transfer manifests to destination
+  endpoints. This endpoint must have access to the file system to which the DTS
+  writes its manifests.</li>
+<li><code>data_dir</code>: a path to a directory on the local file system that the DTS uses
+  for its own storage. The DTS should have read/write access to this directory.</li>
+<li><code>manifest_dir</code>: a path to a directory on the local file system in which the
+  DTS writes transfer manifests. The endpoint named in the <code>endpoint</code> parameter
+  must have read access to this directory in order to send the manifest to its
+  destination.</li>
+<li><code>delete_after</code>: the interval (in seconds) after which the DTS deletes the
+  record for a completed transfer, whether the transfer completed successfully
+  or unsuccessfully. This makes it possible for users to query the status of
+  completed transfers for the given interval. This parameter is optional and
+  defaults to 7 days (604800 seconds).</li>
+<li><code>debug</code>: an optional parameter that, if set to <code>true</code>, enables more detailed
+  logging and other features that are helpful for troubleshooting and
+  development work. The default value is <code>false</code>.</li>
+</ul>
 <h2 id="endpoints"><code>endpoints</code></h2>
 <div class="highlight"><pre><span></span><code><span class="nt">endpoints</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">globus-local</span><span class="p">:</span>
@@ -885,7 +918,36 @@ this file and how they affect your DTS instance.</p>
 <span class="w">      </span><span class="nt">client_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;ID of client with authentication secret&gt;</span>
 <span class="w">      </span><span class="nt">client_secret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;secret&gt;</span>
 </code></pre></div>
-<p><strong>TODO: Things and stuff</strong></p>
+<p>This section is a mapping (set of key-value pairs) that associates the names
+of endpoints (keys) with sets of parameters that define their behaviors
+(values). The endpoints defined here can be referred to in the other sections.
+The fields that define the behavior of each endpoint are:</p>
+<ul>
+<li><code>name</code>: a human-readable name for the endpoint, which can be helpful in
+  diagnostic and error-related messages</li>
+<li><code>id</code>: a UUID that uniquely identifies the endpoint in a (provider-specific)
+  way that allows the DTS to access it</li>
+<li><code>provider</code>: the name of the service providing the endpoint capability.
+  Valid values for this parameter are:<ul>
+<li><code>globus</code>: identifies the endpoint as a Globus Collection (in which case
+  the <code>id</code> parameter is the corresponding UUID)</li>
+<li><code>local</code>: identifies the endpoint as a local endpoint with access only to
+  the DTS's local file system. This type of endpoint is only useful for
+  testing.</li>
+</ul>
+</li>
+<li><code>auth</code>: this optional parameter provides authentication information to the
+  endpoint's provider if necessary. Its fields are:<ul>
+<li><code>client_id</code>: an ID that identifies the DTS to the endpoint's provider as
+  a client</li>
+<li><code>client_secret</code>: a string containing a secret corresponding to the ID
+  provided by the <code>client_id</code> parameter</li>
+</ul>
+</li>
+<li><code>root</code>: this optional parameter specifies the root directory used by DTS to
+  refer to files on the underlying filesystem of the endpoint. If left blank,
+  the root directory is set to <code>/</code>.</li>
+</ul>
 <h2 id="databases"><code>databases</code></h2>
 <div class="highlight"><pre><span></span><code><span class="nt">databases</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">jdp</span><span class="p">:</span>
@@ -897,7 +959,26 @@ this file and how they affect your DTS instance.</p>
 <span class="w">    </span><span class="nt">organization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">KBase</span>
 <span class="w">    </span><span class="nt">endpoint</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">globus-kbase</span>
 </code></pre></div>
-<p><strong>TODO: Alll the things</strong></p>
+<p>This section is a mapping (set of key-value pairs) that associates the names
+of databases (keys) with sets of parameters that define the databases themselves
+(at least, as far as the DTS is concerned). These databases are the sources and
+destinations for all file transfers performed by the DTS. The keys in this
+section identify the databases that are configured for the DTS, and are referred
+to in transfer requests specified by DTS clients. Supported databases are:</p>
+<ul>
+<li><code>jdp</code>: the <a href="https://data.jgi.doe.gov/">Joint Genome Institute Data Portal</a></li>
+<li><code>kbase</code>: the <a href="https://www.kbase.us/">Department of Energy Systems Biology Knowledgebase (KBase)</a></li>
+</ul>
+<p>Valid fields for each database are:</p>
+<ul>
+<li><code>name</code>: a human-readable name for the database, useful in diagnostic and
+  error-related messages</li>
+<li><code>organization</code>: a human-readable name for the organization that provides the
+  database (again, purely informational)</li>
+<li><code>endpoint</code>: the name of the endpoint defined in the <a href="config.html#endpoints">endpoints</a>
+  section that provides the DTS with access to the file staging area for the
+  database</li>
+</ul>
 
 
 

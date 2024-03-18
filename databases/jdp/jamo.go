@@ -7,16 +7,11 @@ package jdp
 
 import (
 	"bytes"
-	"crypto/md5"
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
-	"strings"
 	"time"
-
-	"gopkg.in/dnaeon/go-vcr.v3/recorder"
 )
 
 // this type represents a request to JAMO's pagequery endpoint
@@ -77,60 +72,16 @@ type jamoPageQueryResponse struct {
 	Records     []jamoFileRecord `json:"records"`
 }
 
-// this flag is true until the first query to JAMO
-var jamoFirstQuery = true
-
-// this flag indicates whether JAMO is available (i.e. whether DTS is running
-// in the proper domain), and can only be trusted when jamoFirstQuery is false
-var jamoIsAvailable = false
-
-// this flag indicates whether we want to record JAMO queries (usually in a
-// testing environment, where it's set)
-var recordJamo = false
+// override this to attach a VCR recorder to JAMO requests
+var jamoClient = &http.Client{
+	Timeout: time.Second * 10,
+}
 
 // This function gathers and returns all jamo file records that correspond to
 // the given list of file IDs. The list of files is returned in the same order
 // as the list of file IDs.
 func queryJamo(fileIds []string) ([]jamoFileRecord, error) {
 	const jamoBaseUrl = "https://jamo-dev.jgi.doe.gov/"
-
-	if jamoFirstQuery {
-		// poke JAMO to see whether it's available in the current domain
-		resp, err := http.Get(jamoBaseUrl)
-		if err != nil {
-			return nil, err
-		}
-		if resp.StatusCode == http.StatusOK { // success!
-			jamoIsAvailable = true
-		}
-		jamoFirstQuery = false
-	}
-
-	// create a checksum that uniquely identifies the set of requested file IDs
-	checksum := md5.Sum([]byte(strings.Join(fileIds, ",")))
-
-	// set up a "VCR" to manage the recording and playback of JAMO queries
-	vcrMode := recorder.ModePassthrough // no recording or playback by default
-	cassetteName := fmt.Sprintf("fixtures/dts-jamo-cassette-%x", checksum)
-	if jamoIsAvailable {
-		slog.Debug("Querying JAMO for file resource info")
-		if recordJamo {
-			slog.Debug("Recording JAMO query")
-			vcrMode = recorder.ModeRecordOnly
-		}
-	} else { // JAMO not available -- playback
-		slog.Debug("JAMO unavailable -- using pre-recorded results for query")
-		vcrMode = recorder.ModeReplayOnly
-	}
-	vcr, err := recorder.NewWithOptions(&recorder.Options{
-		CassetteName: cassetteName,
-		Mode:         vcrMode,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("queryJamo: %s", err.Error())
-	}
-	defer vcr.Stop()
-	client := vcr.GetDefaultClient()
 
 	// prepare a JAMO query with the desired file IDs
 	// (also record the indices of each file ID so we can preserve their order)
@@ -162,7 +113,7 @@ func queryJamo(fileIds []string) ([]jamoFileRecord, error) {
 		return nil, err
 	}
 	req.Header.Add("Content-type", "application/json; charset=utf-8")
-	resp, err := client.Do(req)
+	resp, err := jamoClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -200,7 +151,7 @@ func queryJamo(fileIds []string) ([]jamoFileRecord, error) {
 			if err != nil {
 				break
 			}
-			resp, err = client.Do(req)
+			resp, err = jamoClient.Do(req)
 			if err != nil {
 				break
 			}

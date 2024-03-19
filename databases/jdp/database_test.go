@@ -47,8 +47,7 @@ func setup() {
 	databases.RegisterDatabase("jdp", NewDatabase)
 	endpoints.RegisterEndpointProvider("globus", globus.NewEndpoint)
 
-	// check for a "record-jamo" flag and stash the result in the recordJamo
-	// global package variable
+	// check for a "record-jamo" flag
 	var recordJamo bool
 	flag.BoolVar(&recordJamo, "record-jamo", false, "records JAMO test queries for use in CI system")
 	flag.Parse()
@@ -73,7 +72,7 @@ func setup() {
 			slog.Debug("Recording JAMO query")
 			vcrMode = recorder.ModeRecordOnly
 		}
-	} else { // JAMO not available -- playback
+	} else { // JAMO not available -- play back
 		slog.Debug("JAMO unavailable -- using pre-recorded results for query")
 		vcrMode = recorder.ModeReplayOnly
 	}

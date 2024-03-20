@@ -23,7 +23,7 @@ func writeJson(w http.ResponseWriter, data []byte, code int) {
 // this type encodes a JSON object for responding to root queries
 type ServiceInfoResponse struct {
 	Name          string `json:"name" example:"DTS" doc:"The name of the service API"`
-	Version       string `json:"version" example:"1.0.0", doc:"The version string (major.minor.patch)"`
+	Version       string `json:"version" example:"1.0.0" doc:"The version string (major.minor.patch)"`
 	Uptime        int    `json:"uptime" example:"345600" doc:"The time the service has been up (seconds)"`
 	Documentation string `json:"documentation" example:"/docs" doc:"The OpenAPI documentation endpoint"`
 }

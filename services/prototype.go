@@ -304,7 +304,7 @@ func (service *prototype) deleteTransfer(ctx context.Context,
 	}) (*struct{}, error) {
 
 	// request that the task be canceled
-  err := tasks.Cancel(input.Id)
+	err := tasks.Cancel(input.Id)
 	if err != nil {
 		return nil, err
 	}

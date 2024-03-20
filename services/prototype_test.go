@@ -485,7 +485,7 @@ func TestFetchInvalidTransferStatus(t *testing.T) {
 	// try an ill-formed transfer
 	resp, err := get(baseUrl + apiPrefix + "transfers/xyzzy")
 	assert.Nil(err)
-	assert.Equal(http.StatusBadRequest, resp.StatusCode)
+	assert.Equal(http.StatusUnprocessableEntity, resp.StatusCode)
 
 	// I bet this one doesn't exist!!
 	resp, err = get(baseUrl + apiPrefix + "transfers/3f0f9563-e1f8-4b9c-9308-36988e25df0b")

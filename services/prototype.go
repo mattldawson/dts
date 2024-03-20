@@ -62,7 +62,7 @@ func authorize(authorizationHeader string) (string, error) {
 	b64Token := authorizationHeader[len("Bearer "):]
 	accessTokenBytes, err := base64.StdEncoding.DecodeString(b64Token)
 	if err != nil {
-		return "", err
+		return "", huma.Error401Unauthorized(err.Error())
 	}
 	accessToken := strings.TrimSpace(string(accessTokenBytes))
 
@@ -77,7 +77,11 @@ func authorize(authorizationHeader string) (string, error) {
 			orcid = orcids[0]
 		}
 	}
-	return orcid, err
+	if err != nil {
+		return orcid, huma.Error401Unauthorized(err.Error())
+	} else {
+		return orcid, nil
+	}
 }
 
 type ServiceInfoOutput struct {
@@ -157,8 +161,7 @@ func (service *prototype) getDatabase(ctx context.Context,
 	slog.Info(fmt.Sprintf("Querying database %s...", input.Id))
 	db, ok := config.Databases[input.Id]
 	if !ok {
-		err := fmt.Errorf("Database %s not found", input.Id)
-		return nil, err
+		return nil, huma.Error404NotFound(fmt.Sprintf("Database %s not found", input.Id))
 	}
 	return &DatabaseOutput{
 		Body: DatabaseResponse{
@@ -219,7 +222,8 @@ func (service *prototype) searchDatabase(ctx context.Context,
 }
 
 type TransferOutput struct {
-	Body uuid.UUID `doc:"A UUID for the requested transfer"`
+	Body   TransferResponse `doc:"A UUID for the requested transfer"`
+	Status int
 }
 
 // handler method for initiating a file transfer operation
@@ -241,7 +245,10 @@ func (service *prototype) createTransfer(ctx context.Context,
 		return nil, err
 	}
 	return &TransferOutput{
-		Body: taskId,
+		Body: TransferResponse{
+			Id: taskId,
+		},
+		Status: http.StatusCreated,
 	}, nil
 }
 
@@ -283,7 +290,7 @@ func (service *prototype) getTransferStatus(ctx context.Context,
 	// fetch the status for the job using the appropriate task data
 	status, err := tasks.Status(input.Id)
 	if err != nil {
-		return nil, err
+		return nil, huma.Error404NotFound(err.Error())
 	}
 	return &TransferStatusOutput{
 		Body: TransferStatusResponse{
@@ -296,19 +303,25 @@ func (service *prototype) getTransferStatus(ctx context.Context,
 	}, nil
 }
 
+type TaskDeletionOutput struct {
+	Status int
+}
+
 // handler method for deleting (canceling) an existing transfer
 func (service *prototype) deleteTransfer(ctx context.Context,
 	input *struct {
 		Authorization string    `header:"authorization" doc:"Authorization header with encoded access token"`
 		Id            uuid.UUID `path:"id" example:"de9a2d6a-f5c9-4322-b8a7-8121d83fdfc2" doc:"the UUID for the requested transfer"`
-	}) (*struct{}, error) {
+	}) (*TaskDeletionOutput, error) {
 
 	// request that the task be canceled
 	err := tasks.Cancel(input.Id)
 	if err != nil {
 		return nil, err
 	}
-	return nil, nil
+	return &TaskDeletionOutput{
+		Status: http.StatusAccepted,
+	}, nil
 }
 
 // returns the uptime for the service in seconds
@@ -345,7 +358,7 @@ func NewDTSPrototype() (TransferService, error) {
 	huma.Get(api, "/api/v1/databases/{db}", service.getDatabase)
 	huma.Get(api, "/api/v1/files", service.searchDatabase)
 	huma.Post(api, "/api/v1/transfers", service.createTransfer)
-	huma.Post(api, "/api/v1/transfers/{id}", service.getTransferStatus)
+	huma.Get(api, "/api/v1/transfers/{id}", service.getTransferStatus)
 	huma.Delete(api, "/api/v1/transfers/{id}", service.deleteTransfer)
 
 	return service, nil

@@ -8,9 +8,11 @@ and their local account on your system. This connection is a form of
 similar to Single Sign-On (SSO) authentication services offered by various
 platforms.
 
-We recommend you implement a REST endpoint that accepts an HTTP `GET` request
-with a given ORCID ID as a path parameter or request parameter, and that
-responds with a body containing a JSON object with two fields:
+## Endpoint Recommendations
+
+Create a REST endpoint that accepts an HTTP `GET` request with a given ORCID ID
+as a path parameter or request parameter. This endpoint responds with a body
+containing a JSON object with two fields:
 
 * `orcid`: the ORCID ID passed as the query parameter
 * `username`: the local username corresponding to the given ORCID ID
@@ -24,7 +26,7 @@ Error codes should be used in accordance with HTTP conventions:
 ### Example
 
 For example, suppose we want to find the local username for [Josiah Carberry](https://orcid.org/0000-0002-1825-0097),
-a fictitious Professor of Psychoceramics at Wesleyan University. The University's
+a fictitious Professor of Psychoceramics at Brown University. The University's
 federated identity endpoint provides the endpoint `https://example.com/dts/localuser/{orcid}`
 that accepts a path parameter `{orcid}`. We can retrieve Josiah's local username
 in the University's database by sending an HTTP `GET` request to

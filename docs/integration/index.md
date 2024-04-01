@@ -76,6 +76,10 @@ Item 1 is entirely a matter of policy enforced within your organization. The
 other items have technical components which are discussed in more detail in the
 sections below.
 
+If your organization has existing services that provide similar capabilities but
+use different conventions, or if you have other technical considerations, please
+contact the DTS team to discuss how we can make the best of what you have.
+
 ## Contents
 
 * [Provide Unique IDs and Metadata for Your Files](resources.md)

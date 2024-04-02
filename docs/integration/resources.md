@@ -35,8 +35,9 @@ illustrates some examples of these dataset-specific identifiers.
 
 Because Uniprot's identifiers indicate which dataset they're from, all of the
 identifiers could be used within a single namespace by the DTS. This is one way
-of providing access to multiple datasets. The DTS team is happy to discuss
-alternatives with you.
+of providing access to multiple datasets. If this method of aggregating datasets
+into a single namespace doesn't work for your organization, the DTS team is
+happy to discuss alternatives with you.
 
 ## File Metadata
 
@@ -53,11 +54,48 @@ Nevertheless, we press on. The metadata specification used by the DTS is likely
 to undergo changes of all sorts as we figure things out, but we'll give our best
 effort to updating documentation as these changes occur.
 
-### DTS Metadata Specification (2024-04-01)
+### DTS Metadata Specification
 
-**Put something here**
+The DTS stores file metadata in the [Frictionless DataResource](https://specs.frictionlessdata.io/data-resource/)
+format. This format is simple and relatively unopinionated, and allows for
+additional fields as needed. The following fields are used by the DTS in addition
+to the ones described in the link:
+
+* `id`: your organization's unique identifier for the resource
+* `credit`: credit metadata associated with the resource that conforms to the
+  [KBase credit metadata schema](https://github.com/kbase/credit_engine)
+* `metadata`: an optional unѕtructured field that you can use to stash
+  additional information about the resource if needed. Don't worry if you can't
+  think of a use for this one.
+
+_It might be good to show an example here._
+
+By the way, the DTS uses the [Frictionless DataPackage](https://specs.frictionlessdata.io/data-package/)
+format to store file manifests for bulk file transfers. A data package is just
+a collection of data resources with some additional metadata that applies to
+all of them. A file manifest is generated automatically by the DTS after each
+successful transfer.
+
+If you adopt the Frictionless DataResource format for your own file metadata,
+integration with the DTS will be very easy. If your organization already has its
+own metadata format, the DTS team can work with you to determine how it can be
+translated to the Frictionless format for use by the DTS.
 
 ## Endpoint Recommendations
+
+Create a REST endpoint that accepts an HTTP `GET` request with a list of unique
+file identifiers specified (for example) by a comma-separated set of request
+parameters. This endpoint responds with a body consisting of a JSON list containing
+objects representing [Frictionless DataResources](https://specs.frictionlessdata.io/data-resource/)
+describing the requested files in as much detail as is practical.
+
+Error codes should be used in accordance with HTTP conventions:
+
+* A successful query returns a `200 OK` status code
+* An improperly-formed request should result in a `400 Bad Request` status code
+* If one or more file IDs do not correspond to existing files in your
+  organization's database, the entries in the JSON list in the response should
+  be set to `null`.
 
 ### Example
 

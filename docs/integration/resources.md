@@ -99,5 +99,135 @@ Error codes should be used in accordance with HTTP conventions:
 
 ### Example
 
+Suppose we want to retrieve metadata for a couple of files provided by the JGI
+Data Portal (JDP) with the unique identifiers `615a383dcc4ff44f36ca5ba2` and
+`61412246cc4ff44f36c8913f` (referred to by the DTS as
+`JDP:615a383dcc4ff44f36ca5ba2` and `JDP:61412246cc4ff44f36c8913f`, respectively).
+If the JDP endpoint is hosted at `example.com` and is implemented according to
+our recommendations, we can send the following `GET` request:
+
+```
+https://example.com/dts/resources?ids=615a383dcc4ff44f36ca5ba2,61412246cc4ff44f36c8913f
+```
+
+This results in a response with a `200 OK` status code with the body
+
+```
+[
+  {
+    "id": "JDP:615a383dcc4ff44f36ca5ba2",
+    "name": "3300047546_18",
+    "path": "img/submissions/255985/3300047546_18.tar.gz",
+    "format": "tar",
+    "media_type": "application/x-tar",
+    "bytes": 1455012,
+    "hash": "148827a6c3da2eaa4188b931ae0edc15",
+    "sources": [
+      {
+        "title": "Wrighton, Kelly (Colorado State University, United States)",
+        "path": "https://doi.org/10.46936/10.25585/60001289",
+        "email": "kwrighton@gmail.com"
+      }
+    ],
+    "credit": {
+      "comment": "",
+      "description": "",
+      "identifier": "615a383dcc4ff44f36ca5ba2",
+      "license": "",
+      "resource_type": "dataset",
+      "version": "",
+      "contributors": [
+        {
+          "contributor_type": "Person",
+          "contributor_id": "",
+          "name": "Wrighton, Kelly",
+          "credit_name": "Wrighton, Kelly",
+          "affiliations": [
+            {
+              "organization_id": "",
+              "organization_name": "Colorado State University"
+            }
+          ],
+          "contributor_roles": "PI"
+        }
+      ],
+      "dates": [
+        {
+          "date": "2019-09-17",
+          "event": "approval"
+        }
+      ],
+      "funding": null,
+      "related_identifiers": null,
+      "repository": {
+        "organization_id": "",
+        "organization_name": ""
+      },
+      "titles":null
+    }
+  },
+  {
+    "id": "JDP:61412246cc4ff44f36c8913f",
+    "name": "3300047546",
+    "path": "img/submissions/255985/3300047546.tar.gz",
+    "format": "tar",
+    "media_type": "application/x-tar",
+    "bytes": 709508155,
+    "hash": "fefe05140b0cad4e5d525acb066439e5",
+    "sources": [
+      {
+        "title":"Wrighton, Kelly (Colorado State University, United States)",
+        "path":"https://doi.org/10.46936/10.25585/60001289",
+        "email":"kwrighton@gmail.com"
+      }
+    ],
+    "credit": {
+      "comment": "",
+      "description": "",
+      "identifier": "61412246cc4ff44f36c8913f",
+      "license": "",
+      "resource_type": "dataset",
+      "version": "",
+      "contributors": [
+        {
+          "contributor_type": "Person",
+          "contributor_id": "",
+          "name":"Wrighton, Kelly",
+          "credit_name": "Wrighton, Kelly",
+          "affiliations": [
+            {
+              "organization_id": "",
+              "organization_name": "Colorado State University"
+            }
+          ],
+          "contributor_roles": "PI"
+        }
+      ],
+      "dates": [
+        {
+          "date": "2019-09-17",
+          "event": "approval"
+        }
+      ],
+      "funding":null,
+      "related_identifiers": null,
+      "repository": {
+        "organization_id": "",
+        "organization_name": ""
+      },
+      "titles":null
+    }
+  },
+]
+```
+
+As you can see, many fields are blank, because some information may not be
+present in the database. The DTS works with the KBase Credit Engine to fill in
+missing credit information.
+
 ### Existing implementations
 
+As it happens, the JDP doesn't provides its own file metadata endpoint, so the
+DTS has its own logic for querying the JDP's source of truth. The DTS can bridge
+gaps in the capabilities of the databases of participating organizations in this
+way, making it easier for you to gradually implement a conforming capability.

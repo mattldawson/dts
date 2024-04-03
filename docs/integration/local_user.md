@@ -35,7 +35,7 @@ in the University's database by sending an HTTP `GET` request to
 https://example.com/dts/localuser/0000-0002-1825-0097
 ```
 
-This produces a responѕe with a `200` status code with the body
+This produces a responѕe with a `200 OK` status code with the body
 
 ```
 {

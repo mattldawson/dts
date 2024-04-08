@@ -85,7 +85,7 @@ translated to the Frictionless format for use by the DTS.
 
 Create a REST endpoint that accepts an HTTP `GET` request with a list of unique
 file identifiers specified (for example) by a comma-separated set of request
-parameters. This endpoint responds with a body consisting of a JSON list containing
+parameters. This endpoint responds with a body containing a JSON list of
 objects representing [Frictionless DataResources](https://specs.frictionlessdata.io/data-resource/)
 describing the requested files in as much detail as is practical.
 
@@ -94,17 +94,17 @@ Error codes should be used in accordance with HTTP conventions:
 * A successful query returns a `200 OK` status code
 * An improperly-formed request should result in a `400 Bad Request` status code
 * If one or more file IDs do not correspond to existing files in your
-  organization's database, the entries in the JSON list in the response should
+  organization's database, their entries in the JSON list in the response should
   be set to `null`.
 
 ### Example
 
-Suppose we want to retrieve metadata for a couple of files provided by the JGI
-Data Portal (JDP) with the unique identifiers `615a383dcc4ff44f36ca5ba2` and
-`61412246cc4ff44f36c8913f` (referred to by the DTS as
-`JDP:615a383dcc4ff44f36ca5ba2` and `JDP:61412246cc4ff44f36c8913f`, respectively).
-If the JDP endpoint is hosted at `example.com` and is implemented according to
-our recommendations, we can send the following `GET` request:
+Suppose we want to retrieve metadata for a couple of files provided by the
+[JGI Data Portal](https://data.jgi.doe.dov) (JDP) with the unique identifiers
+`615a383dcc4ff44f36ca5ba2` and `61412246cc4ff44f36c8913f` (referred to by the
+DTS as `JDP:615a383dcc4ff44f36ca5ba2` and `JDP:61412246cc4ff44f36c8913f`,
+respectively). If the JDP endpoint is hosted at `example.com` and is implemented
+according to our recommendations, we can send the following `GET` request:
 
 ```
 https://example.com/dts/resources?ids=615a383dcc4ff44f36ca5ba2,61412246cc4ff44f36c8913f
@@ -222,8 +222,8 @@ This results in a response with a `200 OK` status code with the body
 ```
 
 As you can see, many fields are blank, because some information may not be
-present in the database. The DTS works with the KBase Credit Engine to fill in
-missing credit information.
+present in the database. The DTS works with the [KBase Credit Engine](https://github.com/kbase/credit_engine)
+to fill in missing credit information.
 
 ### Existing implementations
 

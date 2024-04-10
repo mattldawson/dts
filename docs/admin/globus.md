@@ -23,9 +23,9 @@ Globus has its own set of terminology that is slightly different from that we've
   In particular, a Guest Collections is the _only mechanism_ that can provide
   client applications with access to resources on Globus endpoints. This is the
   closest concept to what DTS considers an endpoint.
- 
+
 ## Setting up Access to a Globus Endpoint
- 
+
 [This guide](https://docs.globus.org/guides/recipes/automate-with-service-account/)
 gives a complete set of instructions using the terminology above. Below, we briefly
 summarize the steps in the guide. Of course, you need a Globus user account to play

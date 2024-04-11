@@ -58,8 +58,15 @@ effort to updating documentation as these changes occur.
 
 The DTS stores file metadata in the [Frictionless DataResource](https://specs.frictionlessdata.io/data-resource/)
 format. This format is simple and relatively unopinionated, and allows for
-additional fields as needed. The following fields are used by the DTS in addition
-to the ones described in the link:
+additional fields as needed. The most important elements of the Frictionless
+DataResource type are:
+
+* `name`: the name of a resource (file)
+* `path`: the path of the resource relative to the root directory of the
+  [staging area](staging_area.md) in which you make the file available
+
+The following fields are used by the DTS in addition to the ones described in
+the link:
 
 * `id`: your organization's unique identifier for the resource
 * `credit`: credit metadata associated with the resource that conforms to the
@@ -227,7 +234,7 @@ to fill in missing credit information.
 
 ### Existing implementations
 
-As it happens, the JDP doesn't provides its own file metadata endpoint, so the
+As it happens, the JDP doesn't provide its own file metadata endpoint, so the
 DTS has its own logic for querying the JDP's source of truth. The DTS can bridge
 gaps in the capabilities of the databases of participating organizations in this
 way, making it easier for you to gradually implement a conforming capability.

@@ -5,6 +5,8 @@ both locally and in a Docker-based environment. It also discusses some technical
 issues that arise in granting the DTS permissions to filesystems and other
 services it needs to perform its data transfers.
 
+# Contents
+
 * [Installing DTS Locally](installation.md)
 * [Deploying DTS via Docker](deployment.md)
 * [Configuring DTS](config.md)

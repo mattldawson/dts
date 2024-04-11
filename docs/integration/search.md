@@ -174,9 +174,10 @@ to fill in missing credit information.
 
 ## Existing implementations
 
-The JDP endpoint we've described in the above example returns information about
-the files matching a query, but not in the Frictionless format we've shown. The
-JDP actually organizes its search results into organisms, and the DTS unpacks
-these results and repackages them into Frictionless DataResource objects. This
-is another example of how the DTS team can support incremental integration by
+The [JDP search endpoint](https://files.jgi.doe.gov/apidoc/#/GET/search_list)
+we've described in the above example returns information about the files
+matching a query, but not in the Frictionless format we've shown. The JDP
+actually organizes its search results into organisms, and the DTS unpacks these
+results and repackages them into Frictionless DataResource objects. This is
+another example of how the DTS team can support incremental integration by
 working with your organization.

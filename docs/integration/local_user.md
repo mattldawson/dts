@@ -1,10 +1,10 @@
 # Map ORCID IDs to Local User Accounts
 
-DTS uses [ORCID IDs](https://info.orcid.org/what-is-orcid/) to identify
-individuals and organizations. In order to understand who is transferring what
-where when, your database must establish a connection between a user's ORCID ID
-and their local account on your system. This connection is a form of
-[federated identity management](https://en.wikipedia.org/wiki/Federated_identity),
+The Data Transfer System (DTS) uses [ORCID IDs](https://info.orcid.org/what-is-orcid/)
+to identify individuals and organizations. In order to understand who is
+transferring what where when, your database must establish a connection between
+a user's ORCID ID and their local account on your system. This connection is a
+form of [federated identity management](https://en.wikipedia.org/wiki/Federated_identity),
 similar to Single Sign-On (SSO) authentication services offered by various
 platforms.
 

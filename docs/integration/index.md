@@ -12,7 +12,7 @@ the terminology used in this guide.
 
 The guidance we present here is not intended to be prescriptive. We provide
 suggestions and examples of technical components to illustrate how your
-organization might go about interating with the DTS, but in actuality the DTS
+organization can integrate a database with the DTS, but in actuality the DTS
 is very flexible and can accommodate various implementations. For example,
 we may be able to adapt existing capabilities for DTS integration in certain
 situations.

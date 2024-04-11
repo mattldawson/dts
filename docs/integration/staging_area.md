@@ -27,15 +27,35 @@ integrated with other file storage and transfer platforms like
 This interoperability allows Globus clients to interoperate seamlessly even in
 heterogeneous technological settings.
 
-## Setting up a Staging Area for Globus
+## Setting up a Staging Area
+
+First, your organization must allocate a file staging area on a filesystem that
+you can expose to Globus. The directory structure of this staging area for your staged
+files isn't important to anyone outside your organization, as long as all of the
+files staged there can be made accessible to Globus (and transitively, to the
+DTS). Recall, though, that the `path` element in the
+[Frictionless DataResource](https://specs.frictionlessdata.io/data-resource/)
+metadata specification for each file should match your staging area's directory
+structure--otherwise, the DTS won't be able to locate your file.
+
+Probably the most important decision you'll make about the staging area is the
+directory in the filesystem that serves as the effective "root" directory for
+the staging area. This "root" directory determines the root path you'll use when
+you create a Globus guest collection that allows the DTS to access its files.
+
+The DTS is a work in progress, and we haven't yet worked out all the details for
+handling private or embargoed datasets. We're interested to hear your opinions
+on this and other topics!
+
+## Exposing Your Staging Area to Globus
 
 If your organization has a [Globus subscription](https://www.globus.org/why-subscribe),
 you'll have an easy time configuring a file staging area that can be integrated
 with the DTS. Globus has [extensive documentation](https://www.globus.org/data-sharing)
 to help you understand how to share your data effectively.
 
-To make your files available to the DTS, you'll need to set up a Globus guest
-collection. The following links can help you configure your Globus setup:
+To make your staging area available to the DTS, you'll need to set up a Globus
+guest collection. The following links can help you configure your Globus setup:
 
 * [How to Share Data Using Globus](https://docs.globus.org/guides/tutorials/manage-files/share-files/):
   a step-by-step guide to creating a guest collection that can serve as a

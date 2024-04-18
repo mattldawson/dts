@@ -71,7 +71,7 @@ type TransferRequest struct {
 	// name of source database
 	Source string `json:"source" example:"jdp" doc:"source database identifier"`
 	// identifiers for files to be transferred
-	FileIds []string `json:"file_ids" doc:"source-specific identifiers for files to be transferred"`
+	FileIds []string `json:"file_ids" example:"[\"fileid1\", \"fileid2\"]" doc:"source-specific identifiers for files to be transferred"`
 	// name of destination database
 	Destination string `json:"destination" example:"kbase" doc:"destination database identifier"`
 }

@@ -79,9 +79,8 @@ func authorize(authorizationHeader string) (string, error) {
 	}
 	if err != nil {
 		return orcid, huma.Error401Unauthorized(err.Error())
-	} else {
-		return orcid, nil
 	}
+	return orcid, nil
 }
 
 type ServiceInfoOutput struct {

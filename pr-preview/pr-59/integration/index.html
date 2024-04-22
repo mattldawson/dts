@@ -1032,9 +1032,11 @@
 
 
 <h1 id="dts-integration-guide">DTS Integration Guide</h1>
-<p>This document lists all of the things you must do in order to integrate your
-database with the BER Data Transfer System (DTS) in order to take advantage of
-its file and metadata transfer capabilities.</p>
+<p>This document lists all of the components that the Data Transfer System (DTS)
+expects from any database with which it interacts. Your organization must
+implement each of these components in order to integrate its database(s) with
+the DTS in order to take advantage of its file and metadata transfer
+capabilities.</p>
 <p>We have tried to cover all the necessary topics comprehensively here, but
 there's no substitute for a real person when confusion arises, so please don't
 hesitate to contact the KBase DTS development team with your questions.
@@ -1043,26 +1045,30 @@ the terminology used in this guide.</p>
 <p>The guidance we present here is not intended to be prescriptive. We provide
 suggestions and examples of technical components to illustrate how your
 organization can integrate a database with the DTS, but in actuality the DTS
-is very flexible and can accommodate various implementations. For example,
-we may be able to adapt existing capabilities for DTS integration in certain
-situations.</p>
+is designed to be flexible and can accommodate various implementations. For
+example, we may be able to adapt existing capabilities for DTS integration in
+certain situations.</p>
 <h2 id="overview">Overview</h2>
 <p>The DTS provides a file transfer capability whose organizational unit is
 <strong>individual files</strong>. We're not in the business of telling researchers how to
-do their jobs, and everyone in the business knows how to use a filesystem.</p>
+do their jobs, and everyone in the business knows how to use a filesystem. If
+your organization's data is stored directly in a database and not as files, the
+DTS team can work with you to find the most appropriate way to write data to
+files upon request for transfer.</p>
 <p>If you're reading this, you're probably interested in making your data available
 to the DTS, and/or being able to receive data from other participating
 databases. How exactly does the DTS communicate with these databases? Here's
 what the DTS needs to navigate your organization's database.</p>
 <ol>
 <li><strong>Every file (resource) in the database has a unique identifier.</strong> The
-   identifier can be any string, as long as that string refers to exactly one
-   file. The DTS prepends an abbreviation for your organization or database to
-   the string to create its own namespaced unique identifier. For example, JGI's
-   Data Portal (JDP) has a file with the identifier <code>615a383dcc4ff44f36ca5ba2</code>,
-   and the DTS refers to this file as <code>JDP:615a383dcc4ff44f36ca5ba2</code>.</li>
+   identifier can be any string (including a sequence of digits), as long as
+   that string refers to exactly one file. The DTS prepends an abbreviation for
+   your organization or database to the string to create its own namespaced
+   unique identifier. For example, JGI's Data Portal (JDP) has a file with the
+   identifier <code>615a383dcc4ff44f36ca5ba2</code>, and the DTS refers to this file as
+   <code>JDP:615a383dcc4ff44f36ca5ba2</code>.</li>
 <li><strong>Your database can provide information about a file (resource) given its
-   unique identifier.</strong> Specifically, the database provides an <strong>resources
+   unique identifier.</strong> Specifically, the database provides a <strong>resources
    endpoint</strong> that accepts an HTTP request with a list of file IDs, and
    provides a response containing essential informatіon (the file's location,
    its type and other important metadata) for each of the corresponding files.</li>

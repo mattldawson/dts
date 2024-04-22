@@ -1164,15 +1164,14 @@ DataResource type are:</p>
 <li><code>path</code>: the path of the resource relative to the root directory of the
   <a href="staging_area.html">staging area</a> in which you make the file available</li>
 </ul>
-<p>The following fields are used by the DTS in addition to the ones described in
-the link:</p>
+<p>The following additional fields are used by the DTS:</p>
 <ul>
 <li><code>id</code>: your organization's unique identifier for the resource</li>
 <li><code>credit</code>: credit metadata associated with the resource that conforms to the
   <a href="https://github.com/kbase/credit_engine">KBase credit metadata schema</a></li>
 <li><code>metadata</code>: an optional unѕtructured field that you can use to stash
-  additional information about the resource if needed. Don't worry if you can't
-  think of a use for this one.</li>
+  additional information about the resource if needed. For now, the DTS does not
+  use this field.</li>
 </ul>
 <p><em>It might be good to show an example here.</em></p>
 <p>By the way, the DTS uses the <a href="https://specs.frictionlessdata.io/data-package/">Frictionless DataPackage</a>

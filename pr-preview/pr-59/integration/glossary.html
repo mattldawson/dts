@@ -960,22 +960,23 @@
 <h1 id="dts-integration-glossary">DTS Integration Glossary</h1>
 <p>We use the following terms in the DTS Integration Guide.</p>
 <ul>
-<li><strong>DTS</strong>: The <a href="https://kbase.github.io/dts/">BER data transfer system</a></li>
-<li><strong>Frictionless DataPackage</strong>: A <a href="https://specs.frictionlessdata.io/data-package/">representation</a>
-  for a collection of <strong>Frictionless DataResources</strong>. The DTS generates <strong>transfer
-  manifests</strong> in this format.</li>
+<li><strong>DTS</strong>: The <a href="https://kbase.github.io/dts/">Data Transfer System</a></li>
+<li><strong>Frictionless DataPackage</strong>: A <a href="https://specs.frictionlessdata.io/data-package/">collection of metadata</a>
+  in the form of an array of <strong>Frictionless DataResources</strong>. The DTS generates
+  <strong>transfer manifests</strong> in this format.</li>
 <li><strong>Frictionless DataResource</strong>: A <a href="https://specs.frictionlessdata.io/data-resource/">representation</a>
   of metadata for an individual resource (file)</li>
-<li><strong>Resource</strong>: A file, with a unique identifier, that can be transferred from</li>
+<li><strong>Resource</strong>: A file, with a unique identifier, that can be transferred from
+  one database to another, along with its metadata.</li>
 <li><strong>Resource endpoint</strong>: an endpoint provided by your database that accepts an
   HTTP <code>GET</code> request with a list of file IDs, and provides a response containing
   essential informatіon (the file's location, its type and other important
-  metadata) for each of the corresponding files. Read <a href="resources.html">this</a> for
-  more detailed information.</li>
+  metadata) for each of the corresponding files. Described in detail in
+  <a href="resources.html">Provide Unique IDs and Metadata for Your Files</a>.</li>
 <li><strong>Search endpoint</strong>: an endpoint provided by your database that accepts an
   HTTP <code>GET</code> request with a query string, and produces a response containing a
-  list of matching file IDs. Read <a href="search.html">this</a> for more detailed
-  information.</li>
+  list of matching file IDs. See <a href="search.html">Make Your Files Searchable</a> for
+  more detailed information.</li>
 <li><strong>Staging area</strong>: A filesystem or portion of a filesystem on a system
   controlled or provisioned by your organization where you can place files
   for transfer by a bulk transfer provider such as <a href="https://www.globus.org/">Globus</a>,
@@ -983,7 +984,7 @@
 <li><strong>Staging endpoint</strong>: An endpoint provided by your database that accepts an
   HTTP <code>POST</code> request with a list of resource IDs and returns a UUID that can
   be used to query the status of a file staging operation. More information is
-  available <a href="stage_files.html">here</a>.</li>
+  available in <a href="stage_files.html">Stage Your Files on Request</a>.</li>
 <li><strong>Staging task</strong>: A process by which files with specific IDs can be
   copied into your organization's <strong>staging area</strong> in preparation for transfer.
   This process can occur over a brief or extended period, depending on the
@@ -992,7 +993,8 @@
 <li><strong>Staging status endpoint</strong>: An endpoint provided by your database that
   accepts an HTTP <code>GET</code> request with a staging request UUID (obtained from a
   staging endpoint), producing a response that indicates whether the staging
-  process has completed. Read <a href="staging_status.html">this</a> for more information.</li>
+  process has completed. See <a href="staging_status.html">Provide a Way to Monitor File Staging</a>
+  for more information.</li>
 <li><strong>Transfer Manifest</strong>: a file (usually named <code>manifest.json</code>) containing a
   machine-readable <strong>Frictionless DataPackage</strong> containing metadata for a set of
   files transferred by the DTS. The DTS deposits a transfer manifest at the top
@@ -1001,7 +1003,7 @@
 <li><strong>User federation endpoint</strong>: An endpoint provided by your database that
   accepts an HTTP <code>GET</code> request with an ORCID ID and produces a response
   containing the corresponding username for an account within your system.
-  Read more about this endpoint <a href="local_user.html">here</a>.</li>
+  Read more about this endpoint in <a href="local_user.html">Map ORCID IDs to Local User Accounts</a>.</li>
 <li><strong>UUID</strong>: A <a href="https://en.wikipedia.org/wiki/Universally_unique_identifier">universally unique identifier</a>
   used by the DTS to represent staging tasks, transfers, and other transient-
   but-possibly-long-running operations</li>

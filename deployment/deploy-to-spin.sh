@@ -26,7 +26,7 @@ fi
 
 # Build the image locally. It's a multi-stage build (see Dockerfile up top), so
 # make sure we prune the "builder" image afterward.
-docker build -f deployment/Dockerfile -t dts:$TAG --network=host \
+docker buildx build --platform linux/amd64 -f deployment/Dockerfile -t dts:$TAG --network=host \
   --build-arg CONTACT_NAME="Jeffrey N. Johnson" \
   --build-arg CONTACT_EMAIL="jeff@cohere-llc.com" \
   --build-arg SERVER_URL="https:\/\/dts.kbase.us" \

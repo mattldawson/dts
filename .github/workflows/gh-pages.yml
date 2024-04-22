@@ -4,8 +4,8 @@ on:
   push:
     # Runs only if documentation is changed
     paths:
-    - 'mkdocs.yml'
-    - 'docs/**'
+      - 'mkdocs.yml'
+      - 'docs/**'
     # Runs every time main branch is updated
     branches: ["main"]
   # Runs every time a PR is open against main

@@ -4,8 +4,8 @@ In the last section, we described the file staging process, in which the Data
 Transfer System (DTS) asks your system to stage a set of files for transfer.
 The DTS makes a file staging request, and your system returns some sort of
 identifier that can be used to track the staging operation. In this section,
-we describe a _staging status endpoint_ that the DTS can query with the
-identifier it was given.
+we describe a _staging status endpoint_ that the DTS can query using the unique
+staging identifier provided by the database.
 
 This one's easy--your endpoint should accept a UUID that the DTS was given when
 it requested a staging operation for a set of specific files, and return
@@ -52,7 +52,7 @@ place within the file staging area, so their transfer can begin.
 ### Existing implementations
 
 The JDP's [file staging status endpoint](https://files.jgi.doe.gov/apidoc/#/GET/request_archived_files_requests_read)
-returns a very elaborate set of status information, most of which is discarded
+returns a very elaborate set of status information, most of which is not used
 by the DTS. As we've discussed in previous sections, the DTS prototype
 implementation repurposes a lot of existing endpoints for the JDP, and we are
 prepared to work with your organization to determine how best to wire your

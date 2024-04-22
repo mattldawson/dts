@@ -65,15 +65,14 @@ DataResource type are:
 * `path`: the path of the resource relative to the root directory of the
   [staging area](staging_area.md) in which you make the file available
 
-The following fields are used by the DTS in addition to the ones described in
-the link:
+The following additional fields are used by the DTS:
 
 * `id`: your organization's unique identifier for the resource
 * `credit`: credit metadata associated with the resource that conforms to the
   [KBase credit metadata schema](https://github.com/kbase/credit_engine)
 * `metadata`: an optional unѕtructured field that you can use to stash
-  additional information about the resource if needed. Don't worry if you can't
-  think of a use for this one.
+  additional information about the resource if needed. For now, the DTS does not
+  use this field.
 
 _It might be good to show an example here._
 

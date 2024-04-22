@@ -20,7 +20,7 @@ Globus has its own set of terminology that is slightly different from that we've
   access privileges on a Globus Endpoint.
 * **Globus Guest Collection**: A Guest Collection is a Globus Collection that allows
   a Globus user to share files on with other Globus users and with applications.
-  In particular, a Guest Collections is the _only mechanism_ that can provide
+  In particular, a Guest Collection is the _only mechanism_ that can provide
   client applications with access to resources on Globus endpoints. This is the
   closest concept to what the DTS considers an endpoint.
 

@@ -3,7 +3,7 @@
 This guide walks you through the process of installing and configuring the DTS,
 both locally and in a Docker-based environment. It also discusses some technical
 issues that arise in granting the DTS permissions to filesystems and other
-services it needs to perform its data transfers.
+services it needs to perform data transfers.
 
 # Contents
 

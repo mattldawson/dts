@@ -1,8 +1,12 @@
 name: Build and deploy gh-pages branch with Mkdocs
 
 on:
-  # Runs every time main branch is updated
   push:
+    # Runs only if documentation is changed
+    paths:
+    - 'mkdocs.yml'
+    - 'docs/**'
+    # Runs every time main branch is updated
     branches: ["main"]
   # Runs every time a PR is open against main
   pull_request:

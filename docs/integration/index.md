@@ -33,13 +33,17 @@ to the DTS, and/or being able to receive data from other participating
 databases. How exactly does the DTS communicate with these databases? Here's
 what the DTS needs to navigate your organization's database.
 
+Here's a brief summary of what's needed to connect your database with the DTS.
+The sections that follow describe each of these items in more detail.
+
 1. **Every file (resource) in the database has a unique identifier.** The
    identifier can be any string (including a sequence of digits), as long as
    that string refers to exactly one file. The DTS prepends an abbreviation for
    your organization or database to the string to create its own namespaced
    unique identifier. For example, JGI's Data Portal (JDP) has a file with the
    identifier `615a383dcc4ff44f36ca5ba2`, and the DTS refers to this file as
-   `JDP:615a383dcc4ff44f36ca5ba2`.
+   `JDP:615a383dcc4ff44f36ca5ba2`. This is mostly a matter of policy, but it's
+   important to establish an unambiguous way to refer to individual files.
 2. **Your database can provide information about a file (resource) given its
    unique identifier.** Specifically, the database provides a **resources
    endpoint** that accepts an HTTP request with a list of file IDs, and
@@ -77,10 +81,6 @@ what the DTS needs to navigate your organization's database.
    system. This federation process allows DTS to associate a transfer operation
    with user accounts in the organizations for the source and destination
    databases.
-
-Item 1 is entirely a matter of policy enforced within your organization. The
-other items have technical components which are discussed in more detail in the
-sections below.
 
 If your organization has existing services that provide similar capabilities but
 use different conventions, or if you have other technical considerations, please

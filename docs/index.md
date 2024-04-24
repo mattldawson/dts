@@ -26,3 +26,8 @@ environment variables.
   database up to the DTS to take advantage of its capabilities
 * [Developer Guide](developer/index.md): A detailed description of the DTS
   code structure and important concepts
+
+The Data Transfer Service is supported as part of the BER Genomic Science
+Program's DOE Systems Biology Knowledgebase (KBase) project funded by the U.S.
+Department of Energy, Office of Science, Office of Biological and Environmental
+Research under Award Number DE-AC02-05CH11231.

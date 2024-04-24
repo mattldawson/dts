@@ -141,6 +141,34 @@ func (server *KBaseAuthServer) get(resource string) (*http.Response, error) {
 	return client.Do(req)
 }
 
+// returns the username for the current KBase user accessing the
+// KBase auth server
+func (server *KBaseAuthServer) Username() (string, error) {
+	resp, err := server.get("me")
+	if err != nil {
+		return "", err
+	}
+	if resp.StatusCode != 200 {
+		err = kbaseAuthError(resp)
+		if err != nil {
+			return "", err
+		}
+	}
+	var body []byte
+	body, err = io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	var result struct {
+		Username string `json:"user"`
+	}
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return "", err
+	}
+	return result.Username, nil
+}
+
 // returns the current KBase user's registered ORCID identifiers (and/or an error)
 // a user can have 0, 1, or many associated ORCID identifiers
 func (server *KBaseAuthServer) Orcids() ([]string, error) {

@@ -44,6 +44,17 @@ func TestNewKBaseAuthServer(t *testing.T) {
 	assert.Nil(err, "Authentication server constructor triggered an error")
 }
 
+// tests whether the authentication server can return the username for the
+// for the owner of the developer token
+func TestUsername(t *testing.T) {
+	assert := assert.New(t)
+	devToken := os.Getenv("DTS_KBASE_DEV_TOKEN")
+	server, _ := NewKBaseAuthServer(devToken)
+	username, err := server.Username()
+	assert.Nil(err)
+	assert.True(len(username) > 0)
+}
+
 // tests whether the authentication server can return the proper credentials
 // for the owner of the developer token
 func TestOrchids(t *testing.T) {

@@ -24,8 +24,9 @@ which it was conceived and built. The structure and content of your database
 can help you determine which is most appropriate.
 
 The DTS does not currently embrace any one search engine at the expense of
-others. Our team can work with you to make sure that your integration exposes
-all the necessary features of your file search capability.
+others. [The DTS team](mailto:engage@kbase.us) can work with you to make sure
+that your integration exposes all the necessary features of your file search
+capability.
 
 ## Endpoint Recommendations
 
@@ -179,5 +180,5 @@ we've described in the above example returns information about the files
 matching a query, but not in the Frictionless format we've shown. The JDP
 actually organizes its search results into organisms, and the DTS unpacks these
 results and repackages them into Frictionless DataResource objects. This is
-another example of how the DTS team can support incremental integration by
-working with your organization.
+another example of how [the DTS team](mailto:engage@kbase.us) can support
+incremental integration by working with your organization.

@@ -36,8 +36,8 @@ illustrates some examples of these dataset-specific identifiers.
 Because Uniprot's identifiers indicate which dataset they're from, all of the
 identifiers could be used within a single namespace by the DTS. This is one way
 of providing access to multiple datasets. If this method of aggregating datasets
-into a single namespace doesn't work for your organization, the DTS team is
-happy to discuss alternatives with you.
+into a single namespace doesn't work for your organization, [the DTS team](mailto:engage@kbase.us)
+is happy to discuss alternatives with you.
 
 ## File Metadata
 
@@ -84,8 +84,9 @@ successful transfer.
 
 If you adopt the Frictionless DataResource format for your own file metadata,
 integration with the DTS will be very easy. If your organization already has its
-own metadata format, the DTS team can work with you to determine how it can be
-translated to the Frictionless format for use by the DTS.
+own metadata format, [the DTS team can work with you](mailto:engage@kbase.us) to
+determine how it can be translated to the Frictionless format for use by the
+DTS.
 
 ## Endpoint Recommendations
 

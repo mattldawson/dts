@@ -8,9 +8,9 @@ capabilities.
 
 We have tried to cover all the necessary topics comprehensively here, but
 there's no substitute for a real person when confusion arises, so please don't
-hesitate to contact the KBase DTS development team with your questions.
-Take a look at the [DTS Integration Glossary](glossary.md) for an explanation of
-the terminology used in this guide.
+hesitate to [contact the KBase DTS development team](mailto:engage@kbase.us)
+with your questions. Take a look at the [DTS Integration Glossary](glossary.md)
+for an explanation of the terminology used in this guide.
 
 The guidance we present here is not intended to be prescriptive. We provide
 suggestions and examples of technical components to illustrate how your
@@ -24,9 +24,9 @@ certain situations.
 The DTS provides a file transfer capability whose organizational unit is
 **individual files**. We're not in the business of telling researchers how to
 do their jobs, and everyone in the business knows how to use a filesystem. If
-your organization's data is stored directly in a database and not as files, the
-DTS team can work with you to find the most appropriate way to write data to
-files upon request for transfer.
+your organization's data is stored directly in a database and not as files,
+[the DTS team](mailto:engage@kbase.us) can work with you to find the most
+appropriate way to write data to files upon request for transfer.
 
 If you're reading this, you're probably interested in making your data available
 to the DTS, and/or being able to receive data from other participating
@@ -84,7 +84,8 @@ sections below.
 
 If your organization has existing services that provide similar capabilities but
 use different conventions, or if you have other technical considerations, please
-contact the DTS team to discuss how we can make the best of what you have.
+[contact the DTS team](mailto:engage@kbase.us) to discuss how we can make the
+best of what you have.
 
 ## Contents
 

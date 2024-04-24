@@ -4,7 +4,7 @@ If you're reading this, you probably belong to an organization that maintains a
 database containing many files of different sorts, and you probably want to make
 it easier for researchers to access (and cite!) the data in these files.
 
-In order for a file to be made available to users of BER's Data Transfer System
+In order for a file to be made available to users of the Data Transfer System
 (DTS), it must have a unique identifier by which users can refer to it. The
 file's name is probably not unique, so it's not an appropriate identifier.
 Unique file identifiers are such a basic need that your organization probably

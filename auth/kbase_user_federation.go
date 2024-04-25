@@ -54,6 +54,7 @@ func kbaseUserFederation() {
 				if username != orcidAndUsername[1] {
 					kbaseErrorChan <- fmt.Errorf("KBase user mismatch for ORCID %s!", orcidAndUsername[0])
 				}
+				kbaseErrorChan <- nil
 			} else {
 				kbaseUserTable[orcidAndUsername[0]] = orcidAndUsername[1]
 				kbaseErrorChan <- nil
@@ -83,7 +84,6 @@ func SetKBaseLocalUsernameForOrcid(orcid, username string) error {
 	kbaseOrcidUserChan <- [2]string{orcid, username}
 	select {
 	case err = <-kbaseErrorChan:
-	default:
 	}
 	return err
 }

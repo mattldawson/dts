@@ -48,5 +48,5 @@ func TestKBaseLocalUsername(t *testing.T) {
 	err := SetKBaseLocalUsernameForOrcid("my-fake-orcid", "my-fake-username")
 	username, err := KBaseLocalUsernameForOrcid("my-fake-orcid")
 	assert.Nil(err)
-	assert.True(username == "my-fake-username")
+	assert.Equal("my-fake-username", username)
 }

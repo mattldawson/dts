@@ -39,6 +39,18 @@ func TestSetKBaseLocalUsernameForOrcid(t *testing.T) {
 	assert := assert.New(t)
 	err := SetKBaseLocalUsernameForOrcid("my-fake-orcid", "my-fake-username")
 	assert.Nil(err, "Unable to set KBase local username for ORCID!")
+
+	// doing the same thing again should be fine
+	err = SetKBaseLocalUsernameForOrcid("my-fake-orcid", "my-fake-username")
+	assert.Nil(err, "Setting KBase local username is not idempotent!")
+}
+
+// tests whether inconsistently reset ORCID/user registrations trigger errors
+func TestResetKBaseLocalUsernameForOrcid(t *testing.T) {
+	assert := assert.New(t)
+	err := SetKBaseLocalUsernameForOrcid("my-fake-orcid", "my-fake-username")
+	err = SetKBaseLocalUsernameForOrcid("my-fake-orcid", "your-fake-username")
+	assert.NotNil(err)
 }
 
 // tests whether the authentication server can return the username for the
@@ -49,4 +61,13 @@ func TestKBaseLocalUsername(t *testing.T) {
 	username, err := KBaseLocalUsernameForOrcid("my-fake-orcid")
 	assert.Nil(err)
 	assert.Equal("my-fake-username", username)
+}
+
+// tests for fetching a kbase username for an unregistered ORCID
+func TestUnregisteredKBaseLocalUsername(t *testing.T) {
+	assert := assert.New(t)
+	err := SetKBaseLocalUsernameForOrcid("my-fake-orcid", "my-fake-username")
+	username, err := KBaseLocalUsernameForOrcid("your-fake-orcid")
+	assert.NotNil(err)
+	assert.Equal("", username)
 }

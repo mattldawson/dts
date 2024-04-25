@@ -35,17 +35,26 @@ import (
 // rely on a secondary data source for this information.
 
 var kbaseUserFederationStarted = false
-var kbaseOrcidChan chan string        // passes ORCIDs
-var kbaseOrcidUserChan chan [2]string // passes (ORCIDs, username) pairs
-var kbaseUserChan chan string         // passes usernames
-var kbaseErrorChan chan error         // passes errors
+var kbaseOrcidChan chan string        // passes ORCIDs in
+var kbaseOrcidUserChan chan [2]string // passes (ORCIDs, username) pairs in
+var kbaseUserChan chan string         // passes usernames out
+var kbaseErrorChan chan error         // passes errors out
 
 // This goroutine maintains a mapping or ORCID IDS to local KBase users,
 // fielding requests to update and retrieve usernames by ORCID ID.
-func kbaseUserFederation() {
+func kbaseUserFederation(started chan struct{}) {
+	// channels
+	kbaseOrcidChan = make(chan string)
+	kbaseOrcidUserChan = make(chan [2]string)
+	kbaseUserChan = make(chan string)
+	kbaseErrorChan = make(chan error)
 
 	// mapping of ORCID IDs to local KBase users
 	kbaseUserTable := make(map[string]string)
+
+	// we're ready
+	started <- struct{}{}
+	kbaseUserFederationStarted = true
 
 	for {
 		select {
@@ -53,8 +62,9 @@ func kbaseUserFederation() {
 			if username, found := kbaseUserTable[orcidAndUsername[0]]; found {
 				if username != orcidAndUsername[1] {
 					kbaseErrorChan <- fmt.Errorf("KBase user mismatch for ORCID %s!", orcidAndUsername[0])
+				} else {
+					kbaseErrorChan <- nil
 				}
-				kbaseErrorChan <- nil
 			} else {
 				kbaseUserTable[orcidAndUsername[0]] = orcidAndUsername[1]
 				kbaseErrorChan <- nil
@@ -62,7 +72,9 @@ func kbaseUserFederation() {
 		case orcid := <-kbaseOrcidChan: // fetching username for orcid
 			if username, found := kbaseUserTable[orcid]; found {
 				kbaseUserChan <- username
+				kbaseErrorChan <- nil
 			} else {
+				kbaseUserChan <- ""
 				kbaseErrorChan <- fmt.Errorf("KBase user not found for ORCID %s!", orcid)
 			}
 		}
@@ -73,18 +85,14 @@ func kbaseUserFederation() {
 func SetKBaseLocalUsernameForOrcid(orcid, username string) error {
 	if !kbaseUserFederationStarted {
 		// fire it up!
-		kbaseUserFederationStarted = true
-		kbaseOrcidChan = make(chan string, 32)
-		kbaseOrcidUserChan = make(chan [2]string, 32)
-		kbaseUserChan = make(chan string, 32)
-		kbaseErrorChan = make(chan error, 32)
-		go kbaseUserFederation()
+		started := make(chan struct{})
+		go kbaseUserFederation(started)
+
+		// wait for it to start
+		<-started
 	}
-	var err error
 	kbaseOrcidUserChan <- [2]string{orcid, username}
-	select {
-	case err = <-kbaseErrorChan:
-	}
+	err := <-kbaseErrorChan
 	return err
 }
 
@@ -93,12 +101,8 @@ func KBaseLocalUsernameForOrcid(orcid string) (string, error) {
 	if !kbaseUserFederationStarted { // no one's logged in!
 		return "", fmt.Errorf("KBase federated user table not available!")
 	}
-	var username string
-	var err error
 	kbaseOrcidChan <- orcid
-	select {
-	case username = <-kbaseUserChan:
-	case err = <-kbaseErrorChan:
-	}
+	username := <-kbaseUserChan
+	err := <-kbaseErrorChan
 	return username, err
 }

@@ -97,12 +97,17 @@ func NewKBaseAuthServer(accessToken string) (*KBaseAuthServer, error) {
 		for _, pid := range userInfo.Idents {
 			if pid.Provider == "OrcID" {
 				orcid := pid.UserName
-				SetKBaseLocalUsernameForOrcid(orcid, userInfo.Username)
+				err = SetKBaseLocalUsernameForOrcid(orcid, userInfo.Username)
+				if err != nil {
+					break
+				}
 			}
 		}
 
-		// register this instance of the auth server
-		instances[accessToken] = &server
+		if err == nil {
+			// register this instance of the auth server
+			instances[accessToken] = &server
+		}
 		return &server, err
 	}
 }

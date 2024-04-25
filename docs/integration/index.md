@@ -19,6 +19,11 @@ is designed to be flexible and can accommodate various implementations. For
 example, we may be able to adapt existing capabilities for DTS integration in
 certain situations.
 
+**NOTE**: Currently, the DTS supports the transfer of **public flies only**.
+We're gathering information and starting to plan for transferring private and
+embargoed data, though, and we'd love to get your input, so if you're interested
+in this capability, please [reach out to us](mailto:engage@kbase.us)!
+
 ## Overview
 
 The DTS provides a file transfer capability whose organizational unit is

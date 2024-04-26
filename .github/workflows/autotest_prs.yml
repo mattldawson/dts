@@ -12,7 +12,7 @@ env:
   DTS_KBASE_TEST_USER: ${{ secrets.DTS_KBASE_TEST_USER }}
   DTS_GLOBUS_CLIENT_ID: ${{ secrets.DTS_GLOBUS_CLIENT_ID }}
   DTS_GLOBUS_CLIENT_SECRET: ${{ secrets.DTS_GLOBUS_CLIENT_SECRET }}
-  DTS_GLOBUS_TEST_ENDPOINT: ${{ secrets.DTS_GLOBUS_TEST_ENDPOINT }}
+#  DTS_GLOBUS_TEST_ENDPOINT: ${{ secrets.DTS_GLOBUS_TEST_ENDPOINT }}
   DTS_JDP_SECRET: ${{ secrets.DTS_JDP_SECRET }}
 
 jobs:
@@ -36,15 +36,6 @@ jobs:
 
     - name: Building DTS
       run: go build -v ./...
-
-    - name: Setting up KBase local user federation
-      uses: DamianReeves/write-file-action@v1.2
-      with:
-        path: kbase_users.json
-        contents: |
-          {
-            "$DTS_KBASE_TEST_ORCID": "$DTS_KBASE_TEST_USER"
-          }
 
     - name: Testing DTS
       shell: bash

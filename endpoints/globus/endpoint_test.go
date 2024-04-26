@@ -278,6 +278,5 @@ func TestMain(m *testing.M) {
 	setup()
 	status = m.Run()
 	breakdown()
-	status = 0
 	os.Exit(status)
 }

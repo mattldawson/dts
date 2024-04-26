@@ -86,7 +86,8 @@ func setup() {
 	dtstest.EnableDebugLogging()
 
 	if _, ok := os.LookupEnv("DTS_GLOBUS_TEST_ENDPOINT"); !ok {
-		panic("DTS_GLOBUS_TEST_ENDPOINT environment variable must be set!")
+		print("DTS_GLOBUS_TEST_ENDPOINT environment variable not set. Skipping Globus unit tests.\n")
+		os.Exit(0)
 	}
 	config.Init([]byte(globusConfig))
 }
@@ -274,10 +275,9 @@ func TestGlobusTransferCancellation(t *testing.T) {
 // this runs setup, runs all tests, and does breakdown
 func TestMain(m *testing.M) {
 	var status int
-	//setup()
-	//status = m.Run()
-	//breakdown()
-	fmt.Printf("Skipping Globus endpoints tests because LBNL's Google Drive connector is down!")
+	setup()
+	status = m.Run()
+	breakdown()
 	status = 0
 	os.Exit(status)
 }

@@ -28,7 +28,6 @@
 package auth
 
 import (
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -36,41 +35,39 @@ import (
 
 // tests whether a proxy for the KBase authentication server can be
 // constructed
-func TestNewKBaseAuthServer(t *testing.T) {
+func TestSetKBaseLocalUsernameForOrcid(t *testing.T) {
 	assert := assert.New(t)
-	devToken := os.Getenv("DTS_KBASE_DEV_TOKEN")
-	server, err := NewKBaseAuthServer(devToken)
-	assert.NotNil(server, "Authentication server not created")
-	assert.Nil(err, "Authentication server constructor triggered an error")
+	err := SetKBaseLocalUsernameForOrcid("my-fake-orcid", "my-fake-username")
+	assert.Nil(err, "Unable to set KBase local username for ORCID!")
+
+	// doing the same thing again should be fine
+	err = SetKBaseLocalUsernameForOrcid("my-fake-orcid", "my-fake-username")
+	assert.Nil(err, "Setting KBase local username is not idempotent!")
+}
+
+// tests whether inconsistently reset ORCID/user registrations trigger errors
+func TestResetKBaseLocalUsernameForOrcid(t *testing.T) {
+	assert := assert.New(t)
+	err := SetKBaseLocalUsernameForOrcid("my-fake-orcid", "my-fake-username")
+	err = SetKBaseLocalUsernameForOrcid("my-fake-orcid", "your-fake-username")
+	assert.NotNil(err)
 }
 
 // tests whether the authentication server can return the username for the
 // for the owner of the developer token
-func TestUsername(t *testing.T) {
+func TestKBaseLocalUsername(t *testing.T) {
 	assert := assert.New(t)
-	devToken := os.Getenv("DTS_KBASE_DEV_TOKEN")
-	server, _ := NewKBaseAuthServer(devToken)
-	username, err := server.Username()
+	err := SetKBaseLocalUsernameForOrcid("my-fake-orcid", "my-fake-username")
+	username, err := KBaseLocalUsernameForOrcid("my-fake-orcid")
 	assert.Nil(err)
-	assert.True(len(username) > 0)
+	assert.Equal("my-fake-username", username)
 }
 
-// tests whether the authentication server can return the proper credentials
-// for the owner of the developer token
-func TestOrchids(t *testing.T) {
+// tests for fetching a kbase username for an unregistered ORCID
+func TestUnregisteredKBaseLocalUsername(t *testing.T) {
 	assert := assert.New(t)
-	devToken := os.Getenv("DTS_KBASE_DEV_TOKEN")
-	orcid := os.Getenv("DTS_KBASE_TEST_ORCID")
-	assert.False(orcid == "")
-	server, _ := NewKBaseAuthServer(devToken)
-	orcids, err := server.Orcids()
-	assert.Nil(err)
-	var foundOrcid bool
-	for _, id := range orcids {
-		if orcid == id {
-			foundOrcid = true
-			break
-		}
-	}
-	assert.True(foundOrcid)
+	err := SetKBaseLocalUsernameForOrcid("my-fake-orcid", "my-fake-username")
+	username, err := KBaseLocalUsernameForOrcid("your-fake-orcid")
+	assert.NotNil(err)
+	assert.Equal("", username)
 }

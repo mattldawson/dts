@@ -22,13 +22,11 @@
 package kbase
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 
 	"github.com/google/uuid"
 
+	"github.com/kbase/dts/auth"
 	"github.com/kbase/dts/config"
 	"github.com/kbase/dts/databases"
 	"github.com/kbase/dts/endpoints"
@@ -76,30 +74,8 @@ func (db *Database) Endpoint() (endpoints.Endpoint, error) {
 	return endpoints.NewEndpoint(config.Databases[db.Id].Endpoint)
 }
 
-// FIXME: currently we store a mapping of orcid IDs -> KBase user names
-// FIXME: in a file called "kbase_users.json" in the DTS's data folder
-var kbaseUsers map[string]string
-
 func (db *Database) LocalUser(orcid string) (string, error) {
-	if kbaseUsers == nil {
-		kbaseUsersFile := filepath.Join(config.Service.DataDirectory, "kbase_users.json")
-		data, err := os.ReadFile(kbaseUsersFile)
-		if err == nil {
-			err = json.Unmarshal(data, &kbaseUsers)
-		} else {
-			// make an empty map to ѕignify the absence of the file
-			kbaseUsers = make(map[string]string)
-		}
-	}
-	if len(kbaseUsers) > 0 {
-		username, found := kbaseUsers[orcid]
-		if !found {
-			return "", fmt.Errorf("No KBase user found for ORCID %s", orcid)
-		} else {
-			return username, nil
-		}
-	} else {
-		// no current mechanism for this
-		return "localuser", nil
-	}
+	// for KBase user federation, we rely on a table maintained by our KBase
+	// auth server proxy
+	return auth.KBaseLocalUsernameForOrcid(orcid)
 }

@@ -86,7 +86,8 @@ func setup() {
 	dtstest.EnableDebugLogging()
 
 	if _, ok := os.LookupEnv("DTS_GLOBUS_TEST_ENDPOINT"); !ok {
-		panic("DTS_GLOBUS_TEST_ENDPOINT environment variable must be set!")
+		print("DTS_GLOBUS_TEST_ENDPOINT environment variable not set. Skipping Globus unit tests.\n")
+		os.Exit(0)
 	}
 	config.Init([]byte(globusConfig))
 }

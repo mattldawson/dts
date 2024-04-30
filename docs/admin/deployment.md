@@ -1,19 +1,20 @@
-# Deploying DTS via Docker
+# Deploying the DTS via Docker
 
 You can use the `Dockerfile` and `dts.yaml` files in the `deployment` folder to
-build a Docker image for DTS. The Docker image contains two files:
+build a Docker image for the Data Transfer System (DTS). The Docker image
+contains two files:
 
 1. `/bin/dts`: the statically-linked `dts` executable
 2. `/etc/dts.yaml`: a [DTS configuration file](config.md) with embedded
    environment variables that control parameters of interest
 
 This image can be deployed in any Docker-friendly environment. The use of
-environment variables in the configuration file allows you to configure
+environment variables in the configuration file allows you to configure the
 DTS without regenerating the image.
 
 ## Deploying to NERSC's Spin Environment
 
-DTS is hosted in NERSC's [Spin](https://www.nersc.gov/systems/spin/)
+The "primary instance" of the DTS is hosted in NERSC's [Spin](https://www.nersc.gov/systems/spin/)
 environment under [Rancher 2](https://rancher2.spin.nersc.gov/login).
 It runs in the `Production` environment under the `kbase` organization.
 You can read about Spin in NERSC's documentation, and Rancher 2
@@ -21,7 +22,7 @@ You can read about Spin in NERSC's documentation, and Rancher 2
 isn't great, but fortunately there's not a lot to know--most of the
 materials you'll need are right here in the `deployment` folder.
 
-Deploying DTS to Spin involves
+Deploying the DTS to Spin involves
 
 1. updating and pushing a new Docker image with any code changes and
    documentation updates

@@ -16,5 +16,18 @@ provides TLS/SSL encryption. Requests to the DTS include headers with
 authentication information, so these requests rely on the HTTPS protocol to
 protect this information.
 
-It's very easy to deploy DTS in a Docker environment and configure it using
+It's very easy to deploy the DTS in a Docker environment and configure it using
 environment variables.
+
+# Contents
+
+* [Administrator Guide](admin/index.md): How to configure and deploy the DTS
+* [Integration Guide](integration/index.md): How to hook your organization's
+  database up to the DTS to take advantage of its capabilities
+* [Developer Guide](developer/index.md): A detailed description of the DTS
+  code structure and important concepts
+
+The Data Transfer Service is supported as part of the BER Genomic Science
+Program's DOE Systems Biology Knowledgebase (KBase) project funded by the U.S.
+Department of Energy, Office of Science, Office of Biological and Environmental
+Research under Award Number DE-AC02-05CH11231.

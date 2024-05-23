@@ -209,7 +209,8 @@ func creditFromIdAndMetadata(id string, md Metadata) credit.CreditMetadata {
 			ContributorType: "Person",
 			// ContributorId: nothing yet
 			Name:       strings.TrimSpace(fmt.Sprintf("%s, %s %s", pi.LastName, pi.FirstName, pi.MiddleName)),
-			CreditName: strings.TrimSpace(fmt.Sprintf("%s, %s %s", pi.LastName, pi.FirstName, pi.MiddleName)),
+			GivenName:  strings.TrimSpace(fmt.Sprintf("%s %s", pi.FirstName, pi.MiddleName)),
+			FamilyName: strings.TrimSpace(pi.LastName),
 			Affiliations: []credit.Organization{
 				credit.Organization{
 					OrganizationName: pi.Institution,

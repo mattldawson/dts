@@ -1,3 +1,0 @@
-[submodule "databases/credit_engine"]
-	path = credit/credit_engine
-	url = git@github.com:kbase/credit_engine.git

@@ -415,6 +415,11 @@ func (db *Database) Search(params databases.SearchParameters) (databases.SearchR
 
 	p := url.Values{}
 	p.Add("q", params.Query)
+	if params.Status == databases.SearchFileStatusStaged {
+		p.Add(`ff["file_status"]`, "RESTORED")
+	} else if params.Status == databases.SearchFileStatusUnstaged {
+		p.Add(`ff["file_status"]`, "PURGED")
+	}
 	p.Add("p", strconv.Itoa(pageNumber))
 	p.Add("x", strconv.Itoa(pageSize))
 

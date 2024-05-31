@@ -181,6 +181,7 @@ func (service *prototype) searchDatabase(ctx context.Context,
 		Authorization string `header:"authorization" doc:"Authorization header with encoded access token"`
 		Database      string `query:"database" example:"jdp" doc:"The ID of the database to search"`
 		Query         string `query:"query" example:"prochlorococcus" doc:"A query used to search the database for matching files"`
+		Status        string `query:"status" example:"staged" doc:"(Optional) The "staged" or "unstaged" status of the desired files"`
 		Offset        int    `query:"offset" example:"100" doc:"Search results begin at the given offset"`
 		Limit         int    `query:"limit" example:"50" doc:"Limits the number of search results returned"`
 	}) (*SearchResultsOutput, error) {
@@ -196,13 +197,28 @@ func (service *prototype) searchDatabase(ctx context.Context,
 		return nil, fmt.Errorf("Database %s not found", input.Database)
 	}
 
+	// check the requested file status
+	var fileStatus databases.SearchFileStatus
+	switch input.Status {
+	case "":
+		fileStatus = databases.SearchFileStatusAny
+	case "staged", "STAGED":
+		fileStatus = databases.SearchFileStatusStaged
+	case "unstaged", "UNSTAGED":
+		fileStatus = databases.SearchFileStatusUnstaged
+	default:
+		return nil, fmt.Errorf("Invalid status parameter: %s", input.Status)
+	}
+
 	slog.Info(fmt.Sprintf("Searching database %s for files...", input.Database))
 	db, err := databases.NewDatabase(orcid, input.Database)
 	if err != nil {
 		return nil, err
 	}
+
 	results, err := db.Search(databases.SearchParameters{
-		Query: input.Query,
+		Query:  input.Query,
+		Status: fileStatus,
 		Pagination: databases.SearchPaginationParameters{
 			Offset: input.Offset,
 			MaxNum: input.Limit,

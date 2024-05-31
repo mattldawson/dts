@@ -37,10 +37,21 @@ type SearchPaginationParameters struct {
 	MaxNum int
 }
 
+// allows searching for files that are staged, not yet staged, etc
+type SearchFileStatus int32
+
+const (
+	SearchFileStatusAny SearchFileStatus = iota
+	SearchFileStatusStaged
+	SearchFileStatusUnstaged
+)
+
 // parameters that define a search for files
 type SearchParameters struct {
 	// ElasticSearch query string
 	Query string
+	// file status, if requested
+	Status SearchFileStatus
 	// pagination support
 	Pagination SearchPaginationParameters
 }

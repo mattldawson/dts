@@ -222,14 +222,36 @@ func creditFromIdAndMetadata(id string, md Metadata) credit.CreditMetadata {
 	return crd
 }
 
-func trimFileSuffix(filename string) string {
-	for _, suffix := range supportedSuffixes {
-		trimmedFilename, trimmed := strings.CutSuffix(filename, "."+suffix)
-		if trimmed {
-			return trimmedFilename
+// creates a Frictionless DataResource-savvy name for a file:
+// * the filename is down-cased
+// * all periods are replaced with dashes
+// * if needed for uniqueness, a number suffix is added
+var dataResourceNameExists_ map[string]bool = make(map[string]bool)
+
+func dataResourceName(filename string) string {
+	name := strings.ToLower(filename)
+	name = strings.ReplaceAll(name, ".", "-")
+	for {
+		if _, alreadyExists := dataResourceNameExists_[name]; alreadyExists {
+			// look for a numeric suffix after '-'
+			lastDash := strings.LastIndex(name, "-")
+			if lastDash == -1 { // no suffix, can just add "-1"
+				name += "-1"
+			} else {
+				suffix := name[lastDash+1:]
+				num, err := strconv.Atoi(suffix)
+				if err != nil { // not a number! Can add "-1"
+					name += "-1"
+				} else { // a number, so add 1 to it and replace the suffix
+					name = name[:lastDash+1] + fmt.Sprintf("-%d", num+1)
+				}
+			}
+		} else {
+			break
 		}
 	}
-	return filename
+	fmt.Printf("dataResourceName(%s): %s\n", filename, name)
+	return name
 }
 
 // creates a DataResource from a File
@@ -239,16 +261,13 @@ func dataResourceFromFile(file File) frictionless.DataResource {
 	fileTypes := fileTypesFromFile(file)
 	sources := sourcesFromMetadata(file.Metadata)
 
-	// the resource name is the filename with any suffix stripped off
-	name := trimFileSuffix(file.Name)
-
 	// we use relative file paths in accordance with the Frictionless
 	// Data Resource specification
 	filePath := filepath.Join(strings.TrimPrefix(file.Path, filePathPrefix), file.Name)
 
 	return frictionless.DataResource{
 		Id:        id,
-		Name:      name,
+		Name:      dataResourceName(file.Name),
 		Path:      filePath,
 		Format:    format,
 		MediaType: mimeTypeFromFormatAndTypes(format, fileTypes),
@@ -445,7 +464,7 @@ func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, er
 	for i, jamoFile := range jamoFiles {
 		resources[i] = frictionless.DataResource{
 			Id:     "JDP:" + jamoFile.Id,
-			Name:   trimFileSuffix(jamoFile.FileName),
+			Name:   dataResourceName(jamoFile.FileName),
 			Path:   filepath.Join(strings.TrimPrefix(jamoFile.FilePath, filePathPrefix), jamoFile.FileName),
 			Format: jamoFile.Metadata.FileFormat,
 			Bytes:  jamoFile.FileSize,

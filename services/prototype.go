@@ -178,12 +178,13 @@ type SearchResultsOutput struct {
 // handle search queries for files of interest
 func (service *prototype) searchDatabase(ctx context.Context,
 	input *struct {
-		Authorization string `header:"authorization" doc:"Authorization header with encoded access token"`
-		Database      string `query:"database" example:"jdp" doc:"The ID of the database to search"`
-		Query         string `query:"query" example:"prochlorococcus" doc:"A query used to search the database for matching files"`
-		Status        string `query:"status" example:"staged" doc:"(Optional) The "staged" or "unstaged" status of the desired files"`
-		Offset        int    `query:"offset" example:"100" doc:"Search results begin at the given offset"`
-		Limit         int    `query:"limit" example:"50" doc:"Limits the number of search results returned"`
+		Authorization string                 `header:"authorization" doc:"Authorization header with encoded access token"`
+		Database      string                 `query:"database" example:"jdp" doc:"The ID of the database to search"`
+		Query         string                 `query:"query" example:"prochlorococcus" doc:"A query used to search the database for matching files"`
+		Status        string                 `query:"status" example:"staged" doc:"(Optional) The "staged" or "unstaged" status of the desired files"`
+		Offset        int                    `query:"offset" example:"100" doc:"Search results begin at the given offset"`
+		Limit         int                    `query:"limit" example:"50" doc:"Limits the number of search results returned"`
+		Specific      map[string]interface{} `query:"specific" doc:"a mapping from database-specific search parameters to acceptable values"`
 	}) (*SearchResultsOutput, error) {
 
 	orcid, err := authorize(input.Authorization)
@@ -223,6 +224,7 @@ func (service *prototype) searchDatabase(ctx context.Context,
 			Offset: input.Offset,
 			MaxNum: input.Limit,
 		},
+		Specific: input.Specific,
 	})
 	if err != nil {
 		return nil, err

@@ -31,6 +31,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -427,6 +428,58 @@ func pageNumberAndSize(offset, maxNum int) (int, int) {
 	return pageNumber, pageSize
 }
 
+func (db *Database) SpecificSearchParameters() map[string]interface{} {
+	return map[string]interface{}{
+		// see https://files.jgi.doe.gov/apidoc/#/GET/search_list
+		"f": []string{"ssr", "biosample", "project_id", "library"},   // search specific field
+		"s": []string{"name", "id", "title", "kingdom", "score.avg"}, // sort order
+		"d": []string{"asc", "desc"},                                 // sort direction (ascending/descending)
+	}
+}
+
+// checks JDP-specific search parameters and adds them to the given URL values
+func (db Database) addSpecificSearchParameters(params map[string]interface{}, p *url.Values) error {
+	paramSpec := db.SpecificSearchParameters()
+	for name, genericValue := range params {
+		switch name {
+		case "f": // field-specific search
+			if value, ok := genericValue.(string); ok {
+				acceptedValues := paramSpec["f"].([]string)
+				if slices.Contains(acceptedValues, value) {
+					p.Add(name, value)
+				} else {
+					return fmt.Errorf("Invalid JDP search field: %s", value)
+				}
+			} else {
+				return fmt.Errorf("Non-string value for JDP field-specific search!")
+			}
+		case "s": // sort order
+			if value, ok := genericValue.(string); ok {
+				acceptedValues := paramSpec["s"].([]string)
+				if slices.Contains(acceptedValues, value) {
+					p.Add(name, value)
+				} else {
+					return fmt.Errorf("Invalid JDP sort order: %s", value)
+				}
+			} else {
+				return fmt.Errorf("Non-string value for JDP sort order!")
+			}
+		case "d": // sort direction
+			if value, ok := genericValue.(string); ok {
+				acceptedValues := paramSpec["d"].([]string)
+				if slices.Contains(acceptedValues, value) {
+					p.Add(name, value)
+				} else {
+					return fmt.Errorf("Invalid JDP sort direction: %s", value)
+				}
+			} else {
+				return fmt.Errorf("Non-string value for JDP sort direction!")
+			}
+		}
+	}
+	return nil
+}
+
 func (db *Database) Search(params databases.SearchParameters) (databases.SearchResults, error) {
 	// we assume the JDP interface for ElasticSearch queries
 	// (see https://files.jgi.doe.gov/apidoc/)
@@ -441,6 +494,11 @@ func (db *Database) Search(params databases.SearchParameters) (databases.SearchR
 	}
 	p.Add("p", strconv.Itoa(pageNumber))
 	p.Add("x", strconv.Itoa(pageSize))
+
+	err := db.addSpecificSearchParameters(params.Specific, &p)
+	if err != nil {
+		return databases.SearchResults{}, err
+	}
 
 	return db.filesFromSearch(p)
 }

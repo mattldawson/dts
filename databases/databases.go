@@ -38,7 +38,7 @@ type SearchPaginationParameters struct {
 }
 
 // allows searching for files that are staged, not yet staged, etc
-type SearchFileStatus int32
+type SearchFileStatus int
 
 const (
 	SearchFileStatusAny SearchFileStatus = iota
@@ -54,6 +54,9 @@ type SearchParameters struct {
 	Status SearchFileStatus
 	// pagination support
 	Pagination SearchPaginationParameters
+	// database-specific search parameters with names matched to provided values
+	// (validated by database)
+	Specific map[string]interface{}
 }
 
 // results from a file query
@@ -75,6 +78,13 @@ const (
 // Database defines the interface for a database that is used to search for
 // files and initiate file transfers
 type Database interface {
+	// returns m mapping of database-specific search parameters to zeroed values
+	// of specific types accessible via type switches
+	// * supported types: int, string, bool, float64, slices
+	// * slices represent sets of accepted values of their respective types
+	//   (useful for pulldown menus)
+	// * databases with no specific search parameters should return nil
+	SpecificSearchParameters() map[string]interface{}
 	// search for files using the given parameters
 	Search(params SearchParameters) (SearchResults, error)
 	// returns a slice of Frictionless DataResources for the files with the

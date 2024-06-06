@@ -231,7 +231,10 @@ var dataResourceNameExists_ map[string]bool = make(map[string]bool)
 
 func dataResourceName(filename string) string {
 	name := strings.ToLower(filename)
-	name = strings.ReplaceAll(name, ".", "-")
+	lastDot := strings.LastIndex(name, ".")
+	if lastDot != -1 {
+		name = name[:lastDot]
+	}
 	for {
 		if _, alreadyExists := dataResourceNameExists_[name]; alreadyExists {
 			// look for a numeric suffix after '-'
@@ -251,7 +254,6 @@ func dataResourceName(filename string) string {
 			break
 		}
 	}
-	fmt.Printf("dataResourceName(%s): %s\n", filename, name)
 	return name
 }
 

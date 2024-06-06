@@ -87,16 +87,9 @@ type ServiceInfoOutput struct {
 	Body ServiceInfoResponse `doc:"information about the service itself"`
 }
 
-// handler method for root
+// handler method for root (no authorization needed for this one)
 func (service *prototype) getRoot(ctx context.Context,
-	input *struct {
-		Authorization string `header:"authorization"`
-	}) (*ServiceInfoOutput, error) {
-
-	_, err := authorize(input.Authorization)
-	if err != nil {
-		return nil, err
-	}
+	input *struct{}) (*ServiceInfoOutput, error) {
 
 	slog.Info("Querying root endpoint...")
 	return &ServiceInfoOutput{

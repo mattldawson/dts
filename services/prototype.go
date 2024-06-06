@@ -168,17 +168,19 @@ type SearchResultsOutput struct {
 	Body SearchResultsResponse `doc:"Search results containing matching files that match the given query"`
 }
 
-// handle search queries for files of interest
-func (service *prototype) searchDatabase(ctx context.Context,
-	input *struct {
-		Authorization string                 `header:"authorization" doc:"Authorization header with encoded access token"`
-		Database      string                 `query:"database" example:"jdp" doc:"The ID of the database to search"`
-		Query         string                 `query:"query" example:"prochlorococcus" doc:"A query used to search the database for matching files"`
-		Status        string                 `query:"status" example:"staged" doc:"(Optional) The "staged" or "unstaged" status of the desired files"`
-		Offset        int                    `query:"offset" example:"100" doc:"Search results begin at the given offset"`
-		Limit         int                    `query:"limit" example:"50" doc:"Limits the number of search results returned"`
-		Specific      map[string]interface{} `query:"specific" doc:"a mapping from database-specific search parameters to acceptable values"`
-	}) (*SearchResultsOutput, error) {
+type SearchDatabaseInput struct {
+	Authorization string `header:"authorization" doc:"Authorization header with encoded access token"`
+	Database      string `query:"database" example:"jdp" doc:"The ID of the database to search"`
+	Query         string `query:"query" example:"prochlorococcus" doc:"A query used to search the database for matching files"`
+	Status        string `query:"status" example:"staged" doc:"(Optional) The "staged" or "unstaged" status of the desired files"`
+	Offset        int    `query:"offset" example:"100" doc:"Search results begin at the given offset"`
+	Limit         int    `query:"limit" example:"50" doc:"Limits the number of search results returned"`
+}
+
+// implements database search for both GET and POST requests
+func searchDatabase(ctx context.Context,
+	input *SearchDatabaseInput,
+	specific map[string]string) (*SearchResultsOutput, error) {
 
 	orcid, err := authorize(input.Authorization)
 	if err != nil {
@@ -217,7 +219,7 @@ func (service *prototype) searchDatabase(ctx context.Context,
 			Offset: input.Offset,
 			MaxNum: input.Limit,
 		},
-		Specific: input.Specific,
+		Specific: specific,
 	})
 	if err != nil {
 		return nil, err
@@ -229,6 +231,31 @@ func (service *prototype) searchDatabase(ctx context.Context,
 			Resources: results.Resources,
 		},
 	}, nil
+}
+
+// handle search queries for files of interest (GET, no DB-specific parameters)
+func (service *prototype) searchDatabase(ctx context.Context,
+	input *SearchDatabaseInput) (*SearchResultsOutput, error) {
+	return searchDatabase(ctx, input, nil)
+}
+
+// handle search queries for files of interest (POST, DB-specific parameters)
+func (service *prototype) searchDatabaseWithSpecificParams(ctx context.Context,
+	input *struct {
+		SearchDatabaseInput
+		Body        []byte `doc:"Contains database-specific parameters given as key-value pairs in a JSON object"`
+		ContentType string `header:"Content-Type" doc:"Content-Type header (must be application/json)"`
+	}) (*SearchResultsOutput, error) {
+	specific := make(map[string]string) // FIXME: populate with body!
+	searchInput := SearchDatabaseInput{
+		Authorization: input.Authorization,
+		Database:      input.Database,
+		Query:         input.Query,
+		Status:        input.Status,
+		Offset:        input.Offset,
+		Limit:         input.Limit,
+	}
+	return searchDatabase(ctx, &searchInput, specific)
 }
 
 type TransferOutput struct {
@@ -367,6 +394,7 @@ func NewDTSPrototype() (TransferService, error) {
 	huma.Get(api, "/api/v1/databases", service.getDatabases)
 	huma.Get(api, "/api/v1/databases/{db}", service.getDatabase)
 	huma.Get(api, "/api/v1/files", service.searchDatabase)
+	huma.Post(api, "/api/v1/files", service.searchDatabaseWithSpecificParams)
 	huma.Post(api, "/api/v1/transfers", service.createTransfer)
 	huma.Get(api, "/api/v1/transfers/{id}", service.getTransferStatus)
 	huma.Delete(api, "/api/v1/transfers/{id}", service.deleteTransfer)

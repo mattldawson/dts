@@ -386,6 +386,7 @@ func (db *Database) filesFromSearch(params url.Values) (databases.SearchResults,
 	}
 	type JDPResults struct {
 		Organisms []struct {
+			Id    string `json:"id"`
 			Files []File `json:"files"`
 		} `json:"organisms"`
 	}
@@ -399,6 +400,14 @@ func (db *Database) filesFromSearch(params url.Values) (databases.SearchResults,
 		resources := make([]frictionless.DataResource, 0)
 		for _, file := range org.Files {
 			res := dataResourceFromFile(file)
+			if params.Has("extra") {
+				extraFields := strings.Split(params.Get("extra"), ",")
+				for _, field := range extraFields {
+					if field == "project_id" {
+						res.Extra = json.RawMessage(fmt.Sprintf(`{"project_id": "%s"}`, org.Id))
+					} // FIXME: for now, we ignore all other requested extra fields
+				}
+			}
 			if _, encountered := idEncountered[res.Id]; !encountered {
 				resources = append(resources, res)
 				idEncountered[res.Id] = true
@@ -433,49 +442,45 @@ func pageNumberAndSize(offset, maxNum int) (int, int) {
 func (db *Database) SpecificSearchParameters() map[string]interface{} {
 	return map[string]interface{}{
 		// see https://files.jgi.doe.gov/apidoc/#/GET/search_list
-		"f": []string{"ssr", "biosample", "project_id", "library"},   // search specific field
-		"s": []string{"name", "id", "title", "kingdom", "score.avg"}, // sort order
-		"d": []string{"asc", "desc"},                                 // sort direction (ascending/descending)
+		"f":     []string{"ssr", "biosample", "project_id", "library"},   // search specific field
+		"s":     []string{"name", "id", "title", "kingdom", "score.avg"}, // sort order
+		"d":     []string{"asc", "desc"},                                 // sort direction (ascending/descending)
+		"extra": "",                                                      // comma-delimited list of requested extra fields
 	}
 }
 
 // checks JDP-specific search parameters and adds them to the given URL values
-func (db Database) addSpecificSearchParameters(params map[string]interface{}, p *url.Values) error {
+func (db Database) addSpecificSearchParameters(params map[string]string, p *url.Values) error {
 	paramSpec := db.SpecificSearchParameters()
-	for name, genericValue := range params {
+	for name, value := range params {
 		switch name {
 		case "f": // field-specific search
-			if value, ok := genericValue.(string); ok {
-				acceptedValues := paramSpec["f"].([]string)
-				if slices.Contains(acceptedValues, value) {
-					p.Add(name, value)
-				} else {
-					return fmt.Errorf("Invalid JDP search field: %s", value)
-				}
+			acceptedValues := paramSpec["f"].([]string)
+			if slices.Contains(acceptedValues, value) {
+				p.Add(name, value)
 			} else {
-				return fmt.Errorf("Non-string value for JDP field-specific search!")
+				return fmt.Errorf("Invalid JDP search field: %s", value)
 			}
 		case "s": // sort order
-			if value, ok := genericValue.(string); ok {
-				acceptedValues := paramSpec["s"].([]string)
-				if slices.Contains(acceptedValues, value) {
-					p.Add(name, value)
-				} else {
-					return fmt.Errorf("Invalid JDP sort order: %s", value)
-				}
+			acceptedValues := paramSpec["s"].([]string)
+			if slices.Contains(acceptedValues, value) {
+				p.Add(name, value)
 			} else {
-				return fmt.Errorf("Non-string value for JDP sort order!")
+				return fmt.Errorf("Invalid JDP sort order: %s", value)
 			}
 		case "d": // sort direction
-			if value, ok := genericValue.(string); ok {
-				acceptedValues := paramSpec["d"].([]string)
-				if slices.Contains(acceptedValues, value) {
-					p.Add(name, value)
-				} else {
-					return fmt.Errorf("Invalid JDP sort direction: %s", value)
-				}
+			acceptedValues := paramSpec["d"].([]string)
+			if slices.Contains(acceptedValues, value) {
+				p.Add(name, value)
 			} else {
-				return fmt.Errorf("Non-string value for JDP sort direction!")
+				return fmt.Errorf("Invalid JDP sort direction: %s", value)
+			}
+		case "extra": // comma-separated additional fields requested
+			acceptedValues := paramSpec["extra"].([]string)
+			if slices.Contains(acceptedValues, value) {
+				p.Add(name, value)
+			} else {
+				return fmt.Errorf("Invalid requested extra field: %s", value)
 			}
 		}
 	}

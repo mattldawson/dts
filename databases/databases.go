@@ -56,7 +56,7 @@ type SearchParameters struct {
 	Pagination SearchPaginationParameters
 	// database-specific search parameters with names matched to provided values
 	// (validated by database)
-	Specific map[string]interface{}
+	Specific map[string]string
 }
 
 // results from a file query

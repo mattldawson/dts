@@ -415,7 +415,6 @@ func (db *Database) filesFromSearch(params url.Values) (databases.SearchResults,
 		}
 		results.Resources = append(results.Resources, resources...)
 	}
-	slog.Info(fmt.Sprintf("Database search got %d results", len(results.Resources)))
 	return results, nil
 }
 

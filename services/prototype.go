@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net"
@@ -168,13 +169,17 @@ type SearchResultsOutput struct {
 	Body SearchResultsResponse `doc:"Search results containing matching files that match the given query"`
 }
 
+type SearchDatabaseInputWithoutHeader struct {
+	Database string `json:"database" query:"database" example:"jdp" doc:"The ID of the database to search"`
+	Query    string `json:"query" query:"query" example:"prochlorococcus" doc:"A query used to search the database for matching files"`
+	Status   string `json:"status" query:"status" example:"staged" doc:"(Optional) The "staged" or "unstaged" status of the desired files"`
+	Offset   int    `json:"offset" query:"offset" example:"100" doc:"Search results begin at the given offset"`
+	Limit    int    `json:"limit" query:"limit" example:"50" doc:"Limits the number of search results returned"`
+}
+
 type SearchDatabaseInput struct {
 	Authorization string `header:"authorization" doc:"Authorization header with encoded access token"`
-	Database      string `query:"database" example:"jdp" doc:"The ID of the database to search"`
-	Query         string `query:"query" example:"prochlorococcus" doc:"A query used to search the database for matching files"`
-	Status        string `query:"status" example:"staged" doc:"(Optional) The "staged" or "unstaged" status of the desired files"`
-	Offset        int    `query:"offset" example:"100" doc:"Search results begin at the given offset"`
-	Limit         int    `query:"limit" example:"50" doc:"Limits the number of search results returned"`
+	SearchDatabaseInputWithoutHeader
 }
 
 // implements database search for both GET and POST requests
@@ -240,22 +245,33 @@ func (service *prototype) searchDatabase(ctx context.Context,
 }
 
 // handle search queries for files of interest (POST, DB-specific parameters)
+// NOTE: all parameters are extracted from the body of the POST; no URL
+// NOTE: parameters are accepted
 func (service *prototype) searchDatabaseWithSpecificParams(ctx context.Context,
 	input *struct {
-		SearchDatabaseInput
-		Body        []byte `doc:"Contains database-specific parameters given as key-value pairs in a JSON object"`
-		ContentType string `header:"Content-Type" doc:"Content-Type header (must be application/json)"`
+		Authorization string          `header:"authorization" doc:"Authorization header with encoded access token"`
+		Body          json.RawMessage `doc:"Contains all search parameters (including any database-specific parameters) given as key-value pairs in a JSON object" contentType:"application/json"`
+		ContentType   string          `header:"Content-Type" doc:"Content-Type header (must be application/json)"`
 	}) (*SearchResultsOutput, error) {
-	specific := make(map[string]string) // FIXME: populate with body!
+	var body struct {
+		SearchDatabaseInputWithoutHeader
+		Specific map[string]string `json:"specific" doc:"database-specific search parameters in a JSON object"`
+	}
+	err := json.Unmarshal(input.Body, &body)
+	if err != nil {
+		return nil, err
+	}
 	searchInput := SearchDatabaseInput{
 		Authorization: input.Authorization,
-		Database:      input.Database,
-		Query:         input.Query,
-		Status:        input.Status,
-		Offset:        input.Offset,
-		Limit:         input.Limit,
+		SearchDatabaseInputWithoutHeader: SearchDatabaseInputWithoutHeader{
+			Database: body.Database,
+			Query:    body.Query,
+			Status:   body.Status,
+			Offset:   body.Offset,
+			Limit:    body.Limit,
+		},
 	}
-	return searchDatabase(ctx, &searchInput, specific)
+	return searchDatabase(ctx, &searchInput, body.Specific)
 }
 
 type TransferOutput struct {

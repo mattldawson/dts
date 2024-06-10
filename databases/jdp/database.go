@@ -415,6 +415,7 @@ func (db *Database) filesFromSearch(params url.Values) (databases.SearchResults,
 		}
 		results.Resources = append(results.Resources, resources...)
 	}
+	slog.Info(fmt.Sprintf("Database search got %d results", len(results.Resources)))
 	return results, nil
 }
 
@@ -445,7 +446,7 @@ func (db *Database) SpecificSearchParameters() map[string]interface{} {
 		"f":     []string{"ssr", "biosample", "project_id", "library"},   // search specific field
 		"s":     []string{"name", "id", "title", "kingdom", "score.avg"}, // sort order
 		"d":     []string{"asc", "desc"},                                 // sort direction (ascending/descending)
-		"extra": "",                                                      // comma-delimited list of requested extra fields
+		"extra": []string{"project_id"},                                  // list of requested extra fields
 	}
 }
 
@@ -502,9 +503,11 @@ func (db *Database) Search(params databases.SearchParameters) (databases.SearchR
 	p.Add("p", strconv.Itoa(pageNumber))
 	p.Add("x", strconv.Itoa(pageSize))
 
-	err := db.addSpecificSearchParameters(params.Specific, &p)
-	if err != nil {
-		return databases.SearchResults{}, err
+	if params.Specific != nil {
+		err := db.addSpecificSearchParameters(params.Specific, &p)
+		if err != nil {
+			return databases.SearchResults{}, err
+		}
 	}
 
 	return db.filesFromSearch(p)

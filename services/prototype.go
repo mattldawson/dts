@@ -172,7 +172,7 @@ type SearchResultsOutput struct {
 type SearchDatabaseInputWithoutHeader struct {
 	Database string `json:"database" query:"database" example:"jdp" doc:"The ID of the database to search"`
 	Query    string `json:"query" query:"query" example:"prochlorococcus" doc:"A query used to search the database for matching files"`
-	Status   string `json:"status" query:"status" example:"staged" doc:"(Optional) The "staged" or "unstaged" status of the desired files"`
+	Status   string `json:"status" query:"status" example:"\"staged\"" doc:"(Optional) The staged or unstaged status of the desired files"`
 	Offset   int    `json:"offset" query:"offset" example:"100" doc:"Search results begin at the given offset"`
 	Limit    int    `json:"limit" query:"limit" example:"50" doc:"Limits the number of search results returned"`
 }

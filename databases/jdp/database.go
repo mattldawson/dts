@@ -439,7 +439,7 @@ func pageNumberAndSize(offset, maxNum int) (int, int) {
 	return pageNumber, pageSize
 }
 
-func (db *Database) SpecificSearchParameters() map[string]interface{} {
+func (db Database) SpecificSearchParameters() map[string]interface{} {
 	return map[string]interface{}{
 		// see https://files.jgi.doe.gov/apidoc/#/GET/search_list
 		"f":     []string{"ssr", "biosample", "project_id", "library"},   // search specific field
@@ -450,11 +450,16 @@ func (db *Database) SpecificSearchParameters() map[string]interface{} {
 }
 
 // checks JDP-specific search parameters and adds them to the given URL values
-func (db Database) addSpecificSearchParameters(params map[string]string, p *url.Values) error {
+func (db Database) addSpecificSearchParameters(params map[string]json.RawMessage, p *url.Values) error {
 	paramSpec := db.SpecificSearchParameters()
-	for name, value := range params {
+	for name, jsonValue := range params {
 		switch name {
 		case "f": // field-specific search
+			var value string
+			err := json.Unmarshal(jsonValue, &value)
+			if err != nil {
+				return fmt.Errorf("Invalid JDP search field given (must be string)")
+			}
 			acceptedValues := paramSpec["f"].([]string)
 			if slices.Contains(acceptedValues, value) {
 				p.Add(name, value)
@@ -462,6 +467,11 @@ func (db Database) addSpecificSearchParameters(params map[string]string, p *url.
 				return fmt.Errorf("Invalid JDP search field: %s", value)
 			}
 		case "s": // sort order
+			var value string
+			err := json.Unmarshal(jsonValue, &value)
+			if err != nil {
+				return fmt.Errorf("Invalid JDP sort order given (must be string)")
+			}
 			acceptedValues := paramSpec["s"].([]string)
 			if slices.Contains(acceptedValues, value) {
 				p.Add(name, value)
@@ -469,6 +479,11 @@ func (db Database) addSpecificSearchParameters(params map[string]string, p *url.
 				return fmt.Errorf("Invalid JDP sort order: %s", value)
 			}
 		case "d": // sort direction
+			var value string
+			err := json.Unmarshal(jsonValue, &value)
+			if err != nil {
+				return fmt.Errorf("Invalid JDP sort direction given (must be string)")
+			}
 			acceptedValues := paramSpec["d"].([]string)
 			if slices.Contains(acceptedValues, value) {
 				p.Add(name, value)
@@ -476,6 +491,11 @@ func (db Database) addSpecificSearchParameters(params map[string]string, p *url.
 				return fmt.Errorf("Invalid JDP sort direction: %s", value)
 			}
 		case "extra": // comma-separated additional fields requested
+			var value string
+			err := json.Unmarshal(jsonValue, &value)
+			if err != nil {
+				return fmt.Errorf("Invalid JDP requested extra field given (must be string)")
+			}
 			acceptedValues := paramSpec["extra"].([]string)
 			if slices.Contains(acceptedValues, value) {
 				p.Add(name, value)

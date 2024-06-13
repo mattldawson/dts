@@ -22,6 +22,7 @@
 package databases
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -56,7 +57,7 @@ type SearchParameters struct {
 	Pagination SearchPaginationParameters
 	// database-specific search parameters with names matched to provided values
 	// (validated by database)
-	Specific map[string]string
+	Specific map[string]json.RawMessage
 }
 
 // results from a file query

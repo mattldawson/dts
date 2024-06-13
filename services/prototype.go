@@ -185,7 +185,7 @@ type SearchDatabaseInput struct {
 // implements database search for both GET and POST requests
 func searchDatabase(ctx context.Context,
 	input *SearchDatabaseInput,
-	specific map[string]string) (*SearchResultsOutput, error) {
+	specific map[string]json.RawMessage) (*SearchResultsOutput, error) {
 
 	orcid, err := authorize(input.Authorization)
 	if err != nil {
@@ -255,7 +255,7 @@ func (service *prototype) searchDatabaseWithSpecificParams(ctx context.Context,
 	}) (*SearchResultsOutput, error) {
 	var body struct {
 		SearchDatabaseInputWithoutHeader
-		Specific map[string]string `json:"specific" doc:"database-specific search parameters in a JSON object"`
+		Specific map[string]json.RawMessage `json:"specific" doc:"database-specific search parameters in a JSON object"`
 	}
 	err := json.Unmarshal(input.Body, &body)
 	if err != nil {

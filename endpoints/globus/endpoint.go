@@ -299,9 +299,13 @@ func (ep *Endpoint) FilesStaged(files []frictionless.DataResource) (bool, error)
 		resource := fmt.Sprintf("operation/endpoint/%s/ls", ep.Id.String())
 		body, err := ep.get(resource, values)
 		if err != nil {
-			// it's okay if the directory doesn't exist -- it might need to be staged
 			globusErr := err.(*GlobusError)
 			if globusErr.Code == "ClientError.NotFound" {
+				// it's okay if the directory doesn't exist -- it might need to be staged
+				return false, nil
+			} else if globusErr.Code == "ExternalError.DirListingFailed.LoginFailed" {
+				// unfortunately, Globus throws this error when there's a network hiccup,
+				// so we can't take it seriously as an actual error condition
 				return false, nil
 			}
 			return false, err

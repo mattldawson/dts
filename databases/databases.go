@@ -79,7 +79,7 @@ const (
 // Database defines the interface for a database that is used to search for
 // files and initiate file transfers
 type Database interface {
-	// returns m mapping of database-specific search parameters to zeroed values
+	// returns a mapping of database-specific search parameters to zeroed values
 	// of specific types accessible via type switches
 	// * supported types: int, string, bool, float64, slices
 	// * slices represent sets of accepted values of their respective types

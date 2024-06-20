@@ -270,6 +270,7 @@ func (ep *Endpoint) post(resource string, body io.Reader) ([]byte, error) {
 		return nil, err
 	}
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", ep.AccessToken))
+	req.Header.Set("Content-Type", "application/json")
 
 	return ep.sendRequest(req)
 }
@@ -578,8 +579,8 @@ func (ep *Endpoint) Cancel(id uuid.UUID) error {
 	// 3. "TaskComplete", indicating that the task is complete and not able to
 	//    be canceled.
 	//
-	// We live with the 10-second wait for now, since our polling interval is 
-  // large.
+	// We live with the 10-second wait for now, since our polling interval is
+	// large.
 	type CancellationResponse struct {
 		Code      string `json:"code"` // should be "Canceled"
 		Message   string `json:"message"`

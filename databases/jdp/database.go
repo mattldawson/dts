@@ -600,7 +600,9 @@ func (db *Database) StageFiles(fileIds []string) (uuid.UUID, error) {
 		return xferId, err
 	}
 
-	resp, err := db.post("request_archived_files", bytes.NewReader(data))
+	// NOTE: The slash in the resource is all-important for POST requests to
+	// NOTE: the JDP!!
+	resp, err := db.post("request_archived_files/", bytes.NewReader(data))
 	if err != nil {
 		return xferId, err
 	}

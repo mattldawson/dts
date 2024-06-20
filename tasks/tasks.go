@@ -352,19 +352,21 @@ func (task taskType) Completed() bool {
 func (task *taskType) Cancel() error {
 	task.Canceled = true // mark as canceled
 
-	// fetch the source endpoint
-	var endpoint endpoints.Endpoint
-	source, err := databases.NewDatabase(task.Orcid, task.Source)
-	if err != nil {
-		return err
+	if task.Transfer.Valid { // we're transferring
+		// fetch the source endpoint
+		var endpoint endpoints.Endpoint
+		source, err := databases.NewDatabase(task.Orcid, task.Source)
+		if err != nil {
+			return err
+		}
+		endpoint, err = source.Endpoint()
+		if err != nil {
+			return err
+		}
+		// request that the task be canceled using its UUID
+		return endpoint.Cancel(task.Transfer.UUID)
 	}
-	endpoint, err = source.Endpoint()
-	if err != nil {
-		return err
-	}
-
-	// request that the task be canceled
-	return endpoint.Cancel(task.Id)
+	return nil
 }
 
 // this function updates the state of a task, setting its status as necessary

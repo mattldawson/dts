@@ -619,6 +619,8 @@ func (db *Database) StageFiles(fileIds []string) (uuid.UUID, error) {
 	if err != nil {
 		return xferId, err
 	}
+	slog.Debug(fmt.Sprintf("Requested archived files from JDP (request ID: %d)",
+		jdpResp.RequestId))
 	xferId = uuid.New()
 	db.StagingIds[xferId] = jdpResp.RequestId
 	return xferId, err
@@ -638,7 +640,7 @@ func (db *Database) StagingStatus(id uuid.UUID) (databases.StagingStatus, error)
 			return databases.StagingStatusUnknown, err
 		}
 		type JDPResult struct {
-			Status string `json:"status"` // "ready" or not
+			Status string `json:"status"` // "new", "pending", or "ready"
 		}
 		var jdpResult JDPResult
 		err = json.Unmarshal(body, &jdpResult)
@@ -646,7 +648,9 @@ func (db *Database) StagingStatus(id uuid.UUID) (databases.StagingStatus, error)
 			return databases.StagingStatusUnknown, err
 		}
 		statusForString := map[string]databases.StagingStatus{
-			"ready": databases.StagingStatusSucceeded,
+			"new":     databases.StagingStatusActive,
+			"pending": databases.StagingStatusActive,
+			"ready":   databases.StagingStatusSucceeded,
 		}
 		if status, ok := statusForString[jdpResult.Status]; ok {
 			return status, nil

@@ -165,6 +165,107 @@ func (service *prototype) getDatabase(ctx context.Context,
 	}, nil
 }
 
+type SearchParametersOutput struct {
+	Body json.RawMessage `doc:"a JSON object whose fields are search parameters and whose values indicate their type"`
+}
+
+// We map database-specific search parameters to JSON according to the following
+// rules:
+// * fields are search parameter names
+// * values can be
+//   - zeroed primitives, indicating user-supplied parameters
+//   - slices, indicating parameters selected from a list (e.g. a pulldown)
+//
+// We annotate each parameter with its type, to facilitate the client's
+// handling of the JSON object. This treatment may seem delicate and full of
+// boilerplate, but it's an easy and straightforward way of performing a
+// mapping from a minimal data structure to a self-describing representation.
+func mapSearchParamsToJson(params map[string]interface{}) json.RawMessage {
+	obj := make(map[string]interface{}) // map that becomes the JSON response
+
+	for field, value := range params {
+		switch val := value.(type) {
+		case int:
+			entry := struct {
+				Type  string `json:"type"`
+				Value int    `json:"value"`
+			}{
+				Type:  "number",
+				Value: val,
+			}
+			obj[field] = entry
+		case float64:
+			entry := struct {
+				Type  string  `json:"type"`
+				Value float64 `json:"value"`
+			}{
+				Type:  "number",
+				Value: val,
+			}
+			obj[field] = entry
+		case bool:
+			entry := struct {
+				Type  string `json:"type"`
+				Value bool   `json:"value"`
+			}{
+				Type:  "boolean",
+				Value: val,
+			}
+			obj[field] = entry
+		case string:
+			entry := struct {
+				Type  string `json:"type"`
+				Value string `json:"value"`
+			}{
+				Type:  "string",
+				Value: val,
+			}
+			obj[field] = entry
+		case []string:
+			entry := struct {
+				Type  string   `json:"type"`
+				Value []string `json:"value"`
+			}{
+				Type:  "array(string)",
+				Value: val,
+			}
+			obj[field] = entry
+		}
+	}
+	objData, _ := json.Marshal(obj)
+	return json.RawMessage(objData)
+}
+
+// method for querying a single database for its specific search parameters
+func (service *prototype) getDatabaseSearchParameters(ctx context.Context,
+	input *struct {
+		Authorization string `header:"authorization" doc:"Authorization header with encoded access token"`
+		Database      string `path:"db" example:"jdp" doc:"the abbreviated name of a database"`
+	}) (*SearchParametersOutput, error) {
+
+	orcid, err := authorize(input.Authorization)
+	if err != nil {
+		return nil, err
+	}
+
+	// is the database valid?
+	_, ok := config.Databases[input.Database]
+	if !ok {
+		return nil, fmt.Errorf("Database %s not found", input.Database)
+	}
+	db, err := databases.NewDatabase(orcid, input.Database)
+	if err != nil {
+		return nil, err
+	}
+
+	// Fish the database-specific search parameters out of the database
+	// and encode them in a JSON object.
+	params := db.SpecificSearchParameters() // parameters to pack into response
+	return &SearchParametersOutput{
+		Body: mapSearchParamsToJson(params),
+	}, nil
+}
+
 type SearchResultsOutput struct {
 	Body SearchResultsResponse `doc:"Search results containing matching files that match the given query"`
 }
@@ -409,6 +510,7 @@ func NewDTSPrototype() (TransferService, error) {
 	// API v1
 	huma.Get(api, "/api/v1/databases", service.getDatabases)
 	huma.Get(api, "/api/v1/databases/{db}", service.getDatabase)
+	huma.Get(api, "/api/v1/databases/{db}/search-parameters", service.getDatabaseSearchParameters)
 	huma.Get(api, "/api/v1/files", service.searchDatabase)
 	huma.Post(api, "/api/v1/files", service.searchDatabaseWithSpecificParams)
 	huma.Post(api, "/api/v1/transfers", service.createTransfer)

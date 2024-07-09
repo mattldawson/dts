@@ -588,11 +588,14 @@ func (ep *Endpoint) Cancel(id uuid.UUID) error {
 		Resource  string `json:"resource"`
 	}
 	resource := fmt.Sprintf("task/%s/cancel", id.String())
-	body, err := ep.post(resource, nil) // can take up to 10 ѕeconds!
+	_, err := ep.post(resource, nil) // can take up to 10 ѕeconds!
 	if err != nil {
-		return err
+		if globusError, ok := err.(*GlobusError); ok {
+			switch globusError.Code {
+			case "Canceled", "CancelAccepted", "TaskComplete": // it worked!
+				err = nil
+			}
+		}
 	}
-	var response CancellationResponse
-	err = json.Unmarshal(body, &response)
 	return err
 }

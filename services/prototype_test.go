@@ -358,29 +358,28 @@ func TestQueryJDPDatabaseSearchParameters(t *testing.T) {
 	err = json.Unmarshal(respBody, &searchParams)
 	assert.Nil(err)
 
-	// "d": sort order ({"asc", "desc"})
-	assert.Equal(ArraySearchParam{
-		Type:  "array(string)",
-		Value: []string{"asc", "desc"},
-	}, searchParams["d"])
+	AssertSearchParamsEqual := func(param ArraySearchParam, acceptableValues []string) {
+		slices.Sort(acceptableValues)
+		availableValues := param.Value
+		slices.Sort(availableValues)
+		assert.Equal(acceptableValues, availableValues)
+	}
 
-	// "extra": extra metadata to include in payload ({"project_id"})
-	assert.Equal(ArraySearchParam{
-		Type:  "array(string)",
-		Value: []string{"project_id"},
-	}, searchParams["extra"])
+	// "d": sort order
+	AssertSearchParamsEqual(searchParams["d"], []string{"asc", "desc"})
 
-	// "f": specific fields to search ({"ssr", "biosample", "library", "project_id"})
-	assert.Equal(ArraySearchParam{
-		Type:  "array(string)",
-		Value: []string{"ssr", "biosample", "project_id", "library"},
-	}, searchParams["f"])
+	// "extra": extra metadata to include in payload
+	AssertSearchParamsEqual(searchParams["extra"], []string{"project_id"})
 
-	// "s": sort order ({"name", "id", "title", "kingdom", "score.avg"})
-	assert.Equal(ArraySearchParam{
-		Type:  "array(string)",
-		Value: []string{"name", "id", "title", "kingdom", "score.avg"},
-	}, searchParams["s"])
+	// "f": specific fields to search
+	AssertSearchParamsEqual(searchParams["f"],
+		[]string{"biosample", "img_taxon_oid", "project_id",
+			"library", "ssr"})
+
+	// "s": sort order
+	AssertSearchParamsEqual(searchParams["s"],
+		[]string{"name", "id", "title", "kingdom",
+			"score.avg"})
 }
 
 // searches a specific database for files matching a simple query

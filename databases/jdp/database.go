@@ -116,7 +116,7 @@ func formatFromFileName(fileName string) string {
 	// make a list of the supported suffixes if we haven't yet
 	if supportedSuffixes == nil {
 		supportedSuffixes = make([]string, 0)
-		for suffix, _ := range suffixToFormat {
+		for suffix := range suffixToFormat {
 			supportedSuffixes = append(supportedSuffixes, suffix)
 		}
 	}
@@ -199,14 +199,14 @@ func creditFromIdAndMetadata(id string, md Metadata) credit.CreditMetadata {
 	}
 
 	crd.Dates = []credit.EventDate{
-		credit.EventDate{
+		{
 			Date:  md.Proposal.DateApproved,
 			Event: "approval",
 		},
 	}
 	pi := md.Proposal.PI
 	crd.Contributors = []credit.Contributor{
-		credit.Contributor{
+		{
 			ContributorType: "Person",
 			// ContributorId: nothing yet
 			Name:       strings.TrimSpace(fmt.Sprintf("%s, %s %s", pi.LastName, pi.FirstName, pi.MiddleName)),
@@ -442,7 +442,8 @@ func pageNumberAndSize(offset, maxNum int) (int, int) {
 func (db Database) SpecificSearchParameters() map[string]interface{} {
 	return map[string]interface{}{
 		// see https://files.jgi.doe.gov/apidoc/#/GET/search_list
-		"f":     []string{"ssr", "biosample", "project_id", "library"},   // search specific field
+		"f": []string{"ssr", "biosample", "project_id", "library", // search specific field
+			"img_taxon_oid"},
 		"s":     []string{"name", "id", "title", "kingdom", "score.avg"}, // sort order
 		"d":     []string{"asc", "desc"},                                 // sort direction (ascending/descending)
 		"extra": []string{"project_id"},                                  // list of requested extra fields

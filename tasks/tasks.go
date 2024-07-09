@@ -68,6 +68,7 @@ const (
 // portions of a file transfer
 type taskType struct {
 	Id                  uuid.UUID      // task identifier
+	DestinationFolder   string         // folder path to which files are transferred
 	Orcid               string         // Orcid ID for user requesting transfer
 	Source, Destination string         // names of source and destination databases
 	FileIds             []string       // IDs of files within Source
@@ -163,9 +164,10 @@ func (task *taskType) beginTransfer() error {
 	if err != nil {
 		return err
 	}
+	task.DestinationFolder = filepath.Join(username, "dts-"+task.Id.String())
 	fileXfers := make([]FileTransfer, len(task.Resources))
 	for i, resource := range task.Resources {
-		destinationPath := filepath.Join(username, task.Id.String(), resource.Path)
+		destinationPath := filepath.Join(task.DestinationFolder, resource.Path)
 		fileXfers[i] = FileTransfer{
 			SourcePath:      resource.Path,
 			DestinationPath: destinationPath,
@@ -291,14 +293,10 @@ func (task *taskType) checkTransfer() error {
 			if err != nil {
 				return err
 			}
-			username, err := destination.LocalUser(task.Orcid)
-			if err != nil {
-				return err
-			}
 			fileXfers := []FileTransfer{
-				FileTransfer{
+				{
 					SourcePath:      task.ManifestFile,
-					DestinationPath: filepath.Join(username, task.Id.String(), "manifest.json"),
+					DestinationPath: filepath.Join(task.DestinationFolder, "manifest.json"),
 				},
 			}
 
@@ -384,7 +382,7 @@ func (task *taskType) Cancel() error {
 	return nil
 }
 
-// this function updates the state of a task, setting its status as necessary
+// updates the state of a task, setting its status as necessary
 func (task *taskType) Update() error {
 	var err error
 	if task.Resources == nil { // new task!

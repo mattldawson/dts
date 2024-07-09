@@ -454,11 +454,10 @@ func TestCreateTransfer(t *testing.T) {
 	assert.True(status.Status == "succeeded")
 
 	// check for the files in the payload
-	// FIXME: the files are written to the destination endpoint's root in a
-	// FIXME: user-specific and task-specific folder. We need to formalize this.
 	username := testUser
+	destinationFolder := filepath.Join(destination1Root, username, "dts-"+xferId.String())
 	for _, file := range []string{"file1.txt", "file2.txt", "file3.txt", "manifest.json"} {
-		_, err := os.Stat(filepath.Join(destination1Root, username, xferId.String(), file))
+		_, err := os.Stat(filepath.Join(destinationFolder, file))
 		assert.Nil(err)
 	}
 }

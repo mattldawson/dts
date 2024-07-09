@@ -402,11 +402,17 @@ func (db *Database) filesFromSearch(params url.Values) (databases.SearchResults,
 			res := dataResourceFromFile(file)
 			if params.Has("extra") {
 				extraFields := strings.Split(params.Get("extra"), ",")
+				extras := "{"
 				for _, field := range extraFields {
-					if field == "project_id" {
-						res.Extra = json.RawMessage(fmt.Sprintf(`{"project_id": "%s"}`, org.Id))
-					} // FIXME: for now, we ignore all other requested extra fields
+					switch field {
+					case "project_id":
+						extras += fmt.Sprintf(`"project_id": "%s",`, org.Id)
+					case "img_taxon_oid":
+						extras += fmt.Sprintf(`"img_taxon_oid": "%d",`, file.Metadata.IMG.TaxonOID)
+					}
 				}
+				extras += "}"
+				res.Extra = json.RawMessage(extras)
 			}
 			if _, encountered := idEncountered[res.Id]; !encountered {
 				resources = append(resources, res)
@@ -446,7 +452,7 @@ func (db Database) SpecificSearchParameters() map[string]interface{} {
 			"img_taxon_oid"},
 		"s":     []string{"name", "id", "title", "kingdom", "score.avg"}, // sort order
 		"d":     []string{"asc", "desc"},                                 // sort direction (ascending/descending)
-		"extra": []string{"project_id"},                                  // list of requested extra fields
+		"extra": []string{"img_taxon_oid", "project_id"},                 // list of requested extra fields
 	}
 }
 

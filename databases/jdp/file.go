@@ -100,6 +100,9 @@ type Metadata struct {
 		// display name
 		DisplayName string `json:"display_name"`
 	} `json:"gold_data"`
+	IMG struct {
+		TaxonOID int `json:"taxon_oid"`
+	} `json:"img,omitempty"`
 	// sequencing project metadata
 	SequencingProject struct {
 		// name of scientific program to which project belongs

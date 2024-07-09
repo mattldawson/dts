@@ -369,7 +369,7 @@ func TestQueryJDPDatabaseSearchParameters(t *testing.T) {
 	AssertSearchParamsEqual(searchParams["d"], []string{"asc", "desc"})
 
 	// "extra": extra metadata to include in payload
-	AssertSearchParamsEqual(searchParams["extra"], []string{"project_id"})
+	AssertSearchParamsEqual(searchParams["extra"], []string{"img_taxon_oid", "project_id"})
 
 	// "f": specific fields to search
 	AssertSearchParamsEqual(searchParams["f"],

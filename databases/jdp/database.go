@@ -403,12 +403,15 @@ func (db *Database) filesFromSearch(params url.Values) (databases.SearchResults,
 			if params.Has("extra") {
 				extraFields := strings.Split(params.Get("extra"), ",")
 				extras := "{"
-				for _, field := range extraFields {
+				for i, field := range extraFields {
+					if i > 0 {
+						extras += ", "
+					}
 					switch field {
 					case "project_id":
-						extras += fmt.Sprintf(`"project_id": "%s",`, org.Id)
+						extras += fmt.Sprintf(`"project_id": "%s"`, org.Id)
 					case "img_taxon_oid":
-						extras += fmt.Sprintf(`"img_taxon_oid": "%d",`, file.Metadata.IMG.TaxonOID)
+						extras += fmt.Sprintf(`"img_taxon_oid": %d`, file.Metadata.IMG.TaxonOID)
 					}
 				}
 				extras += "}"

@@ -121,6 +121,16 @@ func (e AlreadyRegisteredError) Error() string {
 	return fmt.Sprintf("Cannot register database %s (already registered).", e.dbName)
 }
 
+// This error type is returned when an invalid database-specific search
+// parameter is specified
+type InvalidSearchParameter struct {
+	Database, Message string
+}
+
+func (e InvalidSearchParameter) Error() string {
+	return fmt.Sprintf("Invalid search parameter for database %s: %s", e.Database, e.Message)
+}
+
 // we maintain a table of database instances, identified by their names
 var allDatabases = make(map[string]Database)
 

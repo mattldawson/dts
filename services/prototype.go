@@ -337,6 +337,11 @@ func searchDatabase(ctx context.Context,
 		Specific: specific,
 	})
 	if err != nil {
+		if e, ok := err.(*databases.InvalidSearchParameter); ok {
+			return nil, huma.Error400BadRequest(e.Error())
+		} else {
+			slog.Error(err.Error())
+		}
 		return nil, err
 	}
 	return &SearchResultsOutput{

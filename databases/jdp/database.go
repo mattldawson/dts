@@ -400,6 +400,8 @@ func (db *Database) filesFromSearch(params url.Values) (databases.SearchResults,
 		resources := make([]frictionless.DataResource, 0)
 		for _, file := range org.Files {
 			res := dataResourceFromFile(file)
+
+			// add any requested additional metadata
 			if params.Has("extra") {
 				extraFields := strings.Split(params.Get("extra"), ",")
 				extras := "{"
@@ -417,6 +419,8 @@ func (db *Database) filesFromSearch(params url.Values) (databases.SearchResults,
 				extras += "}"
 				res.Extra = json.RawMessage(extras)
 			}
+
+			// add the resource to our results if it's not there already
 			if _, encountered := idEncountered[res.Id]; !encountered {
 				resources = append(resources, res)
 				idEncountered[res.Id] = true
@@ -469,56 +473,88 @@ func (db Database) addSpecificSearchParameters(params map[string]json.RawMessage
 			var value string
 			err := json.Unmarshal(jsonValue, &value)
 			if err != nil {
-				return fmt.Errorf("Invalid JDP search field given (must be string)")
+				return &databases.InvalidSearchParameter{
+					Database: "JDP",
+					Message:  "Invalid search field given (must be string)",
+				}
 			}
 			acceptedValues := paramSpec["f"].([]string)
 			if slices.Contains(acceptedValues, value) {
 				p.Add(name, value)
 			} else {
-				return fmt.Errorf("Invalid JDP search field: %s", value)
+				return &databases.InvalidSearchParameter{
+					Database: "JDP",
+					Message:  fmt.Sprintf("Invalid search field given: %s", value),
+				}
 			}
 		case "s": // sort order
 			var value string
 			err := json.Unmarshal(jsonValue, &value)
 			if err != nil {
-				return fmt.Errorf("Invalid JDP sort order given (must be string)")
+				return &databases.InvalidSearchParameter{
+					Database: "JDP",
+					Message:  "Invalid JDP sort order given (must be string)",
+				}
 			}
 			acceptedValues := paramSpec["s"].([]string)
 			if slices.Contains(acceptedValues, value) {
 				p.Add(name, value)
 			} else {
-				return fmt.Errorf("Invalid JDP sort order: %s", value)
+				return &databases.InvalidSearchParameter{
+					Database: "JDP",
+					Message:  fmt.Sprintf("Invalid JDP sort order: %s", value),
+				}
 			}
 		case "d": // sort direction
 			var value string
 			err := json.Unmarshal(jsonValue, &value)
 			if err != nil {
-				return fmt.Errorf("Invalid JDP sort direction given (must be string)")
+				return &databases.InvalidSearchParameter{
+					Database: "JDP",
+					Message:  "Invalid JDP sort direction given (must be string)",
+				}
 			}
 			acceptedValues := paramSpec["d"].([]string)
 			if slices.Contains(acceptedValues, value) {
 				p.Add(name, value)
 			} else {
-				return fmt.Errorf("Invalid JDP sort direction: %s", value)
+				return &databases.InvalidSearchParameter{
+					Database: "JDP",
+					Message:  fmt.Sprintf("Invalid JDP sort direction: %s", value),
+				}
 			}
 		case "include_private_data": // search for private data
 			var value int
 			err := json.Unmarshal(jsonValue, &value)
 			if err != nil || (value != 0 && value != 1) {
-				return fmt.Errorf("Invalid flag given for include_private_data (must be 0 or 1)")
+				return &databases.InvalidSearchParameter{
+					Database: "JDP",
+					Message:  "Invalid flag given for include_private_data (must be 0 or 1)",
+				}
 			}
 			p.Add(name, fmt.Sprintf("%d", value))
 		case "extra": // comma-separated additional fields requested
 			var value string
 			err := json.Unmarshal(jsonValue, &value)
 			if err != nil {
-				return fmt.Errorf("Invalid JDP requested extra field given (must be string)")
+				return &databases.InvalidSearchParameter{
+					Database: "JDP",
+					Message:  "Invalid JDP requested extra field given (must be comma-delimited string)",
+				}
 			}
 			acceptedValues := paramSpec["extra"].([]string)
 			if slices.Contains(acceptedValues, value) {
 				p.Add(name, value)
 			} else {
-				return fmt.Errorf("Invalid requested extra field: %s", value)
+				return &databases.InvalidSearchParameter{
+					Database: "JDP",
+					Message:  fmt.Sprintf("Invalid requested extra field: %s", value),
+				}
+			}
+		default:
+			return &databases.InvalidSearchParameter{
+				Database: "JDP",
+				Message:  fmt.Sprintf("Unrecognized JDP-specific search parameter: %s", name),
 			}
 		}
 	}

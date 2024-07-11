@@ -374,6 +374,14 @@ func (db *Database) filesFromSearch(params url.Values) (databases.SearchResults,
 	var results databases.SearchResults
 
 	idEncountered := make(map[string]bool) // keep track of duplicates
+
+	// extra any requested "extra" metadata fields (and scrub them from params)
+	var extraFields []string
+	if params.Has("extra") {
+		extraFields = strings.Split(params.Get("extra"), ",")
+		params.Del("extra")
+	}
+
 	resp, err := db.get("search", params)
 	if err != nil {
 		return results, err
@@ -402,8 +410,7 @@ func (db *Database) filesFromSearch(params url.Values) (databases.SearchResults,
 			res := dataResourceFromFile(file)
 
 			// add any requested additional metadata
-			if params.Has("extra") {
-				extraFields := strings.Split(params.Get("extra"), ",")
+			if extraFields != nil {
 				extras := "{"
 				for i, field := range extraFields {
 					if i > 0 {

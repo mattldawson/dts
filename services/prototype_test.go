@@ -351,18 +351,27 @@ func TestQueryJDPDatabaseSearchParameters(t *testing.T) {
 
 	// all JDP-specific search parameters are selectable string values
 	type ArraySearchParam struct {
-		Type  string   `json:"type"`
-		Value []string `json:"value"`
+		Type  string      `json:"type"`
+		Value interface{} `json:"value"`
 	}
 	var searchParams map[string]ArraySearchParam
 	err = json.Unmarshal(respBody, &searchParams)
 	assert.Nil(err)
 
-	AssertSearchParamsEqual := func(param ArraySearchParam, acceptableValues []string) {
-		slices.Sort(acceptableValues)
+	AssertSearchParamsEqual := func(param ArraySearchParam, acceptableValues interface{}) {
 		availableValues := param.Value
-		slices.Sort(availableValues)
-		assert.Equal(acceptableValues, availableValues)
+		switch availValues := availableValues.(type) {
+		case []string:
+			accValues := acceptableValues.([]string)
+			slices.Sort(availValues)
+			slices.Sort(accValues)
+			assert.Equal(accValues, availValues)
+		case []int:
+			accValues := acceptableValues.([]int)
+			slices.Sort(availValues)
+			slices.Sort(accValues)
+			assert.Equal(accValues, availValues)
+		}
 	}
 
 	// "d": sort order
@@ -375,6 +384,9 @@ func TestQueryJDPDatabaseSearchParameters(t *testing.T) {
 	AssertSearchParamsEqual(searchParams["f"],
 		[]string{"biosample", "img_taxon_oid", "project_id",
 			"library", "ssr"})
+
+	// "include_private_data": search private data in addition to public
+	AssertSearchParamsEqual(searchParams["include_private_data"], []int{0, 1})
 
 	// "s": sort order
 	AssertSearchParamsEqual(searchParams["s"],

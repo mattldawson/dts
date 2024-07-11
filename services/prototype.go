@@ -230,6 +230,15 @@ func mapSearchParamsToJson(params map[string]interface{}) json.RawMessage {
 				Value: val,
 			}
 			obj[field] = entry
+		case []int:
+			entry := struct {
+				Type  string `json:"type"`
+				Value []int  `json:"value"`
+			}{
+				Type:  "array(number)",
+				Value: val,
+			}
+			obj[field] = entry
 		}
 	}
 	objData, _ := json.Marshal(obj)

@@ -451,11 +451,12 @@ func pageNumberAndSize(offset, maxNum int) (int, int) {
 func (db Database) SpecificSearchParameters() map[string]interface{} {
 	return map[string]interface{}{
 		// see https://files.jgi.doe.gov/apidoc/#/GET/search_list
+		"d": []string{"asc", "desc"}, // sort direction (ascending/descending)
 		"f": []string{"ssr", "biosample", "project_id", "library", // search specific field
 			"img_taxon_oid"},
-		"s":     []string{"name", "id", "title", "kingdom", "score.avg"}, // sort order
-		"d":     []string{"asc", "desc"},                                 // sort direction (ascending/descending)
-		"extra": []string{"img_taxon_oid", "project_id"},                 // list of requested extra fields
+		"include_private_data": []int{0, 1},                                             // flag to include private data
+		"s":                    []string{"name", "id", "title", "kingdom", "score.avg"}, // sort order
+		"extra":                []string{"img_taxon_oid", "project_id"},                 // list of requested extra fields
 	}
 }
 
@@ -500,6 +501,13 @@ func (db Database) addSpecificSearchParameters(params map[string]json.RawMessage
 			} else {
 				return fmt.Errorf("Invalid JDP sort direction: %s", value)
 			}
+		case "include_private_data": // search for private data
+			var value int
+			err := json.Unmarshal(jsonValue, &value)
+			if err != nil || (value != 0 && value != 1) {
+				return fmt.Errorf("Invalid flag given for include_private_data (must be 0 or 1)")
+			}
+			p.Add(name, fmt.Sprintf("%d", value))
 		case "extra": // comma-separated additional fields requested
 			var value string
 			err := json.Unmarshal(jsonValue, &value)

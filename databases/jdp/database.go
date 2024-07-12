@@ -639,9 +639,10 @@ func (db *Database) StageFiles(fileIds []string) (uuid.UUID, error) {
 
 	// construct a POST request to restore archived files with the given IDs
 	type RestoreRequest struct {
-		Ids        []string `json:"ids"`
-		SendEmail  bool     `json:"send_email"`
-		ApiVersion string   `json:"api_version"`
+		Ids                []string `json:"ids"`
+		SendEmail          bool     `json:"send_email"`
+		ApiVersion         string   `json:"api_version"`
+		IncludePrivateData int      `json:"include_private_data"`
 	}
 
 	// strip "JDP:" off the file IDs (and remove those without this prefix)
@@ -653,9 +654,10 @@ func (db *Database) StageFiles(fileIds []string) (uuid.UUID, error) {
 	}
 
 	data, err := json.Marshal(RestoreRequest{
-		Ids:        fileIdsWithoutPrefix,
-		SendEmail:  false,
-		ApiVersion: "2",
+		Ids:                fileIdsWithoutPrefix,
+		SendEmail:          false,
+		ApiVersion:         "2",
+		IncludePrivateData: 1, // we need this just in case!
 	})
 	if err != nil {
 		return xferId, err

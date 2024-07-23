@@ -81,6 +81,25 @@ type taskType struct {
 	CompletionTime      time.Time      // time at which the transfer completed
 }
 
+// This error type is returned when a payload is requested that is too large.
+type PayloadTooLargeError struct {
+	size int // size of the requested payload in gigabytes
+}
+
+func (e PayloadTooLargeError) Error() string {
+	return fmt.Sprintf("Requested payload is too large: %d GB (limit is %d GB).",
+		e.size, config.Service.MaxPayloadSize)
+}
+
+// computes the size of a payload for a transfer task (in gigabytes)
+func payloadSize(resources []DataResource) int {
+	var size uint64
+	for _, resource := range resources {
+		size += uint64(resource.Bytes)
+	}
+	return int(size / (1024 * 1024))
+}
+
 // starts a task going, initiating staging if needed
 func (task *taskType) start() error {
 	source, err := databases.NewDatabase(task.Orcid, task.Source)
@@ -92,6 +111,12 @@ func (task *taskType) start() error {
 	task.Resources, err = source.Resources(task.FileIds)
 	if err != nil {
 		return err
+	}
+
+	// make sure the size of the payload doesn't exceed our specified limit
+	size := payloadSize(task.Resources) // (in GB)
+	if size > config.Service.MaxPayloadSize {
+		return &PayloadTooLargeError{size: size}
 	}
 
 	// are the files already staged? (only works for public data)

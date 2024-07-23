@@ -37,6 +37,9 @@ type serviceConfig struct {
 	// maximum number of allowed incoming connections
 	// default: 100
 	MaxConnections int `json:"max_connections,omitempty" yaml:"max_connections,omitempty"`
+	// maximum size of requested payload for transfer, past which transfer
+	// requests are rejected (gigabytes)
+	MaxPayloadSize int `json:"max_payload_size,omitempy" yaml:"max_payload_size,omitempty"`
 	// polling interval for checking transfer statuses (milliseconds)
 	// default: 1 minute
 	PollInterval int `json:"poll_interval" yaml:"poll_interval"`
@@ -80,6 +83,7 @@ func readConfig(bytes []byte) error {
 	var conf configFile
 	conf.Service.Port = 8080
 	conf.Service.MaxConnections = 100
+	conf.Service.MaxPayloadSize = 100
 	conf.Service.PollInterval = int(time.Minute / time.Millisecond)
 	conf.Service.DeleteAfter = 7 * 24 * 3600
 	err := yaml.Unmarshal(bytes, &conf)

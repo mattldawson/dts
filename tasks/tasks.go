@@ -94,7 +94,7 @@ func (task *taskType) start() error {
 		return err
 	}
 
-	// are the files already staged?
+	// are the files already staged? (only works for public data)
 	sourceEndpoint, err := source.Endpoint()
 	if err != nil {
 		return err
@@ -211,20 +211,8 @@ func (task *taskType) checkStaging() error {
 		return err
 	}
 
-	if stagingStatus == databases.StagingStatusSucceeded { // supposedly staged!
-		// double check with the endpoint
-		sourceEndpoint, err := source.Endpoint()
-		if err != nil {
-			return err
-		}
-		staged, err := sourceEndpoint.FilesStaged(task.Resources)
-		if err != nil {
-			return err
-		}
-		if staged {
-			err = task.beginTransfer()
-		}
-		return err
+	if stagingStatus == databases.StagingStatusSucceeded { // staged!
+		return task.beginTransfer() // move along
 	} else if stagingStatus == databases.StagingStatusFailed {
 		// staging failed, so cancel the task
 		task.Cancel()

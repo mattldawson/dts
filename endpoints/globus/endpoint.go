@@ -463,19 +463,11 @@ func (ep *Endpoint) submitTransfer(destination endpoints.Endpoint,
 }
 
 func (ep *Endpoint) Transfer(destination endpoints.Endpoint, files []endpoints.FileTransfer) (uuid.UUID, error) {
-	// check that all requested files are staged on this endpoint
-	// (Globus does not perform this check by itself)
-	requestedFiles := make([]frictionless.DataResource, len(files))
-	for i, file := range files {
-		requestedFiles[i].Path = file.SourcePath // only the Path field is required
-	}
-	staged, err := ep.FilesStaged(requestedFiles)
-	if err != nil {
-		return uuid.UUID{}, err
-	}
-	if !staged {
-		return uuid.UUID{}, fmt.Errorf("The files requested for transfer are not yet staged.")
-	}
+	// NOTE: We don't check whether files are staged here, because the endpoint
+	// NOTE: itself doesn't always have a reliable staging check (e.g. JDP's
+	// NOTE: private data is invisible to Globus directory listings).
+	// NOTE: Consequently, we assume that files are staged by the time this
+	// NOTE: function is called.
 
 	// obtain a submission ID
 	submissionId, err := ep.getSubmissionId()

@@ -73,6 +73,7 @@ type taskType struct {
 	Source, Destination string         // names of source and destination databases
 	FileIds             []string       // IDs of files within Source
 	Resources           []DataResource // Frictionless DataResources for files
+	PayloadSize         float64        // Size of payload (gigabytes)
 	Canceled            bool           // set if a cancellation request has been made
 	Staging, Transfer   uuid.NullUUID  // staging and file transfer UUIDs (if any)
 	Manifest            uuid.NullUUID  // manifest generation UUID (if any)
@@ -114,9 +115,9 @@ func (task *taskType) start() error {
 	}
 
 	// make sure the size of the payload doesn't exceed our specified limit
-	size := payloadSize(task.Resources) // (in GB)
-	if size > config.Service.MaxPayloadSize {
-		return &PayloadTooLargeError{size: size}
+	task.PayloadSize = payloadSize(task.Resources) // (in GB)
+	if task.PayloadSize > config.Service.MaxPayloadSize {
+		return &PayloadTooLargeError{size: task.PayloadSize}
 	}
 
 	// are the files already staged? (only works for public data)
@@ -507,7 +508,8 @@ func processTasks() {
 			newTask.Id = uuid.New()
 			tasks[newTask.Id] = newTask
 			returnTaskIdChan <- newTask.Id
-			slog.Info(fmt.Sprintf("Created new transfer task %s", newTask.Id.String()))
+			slog.Info(fmt.Sprintf("Created new transfer task %s (%d file(s) requested)",
+				newTask.Id.String(), len(newTask.FileIds)))
 		case taskId := <-cancelTaskChan: // Cancel() called
 			if task, found := tasks[taskId]; found {
 				slog.Info(fmt.Sprintf("Task %s: received cancellation request", taskId.String()))
@@ -546,9 +548,11 @@ func processTasks() {
 					if task.Status.Code != oldStatus.Code {
 						switch task.Status.Code {
 						case TransferStatusStaging:
-							slog.Info(fmt.Sprintf("Task %s: staging files", task.Id.String()))
+							slog.Info(fmt.Sprintf("Task %s: staging %d file(s) (%g GB)",
+								task.Id.String(), len(task.Resources), task.PayloadSize))
 						case TransferStatusActive:
-							slog.Info(fmt.Sprintf("Task %s: beginning transfer", task.Id.String()))
+							slog.Info(fmt.Sprintf("Task %s: beginning transfer (%d file(s), %g GB)",
+								task.Id.String(), len(task.Resources), task.PayloadSize))
 						case TransferStatusInactive:
 							slog.Info(fmt.Sprintf("Task %s: suspended transfer", task.Id.String()))
 						case TransferStatusFinalizing:

@@ -459,6 +459,8 @@ func (ep *Endpoint) submitTransfer(destination endpoints.Endpoint,
 		return xferId, err
 	}
 	xferId = gResp.TaskId
+	slog.Debug(fmt.Sprintf("Initiated Globus transfer task %s (%d files)",
+		xferId.String(), len(files)))
 	return xferId, nil
 }
 

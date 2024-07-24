@@ -49,6 +49,16 @@ const (
 	filePathPrefix = "/global/dna/dm_archive/" // directory containing JDP files
 )
 
+// This error type is returned when a file is requested for which the requester
+// does not have permission.
+type PermissionDeniedError struct {
+	fileId string
+}
+
+func (e PermissionDeniedError) Error() string {
+	return fmt.Sprintf("Can't access file %s: permission denied.", e.fileId)
+}
+
 // a mapping from file suffixes to format labels
 var suffixToFormat = map[string]string{
 	"bam":      "bam",
@@ -610,6 +620,9 @@ func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, er
 	// translate from JAMOese to Frictionless-ese
 	resources := make([]frictionless.DataResource, len(jamoFiles))
 	for i, jamoFile := range jamoFiles {
+		if jamoFile.Id == "" { // permissions problem
+			return nil, &PermissionDeniedError{fileIds[i]}
+		}
 		resources[i] = frictionless.DataResource{
 			Id:     "JDP:" + jamoFile.Id,
 			Name:   dataResourceName(jamoFile.FileName),
@@ -618,6 +631,10 @@ func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, er
 			Bytes:  jamoFile.FileSize,
 			Hash:   jamoFile.MD5Sum,
 		}
+		if resources[i].Path == "" || resources[i].Path == "/" { // permissions probem
+			return nil, &PermissionDeniedError{fileIds[i]}
+		}
+
 		// fill in holes where we can and patch up discrepancies
 		if resources[i].Format == "" {
 			resources[i].Format = formatFromFileName(resources[i].Path)
@@ -684,8 +701,8 @@ func (db *Database) StageFiles(fileIds []string) (uuid.UUID, error) {
 	if err != nil {
 		return xferId, err
 	}
-	slog.Debug(fmt.Sprintf("Requested archived files from JDP (request ID: %d)",
-		jdpResp.RequestId))
+	slog.Debug(fmt.Sprintf("Requested %d archived files from JDP (request ID: %d)",
+		len(fileIds), jdpResp.RequestId))
 	xferId = uuid.New()
 	db.StagingIds[xferId] = jdpResp.RequestId
 	return xferId, err

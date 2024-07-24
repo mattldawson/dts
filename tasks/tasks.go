@@ -98,7 +98,7 @@ func payloadSize(resources []DataResource) float64 {
 	for _, resource := range resources {
 		size += uint64(resource.Bytes)
 	}
-	return float64(size) / float64(1024*1024)
+	return float64(size) / float64(1024*1024*1024)
 }
 
 // starts a task going, initiating staging if needed

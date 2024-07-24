@@ -16,6 +16,7 @@
 # MAX_CONNECTIONS: the maximum number of connections allowed for accepting
 #                  and queueing queries. Any additional connections are
 #                  rejected.
+# MAX_PAYLOAD_SIZE: the maximum size for any given payload (gigabytes)
 # POLL_INTERVAL: the interval at which DTS updates tasks (milliseconds)
 # PORT: the port on which the service listens
 # PURGE_INTERVAL: the interval at which DTS purges completed task records
@@ -24,6 +25,7 @@
 service:
   port: ${PORT}
   max_connections: ${MAX_CONNECTIONS}
+  max_payload_size: ${MAX_PAYLOAD_SIZE}
   poll_interval: ${POLL_INTERVAL}
   endpoint: globus-local
   data_dir: ${DATA_DIRECTORY}

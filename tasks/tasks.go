@@ -83,21 +83,21 @@ type taskType struct {
 
 // This error type is returned when a payload is requested that is too large.
 type PayloadTooLargeError struct {
-	size int // size of the requested payload in gigabytes
+	size float64 // size of the requested payload in gigabytes
 }
 
 func (e PayloadTooLargeError) Error() string {
-	return fmt.Sprintf("Requested payload is too large: %d GB (limit is %d GB).",
+	return fmt.Sprintf("Requested payload is too large: %g GB (limit is %g GB).",
 		e.size, config.Service.MaxPayloadSize)
 }
 
 // computes the size of a payload for a transfer task (in gigabytes)
-func payloadSize(resources []DataResource) int {
+func payloadSize(resources []DataResource) float64 {
 	var size uint64
 	for _, resource := range resources {
 		size += uint64(resource.Bytes)
 	}
-	return int(size / (1024 * 1024))
+	return float64(size) / float64(1024*1024)
 }
 
 // starts a task going, initiating staging if needed
@@ -328,6 +328,10 @@ func (task *taskType) checkTransfer() error {
 			}
 			task.Transfer.Valid = false
 			task.Manifest.Valid = true
+		} else {
+			// the transfer failed, so make sure we cancel it in case it's still
+			// trying (because e.g. Globus continues trying transfers for ~3 days!!)
+			task.Cancel()
 		}
 	}
 	return nil

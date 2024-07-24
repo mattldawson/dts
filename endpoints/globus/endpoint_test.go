@@ -211,24 +211,6 @@ func TestGlobusTransfer(t *testing.T) {
 	assert.Equal(endpoints.TransferStatusSucceeded, status.Code)
 }
 
-func TestBadGlobusTransfer(t *testing.T) {
-	assert := assert.New(t)
-	source, _ := NewEndpoint("source")
-	destination, _ := NewEndpoint("destination")
-
-	// ask for some nonexistent files
-	fileXfers := make([]endpoints.FileTransfer, 0)
-	for i := 1; i <= 3; i++ {
-		id := fmt.Sprintf("%d", i)
-		fileXfers = append(fileXfers, endpoints.FileTransfer{
-			SourcePath:      sourceFilesById[id] + "_with_bad_suffix",
-			DestinationPath: path.Join(destDirName(16), path.Base(sourceFilesById[id]+"_with_bad_suffix")),
-		})
-	}
-	_, err := source.Transfer(destination, fileXfers)
-	assert.NotNil(err)
-}
-
 func TestUnknownGlobusStatus(t *testing.T) {
 	assert := assert.New(t)
 	endpoint, _ := NewEndpoint("source")

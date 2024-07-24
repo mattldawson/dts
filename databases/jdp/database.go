@@ -49,14 +49,23 @@ const (
 	filePathPrefix = "/global/dna/dm_archive/" // directory containing JDP files
 )
 
-// This error type is returned when a file is requested for which the requester
-// does not have permission.
+// this error type is returned when a file is requested for which the requester
+// does not have permission
 type PermissionDeniedError struct {
 	fileId string
 }
 
 func (e PermissionDeniedError) Error() string {
 	return fmt.Sprintf("Can't access file %s: permission denied.", e.fileId)
+}
+
+// this error type is returned when a file is requested and is not found
+type FileIdNotFoundError struct {
+	fileId string
+}
+
+func (e FileIdNotFoundError) Error() string {
+	return fmt.Sprintf("Can't access file %s: not found.", e.fileId)
 }
 
 // a mapping from file suffixes to format labels
@@ -604,47 +613,88 @@ func (db *Database) Search(params databases.SearchParameters) (databases.SearchR
 }
 
 func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, error) {
-	// For the moment, this implementation is a stopgap to save the JDP team
-	// from implementing additional functionality for the DTS. Here we query JAMO
-	// directly for information about files that correspond to the given set of
-	// file IDs.
+	// strip the "JDP:" prefix from our files and create a mapping from IDs to
+	// their original order so we can hand back metadata accordingly
 	strippedFileIds := make([]string, len(fileIds))
+	indexForId := make(map[string]int)
 	for i, fileId := range fileIds {
 		strippedFileIds[i] = strings.TrimPrefix(fileId, "JDP:")
+		indexForId[strippedFileIds[i]] = i
 	}
-	jamoFiles, err := queryJamo(strippedFileIds)
+
+	type MetadataRequest struct {
+		Ids                []string `json:"ids"`
+		Aggregations       bool     `json:"aggregations"`
+		IncludePrivateData bool     `json:"include_private_data"`
+	}
+	data, err := json.Marshal(MetadataRequest{
+		Ids:                strippedFileIds,
+		Aggregations:       false,
+		IncludePrivateData: true,
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	// translate from JAMOese to Frictionless-ese
-	resources := make([]frictionless.DataResource, len(jamoFiles))
-	for i, jamoFile := range jamoFiles {
-		if jamoFile.Id == "" { // permissions problem
+	resp, err := db.post("search/by_file_ids/", bytes.NewReader(data))
+	defer resp.Body.Close()
+	var body []byte
+	body, err = io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	type MetadataResponse struct {
+		Hits struct {
+			Hits []struct {
+				Type   string `json:"_type"`
+				Id     string `json:"_id"`
+				Source struct {
+					FilePath string `json:"file_path"`
+					FileName string `json:"file_name"`
+					FileSize int    `json:"file_size"`
+					MD5Sum   string `json:"md5sum"`
+					Metadata Metadata
+				} `json:"_source"`
+			} `json:"hits"`
+		} `json:"hits"`
+	}
+	var jdpResp MetadataResponse
+	err = json.Unmarshal(body, &jdpResp)
+	if err != nil {
+		return nil, err
+	}
+
+	// translate the response
+	resources := make([]frictionless.DataResource, len(strippedFileIds))
+	for i, md := range jdpResp.Hits.Hits {
+		if md.Id == "" { // permissions problem
 			return nil, &PermissionDeniedError{fileIds[i]}
 		}
-		resources[i] = frictionless.DataResource{
-			Id:     "JDP:" + jamoFile.Id,
-			Name:   dataResourceName(jamoFile.FileName),
-			Path:   filepath.Join(strings.TrimPrefix(jamoFile.FilePath, filePathPrefix), jamoFile.FileName),
-			Format: jamoFile.Metadata.FileFormat,
-			Bytes:  jamoFile.FileSize,
-			Hash:   jamoFile.MD5Sum,
+		index, found := indexForId[md.Id]
+		if !found {
+			return nil, &FileIdNotFoundError{fileIds[i]}
 		}
-		if resources[i].Path == "" || resources[i].Path == "/" { // permissions probem
-			return nil, &PermissionDeniedError{fileIds[i]}
+		resources[index] = frictionless.DataResource{
+			Id:     "JDP:" + md.Id,
+			Name:   dataResourceName(md.Source.FileName),
+			Path:   filepath.Join(strings.TrimPrefix(md.Source.FilePath, filePathPrefix), md.Source.FileName),
+			Bytes:  md.Source.FileSize,
+			Hash:   md.Source.MD5Sum,
+			Credit: creditFromIdAndMetadata("JDP:"+md.Id, md.Source.Metadata),
+		}
+		if resources[index].Path == "" || resources[index].Path == "/" { // permissions probem
+			return nil, &PermissionDeniedError{fileIds[index]}
 		}
 
 		// fill in holes where we can and patch up discrepancies
-		if resources[i].Format == "" {
-			resources[i].Format = formatFromFileName(resources[i].Path)
-		} else if resources[i].Format == "txt" {
-			resources[i].Format = "text"
-		}
-		resources[i].MediaType = mimeTypeFromFormatAndTypes(resources[i].Format, []string{})
+		// FIXME: we don't retrieve hits.hits._source.file_type because it can be
+		// FIXME: either a string or an array of strings, and I'm just trying for a
+		// FIXME: solution
+		resources[index].Format = formatFromFileName(resources[index].Path)
+		resources[index].MediaType = mimeTypeFromFormatAndTypes(resources[index].Format, []string{})
 		// fill in credit metadata
-		resources[i].Credit = credit.CreditMetadata{
-			Identifier:   resources[i].Id,
+		resources[index].Credit = credit.CreditMetadata{
+			Identifier:   resources[index].Id,
 			ResourceType: "dataset",
 		}
 	}

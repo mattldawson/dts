@@ -90,7 +90,7 @@ type Metadata struct {
 		DOI string `json:"doi"`
 	} `json:"proposal"`
 	// status indicating whether data is "Restricted" or "Unrestricted"
-	DataUtilizationЅtatus string `json:"data_utilization_status"`
+	//DataUtilizationЅtatus string `json:"data_utilization_status"`
 	// GOLD-related metadata
 	GoldData struct {
 		// stamp ID

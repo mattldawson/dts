@@ -4,6 +4,10 @@ package jdp
 // to interact with JAMO to fill in some holes in required features.
 // For information about JAMO, see
 // https://docs.jgi.doe.gov/pages/viewpage.action?pageId=65897565
+//
+// This code is not currently in use, having been replaced by a JDP metadata
+// endpoint. I'm keeping it around in case we need it for other partners like
+// NMDC and ESS-DIVE who also use JAMO.
 
 import (
 	"bytes"

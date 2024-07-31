@@ -31,7 +31,6 @@ import (
 	"net/url"
 	"path/filepath"
 	"strings"
-	//"time"
 
 	"github.com/google/uuid"
 
@@ -583,6 +582,8 @@ func (ep *Endpoint) Cancel(id uuid.UUID) error {
 	}
 	resource := fmt.Sprintf("task/%s/cancel", id.String())
 	_, err := ep.post(resource, nil) // can take up to 10 ѕeconds!
+	// FIXME: if this ^^^ becomes an issue, we can dispatch the POST to a
+	// FIXME: persistent goroutine to handle the cancellation
 	if err != nil {
 		if globusError, ok := err.(*GlobusError); ok {
 			switch globusError.Code {

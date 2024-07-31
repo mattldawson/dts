@@ -34,6 +34,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/google/uuid"
 
@@ -243,36 +244,40 @@ func creditFromIdAndMetadata(id string, md Metadata) credit.CreditMetadata {
 }
 
 // creates a Frictionless DataResource-savvy name for a file:
-// * the filename is down-cased
-// * all periods are replaced with dashes
-// * if needed for uniqueness, a number suffix is added
-var dataResourceNameExists_ map[string]bool = make(map[string]bool)
-
+// * the name consists of lower case characters plus '.', '-', and '_'
+// * all forbidden characters encountered in the filename are removed
+// * a number suffix is added if needed to make the name unique
 func dataResourceName(filename string) string {
 	name := strings.ToLower(filename)
+
+	// remove any file suffix
 	lastDot := strings.LastIndex(name, ".")
 	if lastDot != -1 {
 		name = name[:lastDot]
 	}
+
+	// replace sequences of invalid characters with '_'
 	for {
-		if _, alreadyExists := dataResourceNameExists_[name]; alreadyExists {
-			// look for a numeric suffix after '-'
-			lastDash := strings.LastIndex(name, "-")
-			if lastDash == -1 { // no suffix, can just add "-1"
-				name += "-1"
+		isInvalid := func(c rune) bool {
+			return !unicode.IsLetter(c) && !unicode.IsDigit(c) && c != '_' && c != '-' && c != '.'
+		}
+		start := strings.IndexFunc(name, isInvalid)
+		if start >= 0 {
+			nameRunes := []rune(name)
+			end := start + 1
+			for end < len(name) && isInvalid(nameRunes[end]) {
+				end++
+			}
+			if end < len(name) {
+				name = name[:start] + string('_') + name[end+1:]
 			} else {
-				suffix := name[lastDash+1:]
-				num, err := strconv.Atoi(suffix)
-				if err != nil { // not a number! Can add "-1"
-					name += "-1"
-				} else { // a number, so add 1 to it and replace the suffix
-					name = name[:lastDash+1] + fmt.Sprintf("-%d", num+1)
-				}
+				name = name[:start] + string('_')
 			}
 		} else {
 			break
 		}
 	}
+
 	return name
 }
 
@@ -692,11 +697,6 @@ func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, er
 		// FIXME: solution
 		resources[index].Format = formatFromFileName(resources[index].Path)
 		resources[index].MediaType = mimeTypeFromFormatAndTypes(resources[index].Format, []string{})
-		// fill in credit metadata
-		resources[index].Credit = credit.CreditMetadata{
-			Identifier:   resources[index].Id,
-			ResourceType: "dataset",
-		}
 	}
 	return resources, err
 }

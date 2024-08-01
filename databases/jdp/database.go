@@ -275,8 +275,7 @@ func dataResourceFromFile(file File) frictionless.DataResource {
 			ResourceType: "dataset",
 			Titles: []credit.Title{
 				{
-					Language: "English",
-					Title:    filePath,
+					Title: filePath,
 				},
 			},
 			Dates: []credit.EventDate{
@@ -294,7 +293,7 @@ func dataResourceFromFile(file File) frictionless.DataResource {
 				},
 			},
 			Publisher: credit.Organization{
-				OrganizationId:   "JGI:JDP",
+				OrganizationId:   "ROR:04xm1d337",
 				OrganizationName: "Joint Genome Institute",
 			},
 			RelatedIdentifiers: []credit.PermanentID{
@@ -706,72 +705,18 @@ func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, er
 		if !found {
 			return nil, &FileIdNotFoundError{fileIds[i]}
 		}
-		id := "JDP:" + md.Id
-		filePath := filepath.Join(strings.TrimPrefix(md.Source.FilePath, filePathPrefix), md.Source.FileName)
-		pi := md.Source.Metadata.Proposal.PI
-		resources[index] = frictionless.DataResource{
-			Id:    id,
-			Name:  dataResourceName(md.Source.FileName),
-			Path:  filepath.Join(strings.TrimPrefix(md.Source.FilePath, filePathPrefix), md.Source.FileName),
-			Bytes: md.Source.FileSize,
-			Hash:  md.Source.MD5Sum,
-			Credit: credit.CreditMetadata{
-				Identifier:   id,
-				ResourceType: "dataset",
-				Titles: []credit.Title{
-					{
-						Language: "English",
-						Title:    filePath,
-					},
-				},
-				Dates: []credit.EventDate{
-					{
-						Date:  md.Source.Date,
-						Event: "Created",
-					},
-					{
-						Date:  md.Source.AddedDate,
-						Event: "Accepted",
-					},
-					{
-						Date:  md.Source.ModifiedDate,
-						Event: "Updated",
-					},
-				},
-				Publisher: credit.Organization{
-					OrganizationId:   "JGI:JDP",
-					OrganizationName: "Joint Genome Institute",
-				},
-				RelatedIdentifiers: []credit.PermanentID{
-					{
-						Id:               md.Source.Metadata.Proposal.DOI,
-						Description:      "Proposal DOI",
-						RelationshipType: "IsCitedBy",
-					},
-					{
-						Id:               md.Source.Metadata.Proposal.AwardDOI,
-						Description:      "Awarded proposal DOI",
-						RelationshipType: "IsCitedBy",
-					},
-				},
-				Contributors: []credit.Contributor{
-					{
-						ContributorType: "Person",
-						// ContributorId: nothing yet
-						Name:       strings.TrimSpace(fmt.Sprintf("%s, %s %s", pi.LastName, pi.FirstName, pi.MiddleName)),
-						GivenName:  strings.TrimSpace(fmt.Sprintf("%s %s", pi.FirstName, pi.MiddleName)),
-						FamilyName: strings.TrimSpace(pi.LastName),
-						Affiliations: []credit.Organization{
-							{
-								OrganizationName: pi.Institution,
-							},
-						},
-						ContributorRoles: "PI",
-					},
-				},
-				Version: md.Source.Date,
-			},
+		file := File{
+			Id:           md.Id,
+			Name:         md.Source.FileName,
+			Path:         md.Source.FilePath,
+			Date:         md.Source.Date,
+			AddedDate:    md.Source.AddedDate,
+			ModifiedDate: md.Source.ModifiedDate,
+			Size:         md.Source.FileSize,
+			Metadata:     md.Source.Metadata,
+			MD5Sum:       md.Source.MD5Sum,
 		}
+		resources[index] = dataResourceFromFile(file)
 		if resources[index].Path == "" || resources[index].Path == "/" { // permissions probem
 			return nil, &PermissionDeniedError{fileIds[index]}
 		}

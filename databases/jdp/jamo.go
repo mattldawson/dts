@@ -4,6 +4,10 @@ package jdp
 // to interact with JAMO to fill in some holes in required features.
 // For information about JAMO, see
 // https://docs.jgi.doe.gov/pages/viewpage.action?pageId=65897565
+//
+// This code is not currently in use, having been replaced by a JDP metadata
+// endpoint. I'm keeping it around in case we need it for other partners like
+// NMDC and ESS-DIVE who also use JAMO.
 
 import (
 	"bytes"
@@ -131,7 +135,7 @@ func queryJamo(fileIds []string) ([]jamoFileRecord, error) {
 	// sift file results into place and fetch remaining records
 	records := make([]jamoFileRecord, len(fileIds))
 	for err == nil {
-		for i := results.Start - 1; i < results.End; i++ {
+		for i := 0; i < results.End-results.Start+1; i++ {
 			if index, found := indexForFileId[results.Records[i].Id]; found {
 				records[index] = results.Records[i]
 			} else {

@@ -5,6 +5,7 @@
 service:
   port: 8080                 # port on which the service listenѕ
   max_connections: 100       # maximum number of incoming HTTP connections
+  max_payload_size: 100      # limit (if any) on DTS payload size (gigabytes)
   poll_interval:   60000     # interval at which DTS checks transfer statuses (ms)
   endpoint: globus-local     # name of endpoint used for manifest generation
   data_dir: /path/to/dir     # directory DTS uses for internal data storage

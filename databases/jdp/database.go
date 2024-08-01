@@ -31,8 +31,10 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/google/uuid"
 
@@ -47,6 +49,25 @@ const (
 	jdpBaseURL     = "https://files.jgi.doe.gov/"
 	filePathPrefix = "/global/dna/dm_archive/" // directory containing JDP files
 )
+
+// this error type is returned when a file is requested for which the requester
+// does not have permission
+type PermissionDeniedError struct {
+	fileId string
+}
+
+func (e PermissionDeniedError) Error() string {
+	return fmt.Sprintf("Can't access file %s: permission denied.", e.fileId)
+}
+
+// this error type is returned when a file is requested and is not found
+type FileIdNotFoundError struct {
+	fileId string
+}
+
+func (e FileIdNotFoundError) Error() string {
+	return fmt.Sprintf("Can't access file %s: not found.", e.fileId)
+}
 
 // a mapping from file suffixes to format labels
 var suffixToFormat = map[string]string{
@@ -115,7 +136,7 @@ func formatFromFileName(fileName string) string {
 	// make a list of the supported suffixes if we haven't yet
 	if supportedSuffixes == nil {
 		supportedSuffixes = make([]string, 0)
-		for suffix, _ := range suffixToFormat {
+		for suffix := range suffixToFormat {
 			supportedSuffixes = append(supportedSuffixes, suffix)
 		}
 	}
@@ -198,14 +219,14 @@ func creditFromIdAndMetadata(id string, md Metadata) credit.CreditMetadata {
 	}
 
 	crd.Dates = []credit.EventDate{
-		credit.EventDate{
+		{
 			Date:  md.Proposal.DateApproved,
 			Event: "approval",
 		},
 	}
 	pi := md.Proposal.PI
 	crd.Contributors = []credit.Contributor{
-		credit.Contributor{
+		{
 			ContributorType: "Person",
 			// ContributorId: nothing yet
 			Name:       strings.TrimSpace(fmt.Sprintf("%s, %s %s", pi.LastName, pi.FirstName, pi.MiddleName)),
@@ -222,14 +243,42 @@ func creditFromIdAndMetadata(id string, md Metadata) credit.CreditMetadata {
 	return crd
 }
 
-func trimFileSuffix(filename string) string {
-	for _, suffix := range supportedSuffixes {
-		trimmedFilename, trimmed := strings.CutSuffix(filename, "."+suffix)
-		if trimmed {
-			return trimmedFilename
+// creates a Frictionless DataResource-savvy name for a file:
+// * the name consists of lower case characters plus '.', '-', and '_'
+// * all forbidden characters encountered in the filename are removed
+// * a number suffix is added if needed to make the name unique
+func dataResourceName(filename string) string {
+	name := strings.ToLower(filename)
+
+	// remove any file suffix
+	lastDot := strings.LastIndex(name, ".")
+	if lastDot != -1 {
+		name = name[:lastDot]
+	}
+
+	// replace sequences of invalid characters with '_'
+	for {
+		isInvalid := func(c rune) bool {
+			return !unicode.IsLetter(c) && !unicode.IsDigit(c) && c != '_' && c != '-' && c != '.'
+		}
+		start := strings.IndexFunc(name, isInvalid)
+		if start >= 0 {
+			nameRunes := []rune(name)
+			end := start + 1
+			for end < len(name) && isInvalid(nameRunes[end]) {
+				end++
+			}
+			if end < len(name) {
+				name = name[:start] + string('_') + name[end+1:]
+			} else {
+				name = name[:start] + string('_')
+			}
+		} else {
+			break
 		}
 	}
-	return filename
+
+	return name
 }
 
 // creates a DataResource from a File
@@ -239,16 +288,13 @@ func dataResourceFromFile(file File) frictionless.DataResource {
 	fileTypes := fileTypesFromFile(file)
 	sources := sourcesFromMetadata(file.Metadata)
 
-	// the resource name is the filename with any suffix stripped off
-	name := trimFileSuffix(file.Name)
-
 	// we use relative file paths in accordance with the Frictionless
 	// Data Resource specification
 	filePath := filepath.Join(strings.TrimPrefix(file.Path, filePathPrefix), file.Name)
 
 	return frictionless.DataResource{
 		Id:        id,
-		Name:      name,
+		Name:      dataResourceName(file.Name),
 		Path:      filePath,
 		Format:    format,
 		MediaType: mimeTypeFromFormatAndTypes(format, fileTypes),
@@ -352,6 +398,14 @@ func (db *Database) filesFromSearch(params url.Values) (databases.SearchResults,
 	var results databases.SearchResults
 
 	idEncountered := make(map[string]bool) // keep track of duplicates
+
+	// extra any requested "extra" metadata fields (and scrub them from params)
+	var extraFields []string
+	if params.Has("extra") {
+		extraFields = strings.Split(params.Get("extra"), ",")
+		params.Del("extra")
+	}
+
 	resp, err := db.get("search", params)
 	if err != nil {
 		return results, err
@@ -364,6 +418,7 @@ func (db *Database) filesFromSearch(params url.Values) (databases.SearchResults,
 	}
 	type JDPResults struct {
 		Organisms []struct {
+			Id    string `json:"id"`
 			Files []File `json:"files"`
 		} `json:"organisms"`
 	}
@@ -377,6 +432,26 @@ func (db *Database) filesFromSearch(params url.Values) (databases.SearchResults,
 		resources := make([]frictionless.DataResource, 0)
 		for _, file := range org.Files {
 			res := dataResourceFromFile(file)
+
+			// add any requested additional metadata
+			if extraFields != nil {
+				extras := "{"
+				for i, field := range extraFields {
+					if i > 0 {
+						extras += ", "
+					}
+					switch field {
+					case "project_id":
+						extras += fmt.Sprintf(`"project_id": "%s"`, org.Id)
+					case "img_taxon_oid":
+						extras += fmt.Sprintf(`"img_taxon_oid": %d`, file.Metadata.IMG.TaxonOID)
+					}
+				}
+				extras += "}"
+				res.Extra = json.RawMessage(extras)
+			}
+
+			// add the resource to our results if it's not there already
 			if _, encountered := idEncountered[res.Id]; !encountered {
 				resources = append(resources, res)
 				idEncountered[res.Id] = true
@@ -408,6 +483,115 @@ func pageNumberAndSize(offset, maxNum int) (int, int) {
 	return pageNumber, pageSize
 }
 
+func (db Database) SpecificSearchParameters() map[string]interface{} {
+	return map[string]interface{}{
+		// see https://files.jgi.doe.gov/apidoc/#/GET/search_list
+		"d": []string{"asc", "desc"}, // sort direction (ascending/descending)
+		"f": []string{"ssr", "biosample", "project_id", "library", // search specific field
+			"img_taxon_oid"},
+		"include_private_data": []int{0, 1},                                             // flag to include private data
+		"s":                    []string{"name", "id", "title", "kingdom", "score.avg"}, // sort order
+		"extra":                []string{"img_taxon_oid", "project_id"},                 // list of requested extra fields
+	}
+}
+
+// checks JDP-specific search parameters and adds them to the given URL values
+func (db Database) addSpecificSearchParameters(params map[string]json.RawMessage, p *url.Values) error {
+	paramSpec := db.SpecificSearchParameters()
+	for name, jsonValue := range params {
+		switch name {
+		case "f": // field-specific search
+			var value string
+			err := json.Unmarshal(jsonValue, &value)
+			if err != nil {
+				return &databases.InvalidSearchParameter{
+					Database: "JDP",
+					Message:  "Invalid search field given (must be string)",
+				}
+			}
+			acceptedValues := paramSpec["f"].([]string)
+			if slices.Contains(acceptedValues, value) {
+				p.Add(name, value)
+			} else {
+				return &databases.InvalidSearchParameter{
+					Database: "JDP",
+					Message:  fmt.Sprintf("Invalid search field given: %s", value),
+				}
+			}
+		case "s": // sort order
+			var value string
+			err := json.Unmarshal(jsonValue, &value)
+			if err != nil {
+				return &databases.InvalidSearchParameter{
+					Database: "JDP",
+					Message:  "Invalid JDP sort order given (must be string)",
+				}
+			}
+			acceptedValues := paramSpec["s"].([]string)
+			if slices.Contains(acceptedValues, value) {
+				p.Add(name, value)
+			} else {
+				return &databases.InvalidSearchParameter{
+					Database: "JDP",
+					Message:  fmt.Sprintf("Invalid JDP sort order: %s", value),
+				}
+			}
+		case "d": // sort direction
+			var value string
+			err := json.Unmarshal(jsonValue, &value)
+			if err != nil {
+				return &databases.InvalidSearchParameter{
+					Database: "JDP",
+					Message:  "Invalid JDP sort direction given (must be string)",
+				}
+			}
+			acceptedValues := paramSpec["d"].([]string)
+			if slices.Contains(acceptedValues, value) {
+				p.Add(name, value)
+			} else {
+				return &databases.InvalidSearchParameter{
+					Database: "JDP",
+					Message:  fmt.Sprintf("Invalid JDP sort direction: %s", value),
+				}
+			}
+		case "include_private_data": // search for private data
+			var value int
+			err := json.Unmarshal(jsonValue, &value)
+			if err != nil || (value != 0 && value != 1) {
+				return &databases.InvalidSearchParameter{
+					Database: "JDP",
+					Message:  "Invalid flag given for include_private_data (must be 0 or 1)",
+				}
+			}
+			p.Add(name, fmt.Sprintf("%d", value))
+		case "extra": // comma-separated additional fields requested
+			var value string
+			err := json.Unmarshal(jsonValue, &value)
+			if err != nil {
+				return &databases.InvalidSearchParameter{
+					Database: "JDP",
+					Message:  "Invalid JDP requested extra field given (must be comma-delimited string)",
+				}
+			}
+			acceptedValues := paramSpec["extra"].([]string)
+			if slices.Contains(acceptedValues, value) {
+				p.Add(name, value)
+			} else {
+				return &databases.InvalidSearchParameter{
+					Database: "JDP",
+					Message:  fmt.Sprintf("Invalid requested extra field: %s", value),
+				}
+			}
+		default:
+			return &databases.InvalidSearchParameter{
+				Database: "JDP",
+				Message:  fmt.Sprintf("Unrecognized JDP-specific search parameter: %s", name),
+			}
+		}
+	}
+	return nil
+}
+
 func (db *Database) Search(params databases.SearchParameters) (databases.SearchResults, error) {
 	// we assume the JDP interface for ElasticSearch queries
 	// (see https://files.jgi.doe.gov/apidoc/)
@@ -415,49 +599,104 @@ func (db *Database) Search(params databases.SearchParameters) (databases.SearchR
 
 	p := url.Values{}
 	p.Add("q", params.Query)
+	if params.Status == databases.SearchFileStatusStaged {
+		p.Add(`ff[file_status]`, "RESTORED")
+	} else if params.Status == databases.SearchFileStatusUnstaged {
+		p.Add(`ff[file_status]`, "PURGED")
+	}
 	p.Add("p", strconv.Itoa(pageNumber))
 	p.Add("x", strconv.Itoa(pageSize))
+
+	if params.Specific != nil {
+		err := db.addSpecificSearchParameters(params.Specific, &p)
+		if err != nil {
+			return databases.SearchResults{}, err
+		}
+	}
 
 	return db.filesFromSearch(p)
 }
 
 func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, error) {
-	// For the moment, this implementation is a stopgap to save the JDP team
-	// from implementing additional functionality for the DTS. Here we query JAMO
-	// directly for information about files that correspond to the given set of
-	// file IDs.
+	// strip the "JDP:" prefix from our files and create a mapping from IDs to
+	// their original order so we can hand back metadata accordingly
 	strippedFileIds := make([]string, len(fileIds))
+	indexForId := make(map[string]int)
 	for i, fileId := range fileIds {
 		strippedFileIds[i] = strings.TrimPrefix(fileId, "JDP:")
+		indexForId[strippedFileIds[i]] = i
 	}
-	jamoFiles, err := queryJamo(strippedFileIds)
+
+	type MetadataRequest struct {
+		Ids                []string `json:"ids"`
+		Aggregations       bool     `json:"aggregations"`
+		IncludePrivateData bool     `json:"include_private_data"`
+	}
+	data, err := json.Marshal(MetadataRequest{
+		Ids:                strippedFileIds,
+		Aggregations:       false,
+		IncludePrivateData: true,
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	// translate from JAMOese to Frictionless-ese
-	resources := make([]frictionless.DataResource, len(jamoFiles))
-	for i, jamoFile := range jamoFiles {
-		resources[i] = frictionless.DataResource{
-			Id:     "JDP:" + jamoFile.Id,
-			Name:   trimFileSuffix(jamoFile.FileName),
-			Path:   filepath.Join(strings.TrimPrefix(jamoFile.FilePath, filePathPrefix), jamoFile.FileName),
-			Format: jamoFile.Metadata.FileFormat,
-			Bytes:  jamoFile.FileSize,
-			Hash:   jamoFile.MD5Sum,
+	resp, err := db.post("search/by_file_ids/", bytes.NewReader(data))
+	defer resp.Body.Close()
+	var body []byte
+	body, err = io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	type MetadataResponse struct {
+		Hits struct {
+			Hits []struct {
+				Type   string `json:"_type"`
+				Id     string `json:"_id"`
+				Source struct {
+					FilePath string `json:"file_path"`
+					FileName string `json:"file_name"`
+					FileSize int    `json:"file_size"`
+					MD5Sum   string `json:"md5sum"`
+					Metadata Metadata
+				} `json:"_source"`
+			} `json:"hits"`
+		} `json:"hits"`
+	}
+	var jdpResp MetadataResponse
+	err = json.Unmarshal(body, &jdpResp)
+	if err != nil {
+		return nil, err
+	}
+
+	// translate the response
+	resources := make([]frictionless.DataResource, len(strippedFileIds))
+	for i, md := range jdpResp.Hits.Hits {
+		if md.Id == "" { // permissions problem
+			return nil, &PermissionDeniedError{fileIds[i]}
 		}
+		index, found := indexForId[md.Id]
+		if !found {
+			return nil, &FileIdNotFoundError{fileIds[i]}
+		}
+		resources[index] = frictionless.DataResource{
+			Id:     "JDP:" + md.Id,
+			Name:   dataResourceName(md.Source.FileName),
+			Path:   filepath.Join(strings.TrimPrefix(md.Source.FilePath, filePathPrefix), md.Source.FileName),
+			Bytes:  md.Source.FileSize,
+			Hash:   md.Source.MD5Sum,
+			Credit: creditFromIdAndMetadata("JDP:"+md.Id, md.Source.Metadata),
+		}
+		if resources[index].Path == "" || resources[index].Path == "/" { // permissions probem
+			return nil, &PermissionDeniedError{fileIds[index]}
+		}
+
 		// fill in holes where we can and patch up discrepancies
-		if resources[i].Format == "" {
-			resources[i].Format = formatFromFileName(resources[i].Path)
-		} else if resources[i].Format == "txt" {
-			resources[i].Format = "text"
-		}
-		resources[i].MediaType = mimeTypeFromFormatAndTypes(resources[i].Format, []string{})
-		// fill in credit metadata
-		resources[i].Credit = credit.CreditMetadata{
-			Identifier:   resources[i].Id,
-			ResourceType: "dataset",
-		}
+		// FIXME: we don't retrieve hits.hits._source.file_type because it can be
+		// FIXME: either a string or an array of strings, and I'm just trying for a
+		// FIXME: solution
+		resources[index].Format = formatFromFileName(resources[index].Path)
+		resources[index].MediaType = mimeTypeFromFormatAndTypes(resources[index].Format, []string{})
 	}
 	return resources, err
 }
@@ -467,9 +706,10 @@ func (db *Database) StageFiles(fileIds []string) (uuid.UUID, error) {
 
 	// construct a POST request to restore archived files with the given IDs
 	type RestoreRequest struct {
-		Ids        []string `json:"ids"`
-		SendEmail  bool     `json:"send_email"`
-		ApiVersion string   `json:"api_version"`
+		Ids                []string `json:"ids"`
+		SendEmail          bool     `json:"send_email"`
+		ApiVersion         string   `json:"api_version"`
+		IncludePrivateData int      `json:"include_private_data"`
 	}
 
 	// strip "JDP:" off the file IDs (and remove those without this prefix)
@@ -481,15 +721,18 @@ func (db *Database) StageFiles(fileIds []string) (uuid.UUID, error) {
 	}
 
 	data, err := json.Marshal(RestoreRequest{
-		Ids:        fileIdsWithoutPrefix,
-		SendEmail:  false,
-		ApiVersion: "2",
+		Ids:                fileIdsWithoutPrefix,
+		SendEmail:          false,
+		ApiVersion:         "2",
+		IncludePrivateData: 1, // we need this just in case!
 	})
 	if err != nil {
 		return xferId, err
 	}
 
-	resp, err := db.post("request_archived_files", bytes.NewReader(data))
+	// NOTE: The slash in the resource is all-important for POST requests to
+	// NOTE: the JDP!!
+	resp, err := db.post("request_archived_files/", bytes.NewReader(data))
 	if err != nil {
 		return xferId, err
 	}
@@ -508,6 +751,8 @@ func (db *Database) StageFiles(fileIds []string) (uuid.UUID, error) {
 	if err != nil {
 		return xferId, err
 	}
+	slog.Debug(fmt.Sprintf("Requested %d archived files from JDP (request ID: %d)",
+		len(fileIds), jdpResp.RequestId))
 	xferId = uuid.New()
 	db.StagingIds[xferId] = jdpResp.RequestId
 	return xferId, err
@@ -527,7 +772,7 @@ func (db *Database) StagingStatus(id uuid.UUID) (databases.StagingStatus, error)
 			return databases.StagingStatusUnknown, err
 		}
 		type JDPResult struct {
-			Status string `json:"status"` // "ready" or not
+			Status string `json:"status"` // "new", "pending", or "ready"
 		}
 		var jdpResult JDPResult
 		err = json.Unmarshal(body, &jdpResult)
@@ -535,7 +780,9 @@ func (db *Database) StagingStatus(id uuid.UUID) (databases.StagingStatus, error)
 			return databases.StagingStatusUnknown, err
 		}
 		statusForString := map[string]databases.StagingStatus{
-			"ready": databases.StagingStatusSucceeded,
+			"new":     databases.StagingStatusActive,
+			"pending": databases.StagingStatusActive,
+			"ready":   databases.StagingStatusSucceeded,
 		}
 		if status, ok := statusForString[jdpResult.Status]; ok {
 			return status, nil

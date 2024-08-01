@@ -47,8 +47,6 @@ type File struct {
 	PurgeDate string `json:"dt_to_purge"`
 	// file origination date
 	Date string `json:"file_date"`
-	// integer ID representing the status of the file
-	StatusId int `json:"file_status_id"`
 	// string describing the status of the file
 	Status string `json:"file_status"`
 	// type (or list of types) corresponding to this file
@@ -91,8 +89,6 @@ type Metadata struct {
 		// proposal DOI
 		DOI string `json:"doi"`
 	} `json:"proposal"`
-	// status indicating whether data is "Restricted" or "Unrestricted"
-	DataUtilizationЅtatus string `json:"data_utilization_status"`
 	// GOLD-related metadata
 	GoldData struct {
 		// stamp ID
@@ -102,6 +98,9 @@ type Metadata struct {
 		// display name
 		DisplayName string `json:"display_name"`
 	} `json:"gold_data"`
+	IMG struct {
+		TaxonOID int `json:"taxon_oid"`
+	} `json:"img,omitempty"`
 	// sequencing project metadata
 	SequencingProject struct {
 		// name of scientific program to which project belongs

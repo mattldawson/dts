@@ -71,6 +71,10 @@ databases:
     name: Destination Test Database 2
     organization: Fabulous Destinations, Inc.
     endpoint: destination-endpoint2
+  jdp: # for database-specific search parameters test
+    name: JGI Data Portal
+    organization: Joint Genome Institute
+    endpoint: globus-jdp
 endpoints:
   local-endpoint:
     name: Local endpoint
@@ -278,7 +282,7 @@ func TestQueryDatabases(t *testing.T) {
 	var dbs []DatabaseResponse
 	err = json.Unmarshal(respBody, &dbs)
 	assert.Nil(err)
-	assert.Equal(3, len(dbs))
+	assert.Equal(4, len(dbs))
 	slices.SortFunc(dbs, func(a, b DatabaseResponse) int { // sort alphabetically
 		if a.Id < b.Id {
 			return -1
@@ -297,9 +301,13 @@ func TestQueryDatabases(t *testing.T) {
 	assert.Equal("Destination Test Database 2", dbs[1].Name)
 	assert.Equal("Fabulous Destinations, Inc.", dbs[1].Organization)
 
-	assert.Equal("source", dbs[2].Id)
-	assert.Equal("Source Test Database", dbs[2].Name)
-	assert.Equal("The Source Company", dbs[2].Organization)
+	assert.Equal("jdp", dbs[2].Id)
+	assert.Equal("JGI Data Portal", dbs[2].Name)
+	assert.Equal("Joint Genome Institute", dbs[2].Organization)
+
+	assert.Equal("source", dbs[3].Id)
+	assert.Equal("Source Test Database", dbs[3].Name)
+	assert.Equal("The Source Company", dbs[3].Organization)
 }
 
 // queries a specific (valid) database
@@ -328,6 +336,62 @@ func TestQueryInvalidDatabase(t *testing.T) {
 	resp, err := get(baseUrl + apiPrefix + "databases/nonexistentdb")
 	assert.Nil(err)
 	assert.Equal(http.StatusNotFound, resp.StatusCode)
+}
+
+// queries search parameters specific to the JDP database
+func TestQueryJDPDatabaseSearchParameters(t *testing.T) {
+	assert := assert.New(t)
+
+	resp, err := get(baseUrl + apiPrefix + "databases/jdp/search-parameters")
+	assert.Nil(err)
+
+	respBody, err := io.ReadAll(resp.Body)
+	assert.Nil(err)
+	defer resp.Body.Close()
+
+	// all JDP-specific search parameters are selectable string values
+	type ArraySearchParam struct {
+		Type  string      `json:"type"`
+		Value interface{} `json:"value"`
+	}
+	var searchParams map[string]ArraySearchParam
+	err = json.Unmarshal(respBody, &searchParams)
+	assert.Nil(err)
+
+	AssertSearchParamsEqual := func(param ArraySearchParam, acceptableValues interface{}) {
+		availableValues := param.Value
+		switch availValues := availableValues.(type) {
+		case []string:
+			accValues := acceptableValues.([]string)
+			slices.Sort(availValues)
+			slices.Sort(accValues)
+			assert.Equal(accValues, availValues)
+		case []int:
+			accValues := acceptableValues.([]int)
+			slices.Sort(availValues)
+			slices.Sort(accValues)
+			assert.Equal(accValues, availValues)
+		}
+	}
+
+	// "d": sort order
+	AssertSearchParamsEqual(searchParams["d"], []string{"asc", "desc"})
+
+	// "extra": extra metadata to include in payload
+	AssertSearchParamsEqual(searchParams["extra"], []string{"img_taxon_oid", "project_id"})
+
+	// "f": specific fields to search
+	AssertSearchParamsEqual(searchParams["f"],
+		[]string{"biosample", "img_taxon_oid", "project_id",
+			"library", "ssr"})
+
+	// "include_private_data": search private data in addition to public
+	AssertSearchParamsEqual(searchParams["include_private_data"], []int{0, 1})
+
+	// "s": sort order
+	AssertSearchParamsEqual(searchParams["s"],
+		[]string{"name", "id", "title", "kingdom",
+			"score.avg"})
 }
 
 // searches a specific database for files matching a simple query
@@ -401,11 +465,10 @@ func TestCreateTransfer(t *testing.T) {
 	assert.True(status.Status == "succeeded")
 
 	// check for the files in the payload
-	// FIXME: the files are written to the destination endpoint's root in a
-	// FIXME: user-specific and task-specific folder. We need to formalize this.
 	username := testUser
+	destinationFolder := filepath.Join(destination1Root, username, "dts-"+xferId.String())
 	for _, file := range []string{"file1.txt", "file2.txt", "file3.txt", "manifest.json"} {
-		_, err := os.Stat(filepath.Join(destination1Root, username, xferId.String(), file))
+		_, err := os.Stat(filepath.Join(destinationFolder, file))
 		assert.Nil(err)
 	}
 }

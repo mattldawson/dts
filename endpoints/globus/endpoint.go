@@ -31,7 +31,6 @@ import (
 	"net/url"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 
@@ -270,6 +269,7 @@ func (ep *Endpoint) post(resource string, body io.Reader) ([]byte, error) {
 		return nil, err
 	}
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", ep.AccessToken))
+	req.Header.Set("Content-Type", "application/json")
 
 	return ep.sendRequest(req)
 }
@@ -299,9 +299,13 @@ func (ep *Endpoint) FilesStaged(files []frictionless.DataResource) (bool, error)
 		resource := fmt.Sprintf("operation/endpoint/%s/ls", ep.Id.String())
 		body, err := ep.get(resource, values)
 		if err != nil {
-			// it's okay if the directory doesn't exist -- it might need to be staged
 			globusErr := err.(*GlobusError)
 			if globusErr.Code == "ClientError.NotFound" {
+				// it's okay if the directory doesn't exist -- it might need to be staged
+				return false, nil
+			} else if globusErr.Code == "ExternalError.DirListingFailed.LoginFailed" {
+				// unfortunately, Globus throws this error when there's a network hiccup,
+				// so we can't take it seriously as an actual error condition
 				return false, nil
 			}
 			return false, err
@@ -454,23 +458,17 @@ func (ep *Endpoint) submitTransfer(destination endpoints.Endpoint,
 		return xferId, err
 	}
 	xferId = gResp.TaskId
+	slog.Debug(fmt.Sprintf("Initiated Globus transfer task %s (%d files)",
+		xferId.String(), len(files)))
 	return xferId, nil
 }
 
 func (ep *Endpoint) Transfer(destination endpoints.Endpoint, files []endpoints.FileTransfer) (uuid.UUID, error) {
-	// check that all requested files are staged on this endpoint
-	// (Globus does not perform this check by itself)
-	requestedFiles := make([]frictionless.DataResource, len(files))
-	for i, file := range files {
-		requestedFiles[i].Path = file.SourcePath // only the Path field is required
-	}
-	staged, err := ep.FilesStaged(requestedFiles)
-	if err != nil {
-		return uuid.UUID{}, err
-	}
-	if !staged {
-		return uuid.UUID{}, fmt.Errorf("The files requested for transfer are not yet staged.")
-	}
+	// NOTE: We don't check whether files are staged here, because the endpoint
+	// NOTE: itself doesn't always have a reliable staging check (e.g. JDP's
+	// NOTE: private data is invisible to Globus directory listings).
+	// NOTE: Consequently, we assume that files are staged by the time this
+	// NOTE: function is called.
 
 	// obtain a submission ID
 	submissionId, err := ep.getSubmissionId()
@@ -574,25 +572,25 @@ func (ep *Endpoint) Cancel(id uuid.UUID) error {
 	// 3. "TaskComplete", indicating that the task is complete and not able to
 	//    be canceled.
 	//
-	// To avoid a 10-second wait, we simply issue a request asynchronously and
-	// settle for a "best-effort" execution, which (it seems to me) is just a less
-	// elaborate framing of what Globus gives us.
-
-	errChan := make(chan error, 1) // <-- captures immediately issued errors
-	go func() {
-		resource := fmt.Sprintf("task/%s/cancel", id.String())
-		_, err := ep.post(resource, nil) // can take up to 10 ѕeconds!
-		if err != nil {
-			errChan <- err
-			return
-		}
-		// no need to read the response--just close the error channel
-		close(errChan)
-	}()
-	select {
-	case err := <-errChan: // error received!
-		return err
-	case <-time.After(10 * time.Millisecond): // short timeout period
-		return nil
+	// We live with the 10-second wait for now, since our polling interval is
+	// large.
+	type CancellationResponse struct {
+		Code      string `json:"code"` // should be "Canceled"
+		Message   string `json:"message"`
+		RequestId string `json:"request_id"`
+		Resource  string `json:"resource"`
 	}
+	resource := fmt.Sprintf("task/%s/cancel", id.String())
+	_, err := ep.post(resource, nil) // can take up to 10 ѕeconds!
+	// FIXME: if this ^^^ becomes an issue, we can dispatch the POST to a
+	// FIXME: persistent goroutine to handle the cancellation
+	if err != nil {
+		if globusError, ok := err.(*GlobusError); ok {
+			switch globusError.Code {
+			case "Canceled", "CancelAccepted", "TaskComplete": // it worked!
+				err = nil
+			}
+		}
+	}
+	return err
 }

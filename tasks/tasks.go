@@ -68,16 +68,37 @@ const (
 // portions of a file transfer
 type taskType struct {
 	Id                  uuid.UUID      // task identifier
+	DestinationFolder   string         // folder path to which files are transferred
 	Orcid               string         // Orcid ID for user requesting transfer
 	Source, Destination string         // names of source and destination databases
 	FileIds             []string       // IDs of files within Source
 	Resources           []DataResource // Frictionless DataResources for files
+	PayloadSize         float64        // Size of payload (gigabytes)
 	Canceled            bool           // set if a cancellation request has been made
 	Staging, Transfer   uuid.NullUUID  // staging and file transfer UUIDs (if any)
 	Manifest            uuid.NullUUID  // manifest generation UUID (if any)
 	ManifestFile        string         // name of locally-created manifest file
 	Status              TransferStatus // status of file transfer operation
 	CompletionTime      time.Time      // time at which the transfer completed
+}
+
+// This error type is returned when a payload is requested that is too large.
+type PayloadTooLargeError struct {
+	size float64 // size of the requested payload in gigabytes
+}
+
+func (e PayloadTooLargeError) Error() string {
+	return fmt.Sprintf("Requested payload is too large: %g GB (limit is %g GB).",
+		e.size, config.Service.MaxPayloadSize)
+}
+
+// computes the size of a payload for a transfer task (in gigabytes)
+func payloadSize(resources []DataResource) float64 {
+	var size uint64
+	for _, resource := range resources {
+		size += uint64(resource.Bytes)
+	}
+	return float64(size) / float64(1024*1024*1024)
 }
 
 // starts a task going, initiating staging if needed
@@ -93,7 +114,13 @@ func (task *taskType) start() error {
 		return err
 	}
 
-	// are the files already staged?
+	// make sure the size of the payload doesn't exceed our specified limit
+	task.PayloadSize = payloadSize(task.Resources) // (in GB)
+	if task.PayloadSize > config.Service.MaxPayloadSize {
+		return &PayloadTooLargeError{size: task.PayloadSize}
+	}
+
+	// are the files already staged? (only works for public data)
 	sourceEndpoint, err := source.Endpoint()
 	if err != nil {
 		return err
@@ -163,9 +190,10 @@ func (task *taskType) beginTransfer() error {
 	if err != nil {
 		return err
 	}
+	task.DestinationFolder = filepath.Join(username, "dts-"+task.Id.String())
 	fileXfers := make([]FileTransfer, len(task.Resources))
 	for i, resource := range task.Resources {
-		destinationPath := filepath.Join(username, task.Id.String(), resource.Path)
+		destinationPath := filepath.Join(task.DestinationFolder, resource.Path)
 		fileXfers[i] = FileTransfer{
 			SourcePath:      resource.Path,
 			DestinationPath: destinationPath,
@@ -203,18 +231,21 @@ func (task *taskType) checkStaging() error {
 	if err != nil {
 		return err
 	}
-	sourceEndpoint, err := source.Endpoint()
+	// check with the database first to see whether the files are staged
+	stagingStatus, err := source.StagingStatus(task.Staging.UUID)
 	if err != nil {
 		return err
 	}
-	staged, err := sourceEndpoint.FilesStaged(task.Resources)
-	if err != nil {
-		return err
+
+	if stagingStatus == databases.StagingStatusSucceeded { // staged!
+		return task.beginTransfer() // move along
+	} else if stagingStatus == databases.StagingStatusFailed {
+		// staging failed, so cancel the task
+		task.Cancel()
+		task.Status.Code = TransferStatusUnknown
+		task.Status.Message = "task cancelled because of staging failure"
 	}
-	if staged {
-		err = task.beginTransfer()
-	}
-	return err
+	return nil
 }
 
 // checks whether files for a task are finished transferring and, if so,
@@ -276,14 +307,10 @@ func (task *taskType) checkTransfer() error {
 			if err != nil {
 				return err
 			}
-			username, err := destination.LocalUser(task.Orcid)
-			if err != nil {
-				return err
-			}
 			fileXfers := []FileTransfer{
-				FileTransfer{
+				{
 					SourcePath:      task.ManifestFile,
-					DestinationPath: filepath.Join(username, task.Id.String(), "manifest.json"),
+					DestinationPath: filepath.Join(task.DestinationFolder, "manifest.json"),
 				},
 			}
 
@@ -302,6 +329,10 @@ func (task *taskType) checkTransfer() error {
 			}
 			task.Transfer.Valid = false
 			task.Manifest.Valid = true
+		} else {
+			// the transfer failed, so make sure we cancel it in case it's still
+			// trying (because e.g. Globus continues trying transfers for ~3 days!!)
+			task.Cancel()
 		}
 	}
 	return nil
@@ -352,22 +383,24 @@ func (task taskType) Completed() bool {
 func (task *taskType) Cancel() error {
 	task.Canceled = true // mark as canceled
 
-	// fetch the source endpoint
-	var endpoint endpoints.Endpoint
-	source, err := databases.NewDatabase(task.Orcid, task.Source)
-	if err != nil {
-		return err
+	if task.Transfer.Valid { // we're transferring
+		// fetch the source endpoint
+		var endpoint endpoints.Endpoint
+		source, err := databases.NewDatabase(task.Orcid, task.Source)
+		if err != nil {
+			return err
+		}
+		endpoint, err = source.Endpoint()
+		if err != nil {
+			return err
+		}
+		// request that the task be canceled using its UUID
+		return endpoint.Cancel(task.Transfer.UUID)
 	}
-	endpoint, err = source.Endpoint()
-	if err != nil {
-		return err
-	}
-
-	// request that the task be canceled
-	return endpoint.Cancel(task.Id)
+	return nil
 }
 
-// this function updates the state of a task, setting its status as necessary
+// updates the state of a task, setting its status as necessary
 func (task *taskType) Update() error {
 	var err error
 	if task.Resources == nil { // new task!
@@ -475,7 +508,8 @@ func processTasks() {
 			newTask.Id = uuid.New()
 			tasks[newTask.Id] = newTask
 			returnTaskIdChan <- newTask.Id
-			slog.Info(fmt.Sprintf("Created new transfer task %s", newTask.Id.String()))
+			slog.Info(fmt.Sprintf("Created new transfer task %s (%d file(s) requested)",
+				newTask.Id.String(), len(newTask.FileIds)))
 		case taskId := <-cancelTaskChan: // Cancel() called
 			if task, found := tasks[taskId]; found {
 				slog.Info(fmt.Sprintf("Task %s: received cancellation request", taskId.String()))
@@ -514,9 +548,11 @@ func processTasks() {
 					if task.Status.Code != oldStatus.Code {
 						switch task.Status.Code {
 						case TransferStatusStaging:
-							slog.Info(fmt.Sprintf("Task %s: staging files", task.Id.String()))
+							slog.Info(fmt.Sprintf("Task %s: staging %d file(s) (%g GB)",
+								task.Id.String(), len(task.Resources), task.PayloadSize))
 						case TransferStatusActive:
-							slog.Info(fmt.Sprintf("Task %s: beginning transfer", task.Id.String()))
+							slog.Info(fmt.Sprintf("Task %s: beginning transfer (%d file(s), %g GB)",
+								task.Id.String(), len(task.Resources), task.PayloadSize))
 						case TransferStatusInactive:
 							slog.Info(fmt.Sprintf("Task %s: suspended transfer", task.Id.String()))
 						case TransferStatusFinalizing:

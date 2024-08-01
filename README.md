@@ -72,24 +72,3 @@ to do:
   capabilities
 * `DTS_JDP_SECRET`: a string containing a shared secret that allows the DTS to
   authenticate with the JGI Data Portal
-
-### Recording JAMO queries for testing in GitHub's CI environment
-
-Currently, the JGI Data Portal does not provide a way to retrieve detailed
-file information, so the DTS uses the JAMO service instead. This service is
-only available from within LBNL's virtual private network, so the DTS provides
-a way to "record" JAMO queries when it's run within this network. These recorded
-queries can then be automatically played back in any testing environment in
-which JAMO is unavailable.
-
-To record the JAMO queries needed by the testing environment, run the unit
-tests for the JDP database with the `-record-jamo` argument:
-
-```
-go test ./databases/jdp/... -args -record-jamo
-```
-
-This places one or more "cassette" files in the `databases/jdp/fixtures` folder,
-where they can be accessed by the testing system. Make sure to commit this
-folder to the repository after recording the JAMO queries. You should also
-delete any old fixture replaced by a new one.

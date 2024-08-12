@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/google/uuid"
 
@@ -59,9 +60,10 @@ type TransferRequest struct {
 	FileIds []string `json:"file_ids" example:"[\"fileid1\", \"fileid2\"]" doc:"source-specific identifiers for files to be transferred"`
 	// name of destination database
 	Destination string `json:"destination" example:"kbase" doc:"destination database identifier"`
-	// a Markdown description of the transfer request (can contain e.g. machine-
-	// readable instructions for processing a payload at the desination site)
-	Description string `json:"description" example:"# title\n* type: assembly\n" doc:"Markdown task description, possibly with machine-readable instructions for processing payload at destination"`
+	// a Markdown description of the transfer request
+	Description string `json:"description" example:"# title\n* type: assembly\n" doc:"Markdown task description"`
+	// machine-readable instructions for processing a payload at the destination site
+	Instructions json.RawMessage `json:"instructions" doc:"JSON object containing machine-readable instructions for processing payload at destination"`
 }
 
 // a response for a file transfer request (POST)

@@ -456,11 +456,12 @@ func (service *prototype) createTransfer(ctx context.Context,
 	}
 
 	taskId, err := tasks.Create(tasks.Specification{
-		UserInfo:    userInfo,
-		Source:      input.Body.Source,
-		Destination: input.Body.Destination,
-		FileIds:     input.Body.FileIds,
-		Description: input.Body.Description,
+		UserInfo:     userInfo,
+		Source:       input.Body.Source,
+		Destination:  input.Body.Destination,
+		FileIds:      input.Body.FileIds,
+		Description:  input.Body.Description,
+		Instructions: input.Body.Instructions,
 	})
 	if err != nil {
 		return nil, err

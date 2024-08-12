@@ -78,28 +78,30 @@ type Specification struct {
 	// an array of identifiers for files to be transferred from Source to
 	// Destination
 	FileIds []string
-	// a Markdown description of the transfer task (can contain machine-readable
-	// instructions for processing the payload at its destination)
+	// a Markdown description of the transfer task
 	Description string
+	// machine-readable instructions for processing the payload at its destination
+	Instructions json.RawMessage
 }
 
 // this type holds multiple (possibly null) UUIDs corresponding to different
 // states in the file transfer lifecycle
 type taskType struct {
-	Id                  uuid.UUID      // task identifier
-	DestinationFolder   string         // folder path to which files are transferred
-	UserInfo            auth.UserInfo  // info about user requesting transfer
-	Source, Destination string         // names of source and destination databases
-	FileIds             []string       // IDs of files within Source
-	Description         string         // Markdown description of the task
-	Resources           []DataResource // Frictionless DataResources for files
-	PayloadSize         float64        // Size of payload (gigabytes)
-	Canceled            bool           // set if a cancellation request has been made
-	Staging, Transfer   uuid.NullUUID  // staging and file transfer UUIDs (if any)
-	Manifest            uuid.NullUUID  // manifest generation UUID (if any)
-	ManifestFile        string         // name of locally-created manifest file
-	Status              TransferStatus // status of file transfer operation
-	CompletionTime      time.Time      // time at which the transfer completed
+	Id                  uuid.UUID       // task identifier
+	DestinationFolder   string          // folder path to which files are transferred
+	UserInfo            auth.UserInfo   // info about user requesting transfer
+	Source, Destination string          // names of source and destination databases
+	FileIds             []string        // IDs of files within Source
+	Description         string          // Markdown description of the task
+	Instructions        json.RawMessage // machine-readable task processing instructions
+	Resources           []DataResource  // Frictionless DataResources for files
+	PayloadSize         float64         // Size of payload (gigabytes)
+	Canceled            bool            // set if a cancellation request has been made
+	Staging, Transfer   uuid.NullUUID   // staging and file transfer UUIDs (if any)
+	Manifest            uuid.NullUUID   // manifest generation UUID (if any)
+	ManifestFile        string          // name of locally-created manifest file
+	Status              TransferStatus  // status of file transfer operation
+	CompletionTime      time.Time       // time at which the transfer completed
 }
 
 // This error type is returned when a payload is requested that is too large.
@@ -284,8 +286,11 @@ func (task *taskType) createManifest() frictionless.DataPackage {
 				Organization: task.UserInfo.Organization,
 			},
 		},
+		Description:  task.Description,
+		Instructions: make(json.RawMessage, len(task.Instructions)),
 	}
 	copy(manifest.Resources, task.Resources)
+	copy(manifest.Instructions, task.Instructions)
 	return manifest
 }
 
@@ -804,11 +809,12 @@ func Create(spec Specification) (uuid.UUID, error) {
 
 	// create a new task and send it along for processing
 	taskChannels.CreateTask <- taskType{
-		UserInfo:    spec.UserInfo,
-		Source:      spec.Source,
-		Destination: spec.Destination,
-		FileIds:     spec.FileIds,
-		Description: spec.Description,
+		UserInfo:     spec.UserInfo,
+		Source:       spec.Source,
+		Destination:  spec.Destination,
+		FileIds:      spec.FileIds,
+		Description:  spec.Description,
+		Instructions: spec.Instructions,
 	}
 	select {
 	case taskId = <-taskChannels.ReturnTaskId:

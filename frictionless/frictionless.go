@@ -61,6 +61,8 @@ type DataPackage struct {
 	Contributors []Contributor `json:"contributors,omitempty"`
 	// an image to use for this data package (URL or POSIX path)
 	Image string `json:"image,omitempty"`
+	// a machine-readable set of instructions for processing
+	Instructions json.RawMessage `json:"instructions,omitempty"`
 }
 
 // a Frictionless data resource describing a file in a search

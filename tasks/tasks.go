@@ -67,41 +67,43 @@ const (
 
 // this type holds a specification used to create a valid transfer task
 type Specification struct {
-	// information about the user requesting the task
-	UserInfo auth.UserInfo
-	// the name of source database from which files are transferred (as specified
-	// in the DTS config file)
-	Source string
+	// a Markdown description of the transfer task
+	Description string
 	// the name of destination database from which files are transferred (as
 	// specified in the DTS config file)
 	Destination string
+	// machine-readable instructions for processing the payload at its destination
+	Instructions json.RawMessage
 	// an array of identifiers for files to be transferred from Source to
 	// Destination
 	FileIds []string
-	// a Markdown description of the transfer task
-	Description string
-	// machine-readable instructions for processing the payload at its destination
-	Instructions json.RawMessage
+	// the name of source database from which files are transferred (as specified
+	// in the DTS config file)
+	Source string
+	// information about the user requesting the task
+	UserInfo auth.UserInfo
 }
 
 // this type holds multiple (possibly null) UUIDs corresponding to different
 // states in the file transfer lifecycle
 type taskType struct {
-	Id                  uuid.UUID       // task identifier
-	DestinationFolder   string          // folder path to which files are transferred
-	UserInfo            auth.UserInfo   // info about user requesting transfer
-	Source, Destination string          // names of source and destination databases
-	FileIds             []string        // IDs of files within Source
-	Description         string          // Markdown description of the task
-	Instructions        json.RawMessage // machine-readable task processing instructions
-	Resources           []DataResource  // Frictionless DataResources for files
-	PayloadSize         float64         // Size of payload (gigabytes)
-	Canceled            bool            // set if a cancellation request has been made
-	Staging, Transfer   uuid.NullUUID   // staging and file transfer UUIDs (if any)
-	Manifest            uuid.NullUUID   // manifest generation UUID (if any)
-	ManifestFile        string          // name of locally-created manifest file
-	Status              TransferStatus  // status of file transfer operation
-	CompletionTime      time.Time       // time at which the transfer completed
+	Canceled          bool            // set if a cancellation request has been made
+	CompletionTime    time.Time       // time at which the transfer completed
+	Description       string          // Markdown description of the task
+	Destination       string          // name of destination database
+	DestinationFolder string          // folder path to which files are transferred
+	FileIds           []string        // IDs of files within Source
+	Id                uuid.UUID       // task identifier
+	Instructions      json.RawMessage // machine-readable task processing instructions
+	Manifest          uuid.NullUUID   // manifest generation UUID (if any)
+	ManifestFile      string          // name of locally-created manifest file
+	PayloadSize       float64         // Size of payload (gigabytes)
+	Resources         []DataResource  // Frictionless DataResources for files
+	Source            string          // name of source database
+	Staging           uuid.NullUUID   // staging UUID (if any)
+	Status            TransferStatus  // status of file transfer operation
+	Transfer          uuid.NullUUID   // file transfer UUID (if any)
+	UserInfo          auth.UserInfo   // info about user requesting transfer
 }
 
 // This error type is returned when a payload is requested that is too large.

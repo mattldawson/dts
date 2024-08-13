@@ -44,6 +44,16 @@ func TestNewKBaseAuthServer(t *testing.T) {
 	assert.Nil(err, "Authentication server constructor triggered an error")
 }
 
+// tests whether an invalid KBase token prevents a proxy for the auth server
+// from being constructed
+func TestInvalidToken(t *testing.T) {
+	assert := assert.New(t)
+	devToken := "INVALID_KBASE_TOKEN"
+	server, err := NewKBaseAuthServer(devToken)
+	assert.Nil(server, "Authentication server created with invalid token")
+	assert.NotNil(err, "Invalid token for authentication server triggered no error")
+}
+
 // tests whether the authentication server can return information for the
 // user associated with the specified developer token
 func TestUserInfo(t *testing.T) {

@@ -1,7 +1,7 @@
 package credit
 
 /*
-  - Represents a contributor to the resource.
+ * Represents a contributor to the resource.
 
 Contributors must have a 'contributor_type', either 'Person' or 'Organization', and
 one of the 'name' fields: either 'given_name' and 'family_name' (for a person), or 'name' (for an organization or a person).
@@ -13,7 +13,8 @@ appropriate roles, please see the following links:
 DataCite contributor roles: https://support.datacite.org/docs/datacite-metadata-schema-v44-recommended-and-optional-properties#7a-contributortype
 
 CRediT contributor role taxonomy: https://credit.niso.org
-*/
+
+ */
 type Contributor struct {
 	/*
 	 * Must be either 'Person' or 'Organization'
@@ -46,39 +47,18 @@ type Contributor struct {
 }
 
 /*
- * Container for an instance of credit metadata; includes the credit metadata itself and metadata for the credit metadata, including the schema version used, who submitted it, and the date of submission. When the credit metadata for a resource is added or updated, a new CreditMetadataEntry is created to store the information.
- */
-type CreditMetadataEntry struct {
-	/*
-	 * The credit metadata itself.
-	 */
-	CreditMetadata CreditMetadata `json:"credit_metadata"`
-	/*
-	 * The version of the credit metadata schema used.
-	 */
-	CreditMetadataSchemaVersion string `json:"credit_metadata_schema_version"`
-	/*
-	 * KBase workspace ID of the user who added this entry.
-	 */
-	SavedBy string `json:"saved_by"`
-	/*
-	 * Unix timestamp for the addition of this set of credit metadata.
-	 */
-	Timestamp int `json:"timestamp"`
-}
+ * Represents the credit metadata associated with an object.
 
-/*
-  - Represents the credit metadata associated with a workspace object.
-
-In the following documentation, 'Resource' is used to refer to the workspace object
-that the CM pertains to.
+In the following documentation, 'Resource' is used to refer to the object
+that the CM pertains to, for example, a KBase Workspace object or a
+sample from the KBase Sample Service.
 
 The 'resource_type' field should be filled using values from the DataCite
 resourceTypeGeneral field:
 
 https://support.datacite.org/docs/datacite-metadata-schema-v44-mandatory-properties#10a-resourcetypegeneral
 
-Currently the KBase workspace only supports credit metadata for objects of type
+Currently KBase only supports credit metadata for objects of type
 'dataset'; anything else will return an error.
 
 The license may be supplied either as an URL pointing to licensing information for
@@ -92,10 +72,12 @@ one or more dates should be supplied: ideally the date of resource publication a
 the last update (if applicable).
 - contributors (one or more required)
 - titles (one or more required)
+- meta
 
 The resource_type field is required, but as there is currently only a single valid
 value, 'dataset', it is automatically populated if no value is supplied.
-*/
+
+ */
 type CreditMetadata struct {
 	/*
 	 * List of strings of freeform text providing extra information about this credit metadata.
@@ -130,12 +112,16 @@ type CreditMetadata struct {
 	 */
 	Identifier string `json:"identifier"`
 	/*
-			 * Usage license for the resource. Use one of the SPDX license identifiers or provide a link to the license text if no SPDX ID is available.
+	 * Usage license for the resource. Use one of the SPDX license identifiers or provide a link to the license text if no SPDX ID is available.
 
-		All data published at KBase is done so under a Creative Commons 0 or Creative Commons 4.0 license.
+All data published at KBase is done so under a Creative Commons 0 or Creative Commons 4.0 license.
 
-	*/
+	 */
 	License License `json:"license"`
+	/*
+	 * Metadata for this credit information, including submitter, schema version, and timestamp.
+	 */
+	Meta Metadata `json:"meta"`
 	/*
 	 * The publisher of the resource. For a dataset, this is the repository where it is stored.
 	 */
@@ -145,7 +131,7 @@ type CreditMetadata struct {
 	 */
 	RelatedIdentifiers []PermanentID `json:"related_identifiers"`
 	/*
-	 * The broad type of the source data for this workspace object. 'dataset' is currently the only valid value for KBase DOIs.
+	 * The broad type of the source data for this object. 'dataset' is currently the only valid value for KBase DOIs.
 	 */
 	ResourceType string `json:"resource_type"`
 	/*
@@ -181,10 +167,11 @@ type Description struct {
 }
 
 /*
-  - Represents an event in the lifecycle of a resource and the date it occurred on.
+ * Represents an event in the lifecycle of a resource and the date it occurred on.
 
 See https://support.datacite.org/docs/datacite-metadata-schema-v44-recommended-and-optional-properties#8-date for more information on the events.
-*/
+
+ */
 type EventDate struct {
 	/*
 	 * The date associated with the event. The date may be in the format YYYY, YYYY-MM, or YYYY-MM-DD.
@@ -197,7 +184,7 @@ type EventDate struct {
 }
 
 /*
-  - Represents a funding source for a resource, including the funding body and the grant awarded.
+ * Represents a funding source for a resource, including the funding body and the grant awarded.
 
 The 'funder_name' field is required; all others are optional.
 
@@ -207,7 +194,8 @@ Recommended resources for organization identifiers include:
   - Crossref Funder Registry, https://www.crossref.org/services/funder-registry/ (to be subsumed into ROR)
 
 Some organizations may have a digital object identifier (DOI).
-*/
+
+ */
 type FundingReference struct {
 	/*
 	 * Code for the grant, assigned by the funder
@@ -242,7 +230,25 @@ type License struct {
 }
 
 /*
-  - Represents an organization.
+ * Metadata for the credit metadata, including the schema version used, who submitted it, and the date of submission. When the credit metadata for a resource is added or updated, this additional metadata must be provided along with the credit information.
+ */
+type Metadata struct {
+	/*
+	 * The version of the credit metadata schema used.
+	 */
+	CreditMetadataSchemaVersion string `json:"credit_metadata_schema_version"`
+	/*
+	 * KBase workspace ID of the user who added this entry.
+	 */
+	SavedBy string `json:"saved_by"`
+	/*
+	 * Unix timestamp for the addition of this set of credit metadata.
+	 */
+	Timestamp int `json:"timestamp"`
+}
+
+/*
+ * Represents an organization.
 
 Recommended resources for organization identifiers and canonical organization names include:
   - Research Organization Registry, http://ror.org
@@ -250,10 +256,10 @@ Recommended resources for organization identifiers and canonical organization na
   - Crossref Funder Registry, https://www.crossref.org/services/funder-registry/
 
 For example, the US DOE would be entered as:
+  organization_name: United States Department of Energy
+  organization_id:   ROR:01bj3aw27
 
-	organization_name: United States Department of Energy
-	organization_id:   ROR:01bj3aw27
-*/
+ */
 type Organization struct {
 	/*
 	 * Persistent unique identifier for the organization in the format <database name>:<identifier within database>
@@ -266,7 +272,7 @@ type Organization struct {
 }
 
 /*
-  - Represents a persistent unique identifier for an entity, with an optional relationship to some other entity.
+ * Represents a persistent unique identifier for an entity, with an optional relationship to some other entity.
 
 The 'id' field and 'relationship_type' fields are required.
 
@@ -275,7 +281,8 @@ The values in the 'relationship_type' field come from controlled vocabularies ma
 DataCite relation types: https://support.datacite.org/docs/datacite-metadata-schema-v44-recommended-and-optional-properties#12b-relationtype
 
 Crossref relation types: https://www.crossref.org/documentation/schema-library/markup-guide-metadata-segments/relationships/
-*/
+
+ */
 type PermanentID struct {
 	/*
 	 * Persistent unique ID for an entity. Should be in the format <database name>:<identifier within database>.
@@ -286,18 +293,19 @@ type PermanentID struct {
 	 */
 	Description string `json:"description"`
 	/*
-			 * The relationship between the ID and some other entity.
-		For example, when a PermanentID class is used to represent objects in the CreditMetadata field 'related_identifiers', the 'relationship_type' field captures the relationship between the CreditMetadata and this ID.
+	 * The relationship between the ID and some other entity.
+For example, when a PermanentID class is used to represent objects in the CreditMetadata field 'related_identifiers', the 'relationship_type' field captures the relationship between the CreditMetadata and this ID.
 
-	*/
+	 */
 	RelationshipType string `json:"relationship_type"`
 }
 
 /*
-  - Represents the title or name of a resource, the type of that title, and the language used (if appropriate).
+ * Represents the title or name of a resource, the type of that title, and the language used (if appropriate).
 
 The 'title' field is required; 'title_type' is only necessary if the text is not the primary title.
-*/
+
+ */
 type Title struct {
 	/*
 	 * The language in which the title is written, using the appropriate IETF BCP-47 notation.
@@ -312,3 +320,5 @@ type Title struct {
 	 */
 	TitleType string `json:"title_type"`
 }
+
+

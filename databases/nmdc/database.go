@@ -19,7 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package jdp
+package nmdc
 
 import (
 	"bytes"
@@ -46,8 +46,8 @@ import (
 )
 
 const (
-	jdpBaseURL     = "https://files.jgi.doe.gov/"
-	filePathPrefix = "/global/dna/dm_archive/" // directory containing JDP files
+	nmdcBaseURL     = "https://api.microbiomedata.org"
+	filePathPrefix = "/data/" // path exposing NMDC files available via Globus
 )
 
 // this error type is returned when a file is requested for which the requester
@@ -129,6 +129,13 @@ var fileTypeToMimeType = map[string]string{
 	"tar.gz":   "application/x-tar",
 	"tar.bz":   "application/x-tar",
 	"tar.bz2":  "application/x-tar",
+}
+
+// attributes (slots) associated with NDMC data types
+// (see https://microbiomedata.github.io/nmdc-schema/)
+var nmdcDataAttributes = []string {
+  // this list is giant--hopefully there's a way to programmatically
+  // query NMDC for this
 }
 
 // extracts the file format from the name and type of the file
@@ -249,18 +256,98 @@ func dataResourceName(filename string) string {
 	return name
 }
 
-// creates a DataResource from a File
-func dataResourceFromFile(file File) frictionless.DataResource {
-	id := "JDP:" + file.Id
-	format := formatFromFileName(file.Name)
-	fileTypes := fileTypesFromFile(file)
-	sources := sourcesFromMetadata(file.Metadata)
+// file database appropriate for handling searches and transfers
+// (implements the databases.Database interface)
+type Database struct {
+	// database identifier
+	Id string
+	// ORCID identifier for database proxy
+	Orcid string
+	// HTTP client that caches queries
+	Client http.Client
+	// shared secret used for authentication
+	Secret string
+}
 
-	// we use relative file paths in accordance with the Frictionless
-	// Data Resource specification
-	filePath := filepath.Join(strings.TrimPrefix(file.Path, filePathPrefix), file.Name)
+func NewDatabase(orcid string) (databases.Database, error) {
+	if orcid == "" {
+		return nil, fmt.Errorf("No ORCID ID was given")
+	}
 
-	pi := file.Metadata.Proposal.PI
+	// make sure we have a shared secret or an SSO token
+	secret, haveSecret := os.LookupEnv("DTS_NMDC_SECRET")
+	if !haveSecret {
+		return nil, fmt.Errorf("No shared secret was found for NMDC authentication")
+	}
+
+	return &Database{
+		Id:         "nmdc",
+		Orcid:      orcid,
+		Secret:     secret,
+	}, nil
+}
+
+// adds an appropriate authorization header to given HTTP request
+func (db Database) addAuthHeader(request *http.Request) {
+	request.Header.Add("Authorization", fmt.Sprintf("Token %s_%s", db.Orcid, db.Secret))
+}
+
+// performs a GET request on the given resource, returning the resulting
+// response and error
+func (db *Database) get(resource string, values url.Values) (*http.Response, error) {
+	var u *url.URL
+	u, err := url.ParseRequestURI(jdpBaseURL)
+	if err != nil {
+		return nil, err
+	}
+	u.Path = resource
+	u.RawQuery = values.Encode()
+	res := fmt.Sprintf("%v", u)
+	slog.Debug(fmt.Sprintf("GET: %s", res))
+	req, err := http.NewRequest(http.MethodGet, res, http.NoBody)
+	if err != nil {
+		return nil, err
+	}
+	db.addAuthHeader(req)
+	return db.Client.Do(req)
+}
+
+// performs a POST request on the given resource, returning the resulting
+// response and error
+func (db *Database) post(resource string, body io.Reader) (*http.Response, error) {
+	u, err := url.ParseRequestURI(jdpBaseURL)
+	if err != nil {
+		return nil, err
+	}
+	u.Path = resource
+	res := fmt.Sprintf("%v", u)
+	slog.Debug(fmt.Sprintf("POST: %s", res))
+	req, err := http.NewRequest(http.MethodPost, res, body)
+	if err != nil {
+		return nil, err
+	}
+	db.addAuthHeader(req)
+	req.Header.Set("Content-Type", "application/json")
+	return db.Client.Do(req)
+}
+
+// data object type for JSON marshalling
+// (see https://microbiomedata.github.io/nmdc-schema/DataObject/)
+type DataObject struct {
+  FileSizeBytes int `json:"file_size_bytes"`
+  Md5Checksum string `json:"md5_checksum"`
+  DataObjectType string `json:"data_object_type"`
+  CompressionType string `json:"compression_type"`
+  // NOTE: no representation of was_generated_by (abstract type) at the moment
+  URL string `json:"url"`
+  Type string `json:"type"`
+  Id string `json:"id"`
+  Name string `json:"name"`
+  Description string `json:"description"`
+  AlternativeIdentifiers []string `json:"alternative_identifiers,omitempty"`
+}
+
+func dataResourceFromDataObject(dataObject DataObject) frictionless.DataResource {
 	return frictionless.DataResource{
 		Id:        id,
 		Name:      dataResourceName(file.Name),
@@ -328,96 +415,8 @@ func dataResourceFromFile(file File) frictionless.DataResource {
 	}
 }
 
-// file database appropriate for handling JDP searches and transfers
-// (implements the databases.Database interface)
-type Database struct {
-	// database identifier
-	Id string
-	// ORCID identifier for database proxy
-	Orcid string
-	// HTTP client that caches queries
-	Client http.Client
-	// shared secret used for authentication
-	Secret string
-	// SSO token used for interim JDP access
-	SsoToken string
-	// mapping from staging UUIDs to JDP restoration request ID
-	StagingIds map[uuid.UUID]int
-}
-
-func NewDatabase(orcid string) (databases.Database, error) {
-	if orcid == "" {
-		return nil, fmt.Errorf("No ORCID ID was given")
-	}
-
-	// make sure we have a shared secret or an SSO token
-	secret, haveSecret := os.LookupEnv("DTS_JDP_SECRET")
-	if !haveSecret { // check for SSO token
-		_, haveToken := os.LookupEnv("DTS_JDP_SSO_TOKEN")
-		if !haveToken {
-			return nil, fmt.Errorf("No shared secret or SSO token was found for JDP authentication")
-		}
-	}
-
-	return &Database{
-		Id:         "jdp",
-		Orcid:      orcid,
-		Secret:     secret,
-		SsoToken:   os.Getenv("DTS_JDP_SSO_TOKEN"),
-		StagingIds: make(map[uuid.UUID]int),
-	}, nil
-}
-
-// adds an appropriate authorization header to given HTTP request
-func (db Database) addAuthHeader(request *http.Request) {
-	if len(db.Secret) > 0 { // use shared secret
-		request.Header.Add("Authorization", fmt.Sprintf("Token %s_%s", db.Orcid, db.Secret))
-	} else { // try SSO token
-		request.Header.Add("Authorization", fmt.Sprintf("Bearer %s", db.SsoToken))
-	}
-}
-
-// performs a GET request on the given resource, returning the resulting
-// response and error
-func (db *Database) get(resource string, values url.Values) (*http.Response, error) {
-	var u *url.URL
-	u, err := url.ParseRequestURI(jdpBaseURL)
-	if err != nil {
-		return nil, err
-	}
-	u.Path = resource
-	u.RawQuery = values.Encode()
-	res := fmt.Sprintf("%v", u)
-	slog.Debug(fmt.Sprintf("GET: %s", res))
-	req, err := http.NewRequest(http.MethodGet, res, http.NoBody)
-	if err != nil {
-		return nil, err
-	}
-	db.addAuthHeader(req)
-	return db.Client.Do(req)
-}
-
-// performs a POST request on the given resource, returning the resulting
-// response and error
-func (db *Database) post(resource string, body io.Reader) (*http.Response, error) {
-	u, err := url.ParseRequestURI(jdpBaseURL)
-	if err != nil {
-		return nil, err
-	}
-	u.Path = resource
-	res := fmt.Sprintf("%v", u)
-	slog.Debug(fmt.Sprintf("POST: %s", res))
-	req, err := http.NewRequest(http.MethodPost, res, body)
-	if err != nil {
-		return nil, err
-	}
-	db.addAuthHeader(req)
-	req.Header.Set("Content-Type", "application/json")
-	return db.Client.Do(req)
-}
-
-// this helper extracts files for the JDP /search GET query with given parameters
-func (db *Database) filesFromSearch(params url.Values) (databases.SearchResults, error) {
+// fetches metadata for data objects based on the given parameters
+func (db *Database) dataObjects(params url.Values) (databases.SearchResults, error) {
 	var results databases.SearchResults
 
 	idEncountered := make(map[string]bool) // keep track of duplicates
@@ -429,7 +428,7 @@ func (db *Database) filesFromSearch(params url.Values) (databases.SearchResults,
 		params.Del("extra")
 	}
 
-	resp, err := db.get("search", params)
+	resp, err := db.get("data_objects/", params)
 	if err != nil {
 		return results, err
 	}
@@ -439,49 +438,50 @@ func (db *Database) filesFromSearch(params url.Values) (databases.SearchResults,
 	if err != nil {
 		return results, err
 	}
-	type JDPResults struct {
-		Organisms []struct {
-			Id    string `json:"id"`
-			Files []File `json:"files"`
-		} `json:"organisms"`
+	type DataObjectResults struct {
+    // NOTE: we only extract the results field for now
+    Results []DataObject `json:"results"`
 	}
-	results.Resources = make([]frictionless.DataResource, 0)
-	var jdpResults JDPResults
-	err = json.Unmarshal(body, &jdpResults)
+	var dataObjectResults DataObjectResults
+	err = json.Unmarshal(body, &dataObjectResults)
 	if err != nil {
 		return results, err
 	}
-	for _, org := range jdpResults.Organisms {
-		resources := make([]frictionless.DataResource, 0)
-		for _, file := range org.Files {
-			res := dataResourceFromFile(file)
+  results.resources = dataResourcesFromDataObjects(dataObjectResults.Results)
+	return results, nil
+}
 
-			// add any requested additional metadata
-			if extraFields != nil {
-				extras := "{"
-				for i, field := range extraFields {
-					if i > 0 {
-						extras += ", "
-					}
-					switch field {
-					case "project_id":
-						extras += fmt.Sprintf(`"project_id": "%s"`, org.Id)
-					case "img_taxon_oid":
-						extras += fmt.Sprintf(`"img_taxon_oid": %d`, file.Metadata.IMG.TaxonOID)
-					}
-				}
-				extras += "}"
-				res.Extra = json.RawMessage(extras)
-			}
+// fetches metadata for data objects associated with the given study
+func (db *Database) dataObjectsForStudy(studyId string, pageNumber, pageSize int) (databases.SearchResults, error) {
+	var results databases.SearchResults
 
-			// add the resource to our results if it's not there already
-			if _, encountered := idEncountered[res.Id]; !encountered {
-				resources = append(resources, res)
-				idEncountered[res.Id] = true
-			}
-		}
-		results.Resources = append(results.Resources, resources...)
+	// extra any requested "extra" metadata fields (and scrub them from params)
+	var extraFields []string
+	if params.Has("extra") {
+		extraFields = strings.Split(params.Get("extra"), ",")
+		params.Del("extra")
 	}
+
+	resp, err := db.get(fmt.Sprintf("data_objects/study/%s", studyId), params)
+	if err != nil {
+		return results, err
+	}
+	defer resp.Body.Close()
+	var body []byte
+	body, err = io.ReadAll(resp.Body)
+	if err != nil {
+		return results, err
+	}
+	type DataObjectResults struct {
+    // NOTE: we only extract the results field for now
+    Results []DataObject `json:"results"`
+	}
+	var dataObjectResults DataObjectResults
+	err = json.Unmarshal(body, &dataObjectResults)
+	if err != nil {
+		return results, err
+	}
+  results.resources = dataResourcesFromDataObjects(dataObjectResults.Results)
 	return results, nil
 }
 
@@ -507,137 +507,61 @@ func pageNumberAndSize(offset, maxNum int) (int, int) {
 }
 
 func (db Database) SpecificSearchParameters() map[string]interface{} {
+  // for details about NMDC-specific search parameters, see
+  // https://api.microbiomedata.org/docs#/find:~:text=Find%20NMDC-,metadata,-entities.
 	return map[string]interface{}{
-		// see https://files.jgi.doe.gov/apidoc/#/GET/search_list
-		"d": []string{"asc", "desc"}, // sort direction (ascending/descending)
-		"f": []string{"ssr", "biosample", "project_id", "library", // search specific field
-			"img_taxon_oid"},
-		"include_private_data": []int{0, 1},                                             // flag to include private data
-		"s":                    []string{"name", "id", "title", "kingdom", "score.avg"}, // sort order
-		"extra":                []string{"img_taxon_oid", "project_id"},                 // list of requested extra fields
+    "activity_id": "",
+    "data_object_id": "",
+    "fields": []string{},
+    "filter": "",
+    "sort": "",
+		"sample_id": "",
+		"study_id": "",
+		"extra": []string{},
 	}
 }
 
-// checks JDP-specific search parameters and adds them to the given URL values
+// checks NMDC-specific search parameters
 func (db Database) addSpecificSearchParameters(params map[string]json.RawMessage, p *url.Values) error {
 	paramSpec := db.SpecificSearchParameters()
 	for name, jsonValue := range params {
 		switch name {
-		case "f": // field-specific search
-			var value string
-			err := json.Unmarshal(jsonValue, &value)
-			if err != nil {
-				return &databases.InvalidSearchParameter{
-					Database: "JDP",
-					Message:  "Invalid search field given (must be string)",
-				}
-			}
-			acceptedValues := paramSpec["f"].([]string)
-			if slices.Contains(acceptedValues, value) {
-				p.Add(name, value)
-			} else {
-				return &databases.InvalidSearchParameter{
-					Database: "JDP",
-					Message:  fmt.Sprintf("Invalid search field given: %s", value),
-				}
-			}
-		case "s": // sort order
-			var value string
-			err := json.Unmarshal(jsonValue, &value)
-			if err != nil {
-				return &databases.InvalidSearchParameter{
-					Database: "JDP",
-					Message:  "Invalid JDP sort order given (must be string)",
-				}
-			}
-			acceptedValues := paramSpec["s"].([]string)
-			if slices.Contains(acceptedValues, value) {
-				p.Add(name, value)
-			} else {
-				return &databases.InvalidSearchParameter{
-					Database: "JDP",
-					Message:  fmt.Sprintf("Invalid JDP sort order: %s", value),
-				}
-			}
-		case "d": // sort direction
-			var value string
-			err := json.Unmarshal(jsonValue, &value)
-			if err != nil {
-				return &databases.InvalidSearchParameter{
-					Database: "JDP",
-					Message:  "Invalid JDP sort direction given (must be string)",
-				}
-			}
-			acceptedValues := paramSpec["d"].([]string)
-			if slices.Contains(acceptedValues, value) {
-				p.Add(name, value)
-			} else {
-				return &databases.InvalidSearchParameter{
-					Database: "JDP",
-					Message:  fmt.Sprintf("Invalid JDP sort direction: %s", value),
-				}
-			}
-		case "include_private_data": // search for private data
-			var value int
-			err := json.Unmarshal(jsonValue, &value)
-			if err != nil || (value != 0 && value != 1) {
-				return &databases.InvalidSearchParameter{
-					Database: "JDP",
-					Message:  "Invalid flag given for include_private_data (must be 0 or 1)",
-				}
-			}
-			p.Add(name, fmt.Sprintf("%d", value))
-		case "extra": // comma-separated additional fields requested
-			var value string
-			err := json.Unmarshal(jsonValue, &value)
-			if err != nil {
-				return &databases.InvalidSearchParameter{
-					Database: "JDP",
-					Message:  "Invalid JDP requested extra field given (must be comma-delimited string)",
-				}
-			}
-			acceptedValues := paramSpec["extra"].([]string)
-			if slices.Contains(acceptedValues, value) {
-				p.Add(name, value)
-			} else {
-				return &databases.InvalidSearchParameter{
-					Database: "JDP",
-					Message:  fmt.Sprintf("Invalid requested extra field: %s", value),
-				}
-			}
-		default:
-			return &databases.InvalidSearchParameter{
-				Database: "JDP",
-				Message:  fmt.Sprintf("Unrecognized JDP-specific search parameter: %s", name),
-			}
-		}
-	}
+      case "activity_id", "data_object_id",
+  p.Add(name, value)
 	return nil
 }
 
 func (db *Database) Search(params databases.SearchParameters) (databases.SearchResults, error) {
-	// we assume the JDP interface for ElasticSearch queries
-	// (see https://files.jgi.doe.gov/apidoc/)
+  // fetch pagination parameters
 	pageNumber, pageSize := pageNumberAndSize(params.Pagination.Offset, params.Pagination.MaxNum)
 
 	p := url.Values{}
-	p.Add("q", params.Query)
+
+  // NMDC's "search" parameter is not yet implemented, so we ignore it for now
+  // in favor of "filter"
+	//p.Add("search", params.Query)
 	if params.Status == databases.SearchFileStatusStaged {
 		p.Add(`ff[file_status]`, "RESTORED")
 	} else if params.Status == databases.SearchFileStatusUnstaged {
 		p.Add(`ff[file_status]`, "PURGED")
 	}
-	p.Add("p", strconv.Itoa(pageNumber))
-	p.Add("x", strconv.Itoa(pageSize))
+	p.Add("page", strconv.Itoa(pageNumber))
+	p.Add("per_page", strconv.Itoa(pageSize))
 
+  // decide which endpoint to call based on NMDC-specific parameters
 	if params.Specific != nil {
+    params.Specific
 		err := db.addSpecificSearchParameters(params.Specific, &p)
 		if err != nil {
 			return databases.SearchResults{}, err
 		}
-	}
+	} else {
+    // simply call the data_objects/ endpoint with the given query string
+    p.Add("filter", params.Query) // FIXME: 
+    return db.dataObjects(p)
+  }
 
-	return db.filesFromSearch(p)
+	return db.dataObjectsFromSearch(p)
 }
 
 func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, error) {
@@ -732,96 +656,17 @@ func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, er
 }
 
 func (db *Database) StageFiles(fileIds []string) (uuid.UUID, error) {
-	var xferId uuid.UUID
-
-	// construct a POST request to restore archived files with the given IDs
-	type RestoreRequest struct {
-		Ids                []string `json:"ids"`
-		SendEmail          bool     `json:"send_email"`
-		ApiVersion         string   `json:"api_version"`
-		IncludePrivateData int      `json:"include_private_data"`
-	}
-
-	// strip "JDP:" off the file IDs (and remove those without this prefix)
-	fileIdsWithoutPrefix := make([]string, 0)
-	for _, fileId := range fileIds {
-		if strings.HasPrefix(fileId, "JDP:") {
-			fileIdsWithoutPrefix = append(fileIdsWithoutPrefix, fileId[4:])
-		}
-	}
-
-	data, err := json.Marshal(RestoreRequest{
-		Ids:                fileIdsWithoutPrefix,
-		SendEmail:          false,
-		ApiVersion:         "2",
-		IncludePrivateData: 1, // we need this just in case!
-	})
-	if err != nil {
-		return xferId, err
-	}
-
-	// NOTE: The slash in the resource is all-important for POST requests to
-	// NOTE: the JDP!!
-	resp, err := db.post("request_archived_files/", bytes.NewReader(data))
-	if err != nil {
-		return xferId, err
-	}
-	defer resp.Body.Close()
-	var body []byte
-	body, err = io.ReadAll(resp.Body)
-	if err != nil {
-		return xferId, err
-	}
-	type RestoreResponse struct {
-		RequestId int `json:"request_id"`
-	}
-
-	var jdpResp RestoreResponse
-	err = json.Unmarshal(body, &jdpResp)
-	if err != nil {
-		return xferId, err
-	}
-	slog.Debug(fmt.Sprintf("Requested %d archived files from JDP (request ID: %d)",
-		len(fileIds), jdpResp.RequestId))
-	xferId = uuid.New()
-	db.StagingIds[xferId] = jdpResp.RequestId
-	return xferId, err
+  // NMDC keeps all of its NERSC data on disk, so all files are already staged.
+  // We simply generate a new UUID that can be handed to db.StagingStatus,
+  // which returns databases.StagingStatusSucceeded.
+  //
+  // "We may eventually use tape but don't need to yet." -Shreyas Cholia, 2024-09-04
+  return uuid.New(), nil
 }
 
 func (db *Database) StagingStatus(id uuid.UUID) (databases.StagingStatus, error) {
-	if restoreId, found := db.StagingIds[id]; found {
-		resource := fmt.Sprintf("request_archived_files/requests/%d", restoreId)
-		resp, err := db.get(resource, url.Values{})
-		if err != nil {
-			return databases.StagingStatusUnknown, err
-		}
-		defer resp.Body.Close()
-		var body []byte
-		body, err = io.ReadAll(resp.Body)
-		if err != nil {
-			return databases.StagingStatusUnknown, err
-		}
-		type JDPResult struct {
-			Status string `json:"status"` // "new", "pending", or "ready"
-		}
-		var jdpResult JDPResult
-		err = json.Unmarshal(body, &jdpResult)
-		if err != nil {
-			return databases.StagingStatusUnknown, err
-		}
-		statusForString := map[string]databases.StagingStatus{
-			"new":     databases.StagingStatusActive,
-			"pending": databases.StagingStatusActive,
-			"ready":   databases.StagingStatusSucceeded,
-		}
-		if status, ok := statusForString[jdpResult.Status]; ok {
-			return status, nil
-		} else {
-			return status, fmt.Errorf("Unrecognized staging status string: %s", jdpResult.Status)
-		}
-	} else {
-		return databases.StagingStatusUnknown, nil
-	}
+  // all files are hot!
+	return databases.StagingStatusSucceeded, nil
 }
 
 func (db *Database) Endpoint() (endpoints.Endpoint, error) {

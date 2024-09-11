@@ -335,7 +335,7 @@ func (db *Database) post(resource string, body io.Reader) (*http.Response, error
 // (see https://microbiomedata.github.io/nmdc-schema/DataObject/)
 type DataObject struct {
   FileSizeBytes int `json:"file_size_bytes"`
-  Md5Checksum string `json:"md5_checksum"`
+  MD5Checksum string `json:"md5_checksum"`
   DataObjectType string `json:"data_object_type"`
   CompressionType string `json:"compression_type"`
   // NOTE: no representation of was_generated_by (abstract type) at the moment
@@ -348,15 +348,16 @@ type DataObject struct {
 }
 
 func dataResourceFromDataObject(dataObject DataObject) frictionless.DataResource {
+  format := formatFromType(dataObject.Type)
 	return frictionless.DataResource{
 		Id:        id,
-		Name:      dataResourceName(file.Name),
-		Path:      filePath,
+		Name:      dataResourceName(dataObject.Name),
+    Description: dataObject.Description,
+		Path:      dataObject.Name,
 		Format:    format,
 		MediaType: mimeTypeFromFormatAndTypes(format, fileTypes),
-		Bytes:     file.Size,
-		Hash:      file.MD5Sum,
-		Sources:   sources,
+		Bytes:     dataObject.FileSizeBytes,
+		Hash:      dataObject.MD5Checksum,
 		Credit: credit.CreditMetadata{
 			Identifier:   id,
 			ResourceType: "dataset",
@@ -447,22 +448,18 @@ func (db *Database) dataObjects(params url.Values) (databases.SearchResults, err
 	if err != nil {
 		return results, err
 	}
-  results.resources = dataResourcesFromDataObjects(dataObjectResults.Results)
+  results.Resources = make([]frictionless.DataResource, len(dataObjectResults.Results))
+  for i, dataObject := range dataObjectResults.Results {
+    results.Resources[i] = dataResourcesFromDataObjects(dataObject)
+  }
 	return results, nil
 }
 
 // fetches metadata for data objects associated with the given study
-func (db *Database) dataObjectsForStudy(studyId string, pageNumber, pageSize int) (databases.SearchResults, error) {
+func (db *Database) dataObjectsForStudy(studyId string) (databases.SearchResults, error) {
 	var results databases.SearchResults
 
-	// extra any requested "extra" metadata fields (and scrub them from params)
-	var extraFields []string
-	if params.Has("extra") {
-		extraFields = strings.Split(params.Get("extra"), ",")
-		params.Del("extra")
-	}
-
-	resp, err := db.get(fmt.Sprintf("data_objects/study/%s", studyId), params)
+	resp, err := db.get(fmt.Sprintf("data_objects/study/%s", studyId), url.Values{})
 	if err != nil {
 		return results, err
 	}
@@ -472,17 +469,26 @@ func (db *Database) dataObjectsForStudy(studyId string, pageNumber, pageSize int
 	if err != nil {
 		return results, err
 	}
-	type DataObjectResults struct {
-    // NOTE: we only extract the results field for now
-    Results []DataObject `json:"results"`
+
+	type DataObjectsByStudyResults struct {
+    BiosampleId string `json:"biosample_id"`
+    DataObjectSet []string `json:"data_object_set"`
 	}
-	var dataObjectResults DataObjectResults
-	err = json.Unmarshal(body, &dataObjectResults)
+	var results []DataObjectsByStudyResults
+	err = json.Unmarshal(body, &results)
 	if err != nil {
 		return results, err
 	}
-  results.resources = dataResourcesFromDataObjects(dataObjectResults.Results)
-	return results, nil
+
+  // gather all the data object IDs into a single list (they should already have
+  // an "nmdc:" CURIE prefix) and fetch their metadata
+  dataObjectIds := make([]string, 0)
+  for _, result := range results {
+    for _, dataObjectId := range result.DataObjectSet {
+      dataObjectIds.append(dataObjectId)
+    }
+  }
+  return db.Resources(dataObjectIds), nil
 }
 
 // returns the page number and page size corresponding to the given Pagination
@@ -512,12 +518,12 @@ func (db Database) SpecificSearchParameters() map[string]interface{} {
 	return map[string]interface{}{
     "activity_id": "",
     "data_object_id": "",
-    "fields": []string{},
+    "fields": "",
     "filter": "",
     "sort": "",
 		"sample_id": "",
 		"study_id": "",
-		"extra": []string{},
+		"extra": "",
 	}
 }
 
@@ -526,54 +532,78 @@ func (db Database) addSpecificSearchParameters(params map[string]json.RawMessage
 	paramSpec := db.SpecificSearchParameters()
 	for name, jsonValue := range params {
 		switch name {
-      case "activity_id", "data_object_id",
+    case "activity_id", "data_object_id", "filter", "sort", "sample_id",
+         "study_id":
+  		var value string
+	  	err := json.Unmarshal(jsonValue, &value)
+  		if err != nil {
+	  		return &databases.InvalidSearchParameter{
+		 			Database: "nmdc",
+           Message:  fmt.Sprintf("Invalid value for parameter %s (must be string)", name)
+  			}
+       }
+		}
+    case "fields": // accepts comma-delimited strings
+			var value string
+			err := json.Unmarshal(jsonValue, &value)
+			if err != nil {
+				return &databases.InvalidSearchParameter{
+					Database: "nmdc",
+					Message:  "Invalid NMDC requested extra field given (must be comma-delimited string)",
+				}
+			}
+			acceptedValues := paramSpec["extra"].([]string)
+			if slices.Contains(acceptedValues, value) {
+				p.Add(name, value)
+			} else {
+				return &databases.InvalidSearchParameter{
+					Database: "nmdc",
+					Message:  fmt.Sprintf("Invalid requested extra field: %s", value),
+				}
+			}
+    case "extra": // accepts comma-delimited strings
+		default:
+			return &databases.InvalidSearchParameter{
+				Database: "nmdc",
+				Message:  fmt.Sprintf("Unrecognized NMDC-specific search parameter: %s", name),
+			}
+    }
   p.Add(name, value)
 	return nil
 }
 
 func (db *Database) Search(params databases.SearchParameters) (databases.SearchResults, error) {
+	p := url.Values{}
+
   // fetch pagination parameters
 	pageNumber, pageSize := pageNumberAndSize(params.Pagination.Offset, params.Pagination.MaxNum)
-
-	p := url.Values{}
+	p.Add("page", strconv.Itoa(pageNumber))
+	p.Add("per_page", strconv.Itoa(pageSize))
 
   // NMDC's "search" parameter is not yet implemented, so we ignore it for now
   // in favor of "filter"
 	//p.Add("search", params.Query)
-	if params.Status == databases.SearchFileStatusStaged {
-		p.Add(`ff[file_status]`, "RESTORED")
-	} else if params.Status == databases.SearchFileStatusUnstaged {
-		p.Add(`ff[file_status]`, "PURGED")
-	}
-	p.Add("page", strconv.Itoa(pageNumber))
-	p.Add("per_page", strconv.Itoa(pageSize))
 
-  // decide which endpoint to call based on NMDC-specific parameters
+  // add any NMDC-specific search parameters
 	if params.Specific != nil {
-    params.Specific
 		err := db.addSpecificSearchParameters(params.Specific, &p)
 		if err != nil {
 			return databases.SearchResults{}, err
 		}
-	} else {
+	}
+
+  // dispatch the search to the proper endpoint, depending on whether we're
+  // looking for a study or individual data objects
+  if p.Has("study_id") {
+    return db.dataObjectsForStudy(p.Get("study_id"))
+  } else {
     // simply call the data_objects/ endpoint with the given query string
     p.Add("filter", params.Query) // FIXME: 
     return db.dataObjects(p)
   }
-
-	return db.dataObjectsFromSearch(p)
 }
 
-func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, error) {
-	// strip the "JDP:" prefix from our files and create a mapping from IDs to
-	// their original order so we can hand back metadata accordingly
-	strippedFileIds := make([]string, len(fileIds))
-	indexForId := make(map[string]int)
-	for i, fileId := range fileIds {
-		strippedFileIds[i] = strings.TrimPrefix(fileId, "JDP:")
-		indexForId[strippedFileIds[i]] = i
-	}
-
+func (db *Database) Resources(dataObjectIds []string) ([]frictionless.DataResource, error) {
 	type MetadataRequest struct {
 		Ids                []string `json:"ids"`
 		Aggregations       bool     `json:"aggregations"`

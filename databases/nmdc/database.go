@@ -46,8 +46,8 @@ import (
 )
 
 const (
-	nmdcBaseURL     = "https://api.microbiomedata.org"
-	filePathPrefix = "/data/" // path exposing NMDC files available via Globus
+	baseApiURL  = "https://api.microbiomedata.org/"
+	baseDataURL = "https://data.microbiomedata.org/data/"
 )
 
 // this error type is returned when a file is requested for which the requester
@@ -69,153 +69,88 @@ func (e FileIdNotFoundError) Error() string {
 	return fmt.Sprintf("Can't access file %s: not found.", e.fileId)
 }
 
-// a mapping from file suffixes to format labels
-var suffixToFormat = map[string]string{
-	"bam":      "bam",
-	"bam.bai":  "bai",
-	"blasttab": "blast",
-	"bz":       "bzip",
-	"bz2":      "bzip2",
-	"csv":      "csv",
-	"faa":      "fasta",
-	"fasta":    "fasta",
-	"fasta.gz": "fasta",
-	"fastq":    "fastq",
-	"fastq.gz": "fastq",
-	"fna":      "fasta",
-	"gff":      "gff",
-	"gff3":     "gff3",
-	"gz":       "gz",
-	"html":     "html",
-	"info":     "texinfo",
-	"out":      "text",
-	"pdf":      "pdf",
-	"tar":      "tar",
-	"tar.gz":   "tar",
-	"tar.bz":   "tar",
-	"tar.bz2":  "tar",
-	"tsv":      "tsv",
-	"txt":      "text",
+// a mapping from NMDC file types to format labels
+// (see https://microbiomedata.github.io/nmdc-schema/FileTypeEnum/)
+var fileTypeToFormat = map[string]string{
+	"Annotation Amino Acid FASTA":  "fasta",
+	"Annotation Enzyme Commission": "tsv",
+	"Annotation KEGG Orthology":    "tsv",
+	"Assembly AGP":                 "agp",
+	"Assembly Contigs":             "fasta",
+	"Assembly Coverage BAM":        "bam",
+	"Assembly Info File":           "texinfo",
+	"Assembly Scaffolds":           "fasta",
+	"BAI File":                     "bai",
+	"CATH FunFams (Functional Families) Annotation GFF": "gff3",
+	"Centrifuge Krona Plot":                             "html",
+	"Clusters of Orthologous Groups (COG) Annotation GFF", "gff3",
+	"CRT Annotation GFF":                 "gff3",
+	"Direct Infusion FT ICR-MS Raw Data": "raw",
+	"Error Corrected Reads":              "fastq",
+	"Filtered Sequencing Reads":          "fastq",
+	"Functional Annotation GFF":          "gff3",
+	"Genemark Annotation GFF":            "gff3",
+	"Gene Phylogeny tsv":                 "tsv",
+	"GOTTCHA2 Krona Plot":                "html",
+	"KO_EC Annotation GFF":               "gff3",
+	"Kraken2 Krona Plot":                 "html",
+	"LC-DDA-MS/MS Raw Data":              "raw",
+	"Metagenome Bins":                    "fasta",
+	"Metagenome Raw Reads":               "raw",
+	"Metagenome Raw Read 1":              "raw",
+	"Metagenome Raw Read 2":              "raw",
+	"Misc Annotation GFF":                "gff3",
+	"Pfam Annotation GFF":                "gff3",
+	"Prodigal Annotation GFF":            "gff3",
+	"QC non-rRNA R1":                     "fastq",
+	"QC non-rRNA R2":                     "fastq",
+	"Read Count and RPKM":                "json",
+	"RFAM Annotation GFF":                "gff3",
+	"Scaffold Lineage tsv":               "tsv",
+	"Structural Annotation GFF":          "gff3",
+	"Structural Annotation Stats Json":   "json",
+	"SUPERFam Annotation GFF":            "gff3",
+	"SMART Annotation GFF":               "gff3",
+	"TIGRFam Annotation GFF":             "gff3",
+	"TMRNA Annotation GFF":               "gff3",
+	"TRNA Annotation GFF":                "gff3",
 }
-
-// this gets populated automatically with the keys in suffixToFormat
-var supportedSuffixes []string
 
 // a mapping from file format labels to mime types
 var formatToMimeType = map[string]string{
-	"bam":   "application/octet-stream",
-	"bai":   "application/octet-stream",
-	"csv":   "text/csv",
-	"fasta": "text/plain",
-	"fastq": "text/plain",
-	"gff":   "text/plain",
-	"gff3":  "text/plain",
-	"gz":    "application/gzip",
-	"bz":    "application/x-bzip",
-	"bz2":   "application/x-bzip2",
-	"tar":   "application/x-tar",
-	"text":  "text/plain",
-}
-
-// a mapping from the JDP's reported file types to mime types
-// (backup method for determining mime types)
-var fileTypeToMimeType = map[string]string{
-	"text":     "text/plain",
-	"fasta":    "text/plain",
-	"fasta.gz": "application/gzip",
-	"fastq":    "text/plain",
-	"fastq.gz": "application/gzip",
-	"tab":      "text/plain",
-	"tar.gz":   "application/x-tar",
-	"tar.bz":   "application/x-tar",
-	"tar.bz2":  "application/x-tar",
-}
-
-// attributes (slots) associated with NDMC data types
-// (see https://microbiomedata.github.io/nmdc-schema/)
-var nmdcDataAttributes = []string {
-  // this list is giant--hopefully there's a way to programmatically
-  // query NMDC for this
+	"agp":     "application/octet-stream",
+	"bam":     "application/octet-stream",
+	"bai":     "application/octet-stream",
+	"csv":     "text/csv",
+	"fasta":   "text/plain",
+	"fastq":   "text/plain",
+	"gff":     "text/plain",
+	"gff3":    "text/plain",
+	"gz":      "application/gzip",
+	"bz":      "application/x-bzip",
+	"bz2":     "application/x-bzip2",
+	"json":    "application/json",
+	"raw":     "application/octet-stream",
+	"tar":     "application/x-tar",
+	"text":    "text/plain",
+	"texinfo": "text/plain",
+	"tsv":     "text/plain",
 }
 
 // extracts the file format from the name and type of the file
-func formatFromFileName(fileName string) string {
-	// make a list of the supported suffixes if we haven't yet
-	if supportedSuffixes == nil {
-		supportedSuffixes = make([]string, 0)
-		for suffix := range suffixToFormat {
-			supportedSuffixes = append(supportedSuffixes, suffix)
-		}
+func formatFromType(fileType string) string {
+	if format, found := fileTypeToFormat[fileType]; found {
+		return format
 	}
-
-	// determine whether the file matches any of the supported suffixes,
-	// selecting the longest matching suffix
-	format := "unknown"
-	longestSuffix := 0
-	for _, suffix := range supportedSuffixes {
-		if strings.HasSuffix(fileName, suffix) && len(suffix) > longestSuffix {
-			format = suffixToFormat[suffix]
-			longestSuffix = len(suffix)
-		}
-	}
-	return format
+	return "unknown"
 }
 
 // extracts the file format from the name and type of the file
-func mimeTypeFromFormatAndTypes(format string, fileTypes []string) string {
-	// try to match the file type to a mime type
-	for _, fileType := range fileTypes {
-		if mimeType, ok := fileTypeToMimeType[fileType]; ok {
-			return mimeType
-		}
-	}
-	// check the file format to see whether it matches a mime type
+func mimeTypeFromFormat(format string) string {
 	if mimeType, ok := formatToMimeType[format]; ok {
 		return mimeType
 	}
-	return ""
-}
-
-// extracts file type information from the given File
-func fileTypesFromFile(file File) []string {
-	// TODO: See https://pkg.go.dev/encoding/json?utm_source=godoc#example-RawMessage-Unmarshal
-	// TODO: for an example of how to unmarshal a variant type.
-	return []string{}
-}
-
-// extracts source information from the given metadata
-func sourcesFromMetadata(md Metadata) []frictionless.DataSource {
-	sources := make([]frictionless.DataSource, 0)
-	piInfo := md.Proposal.PI
-	if len(piInfo.LastName) > 0 {
-		var title string
-		if len(piInfo.FirstName) > 0 {
-			title = fmt.Sprintf("%s, %s", piInfo.LastName, piInfo.FirstName)
-			if len(piInfo.MiddleName) > 0 {
-				title += fmt.Sprintf(" %s", piInfo.MiddleName)
-			}
-			if len(piInfo.Institution) > 0 {
-				if len(piInfo.Country) > 0 {
-					title += fmt.Sprintf(" (%s, %s)", piInfo.Institution, piInfo.Country)
-				} else {
-					title += fmt.Sprintf(" (%s)", piInfo.Institution)
-				}
-			} else if len(piInfo.Country) > 0 {
-				title += fmt.Sprintf(" (%s)", piInfo.Country)
-			}
-		}
-		var doiURL string
-		if len(md.Proposal.AwardDOI) > 0 {
-			doiURL = fmt.Sprintf("https://doi.org/%s", md.Proposal.AwardDOI)
-		}
-		source := frictionless.DataSource{
-			Title: title,
-			Path:  doiURL,
-			Email: piInfo.EmailAddress,
-		}
-		sources = append(sources, source)
-	}
-	return sources
+	return "application/octet-stream"
 }
 
 // creates a Frictionless DataResource-savvy name for a file:
@@ -281,9 +216,9 @@ func NewDatabase(orcid string) (databases.Database, error) {
 	}
 
 	return &Database{
-		Id:         "nmdc",
-		Orcid:      orcid,
-		Secret:     secret,
+		Id:     "nmdc",
+		Orcid:  orcid,
+		Secret: secret,
 	}, nil
 }
 
@@ -293,7 +228,7 @@ func (db Database) addAuthHeader(request *http.Request) {
 }
 
 // performs a GET request on the given resource, returning the resulting
-// response and error
+// response body and/or error
 func (db *Database) get(resource string, values url.Values) (*http.Response, error) {
 	var u *url.URL
 	u, err := url.ParseRequestURI(jdpBaseURL)
@@ -309,11 +244,17 @@ func (db *Database) get(resource string, values url.Values) (*http.Response, err
 		return nil, err
 	}
 	db.addAuthHeader(req)
-	return db.Client.Do(req)
+	resp, err := db.Client.Do(req)
+	if err != nil {
+		return results, err
+	}
+	defer resp.Body.Close()
+	var body []byte
+	return io.ReadAll(resp.Body)
 }
 
 // performs a POST request on the given resource, returning the resulting
-// response and error
+// response body and/or error
 func (db *Database) post(resource string, body io.Reader) (*http.Response, error) {
 	u, err := url.ParseRequestURI(jdpBaseURL)
 	if err != nil {
@@ -328,95 +269,46 @@ func (db *Database) post(resource string, body io.Reader) (*http.Response, error
 	}
 	db.addAuthHeader(req)
 	req.Header.Set("Content-Type", "application/json")
-	return db.Client.Do(req)
+	resp, err := db.Client.Do(req)
+	if err != nil {
+		return results, err
+	}
+	defer resp.Body.Close()
+	var body []byte
+	return io.ReadAll(resp.Body)
 }
 
 // data object type for JSON marshalling
 // (see https://microbiomedata.github.io/nmdc-schema/DataObject/)
 type DataObject struct {
-  FileSizeBytes int `json:"file_size_bytes"`
-  MD5Checksum string `json:"md5_checksum"`
-  DataObjectType string `json:"data_object_type"`
-  CompressionType string `json:"compression_type"`
-  // NOTE: no representation of was_generated_by (abstract type) at the moment
-  URL string `json:"url"`
-  Type string `json:"type"`
-  Id string `json:"id"`
-  Name string `json:"name"`
-  Description string `json:"description"`
-  AlternativeIdentifiers []string `json:"alternative_identifiers,omitempty"`
+	FileSizeBytes   int    `json:"file_size_bytes"`
+	MD5Checksum     string `json:"md5_checksum"`
+	DataObjectType  string `json:"data_object_type"`
+	CompressionType string `json:"compression_type"`
+	// NOTE: no representation of was_generated_by (abstract type) at the moment
+	URL                    string   `json:"url"`
+	Type                   string   `json:"type"`
+	Id                     string   `json:"id"`
+	Name                   string   `json:"name"`
+	Description            string   `json:"description"`
+	AlternativeIdentifiers []string `json:"alternative_identifiers,omitempty"`
 }
 
-func dataResourceFromDataObject(dataObject DataObject) frictionless.DataResource {
-  format := formatFromType(dataObject.Type)
+func (db *Database) dataResourceFromDataObject(dataObject DataObject) frictionless.DataResource {
 	return frictionless.DataResource{
-		Id:        id,
-		Name:      dataResourceName(dataObject.Name),
-    Description: dataObject.Description,
-		Path:      dataObject.Name,
-		Format:    format,
-		MediaType: mimeTypeFromFormatAndTypes(format, fileTypes),
-		Bytes:     dataObject.FileSizeBytes,
-		Hash:      dataObject.MD5Checksum,
-		Credit: credit.CreditMetadata{
-			Identifier:   id,
-			ResourceType: "dataset",
-			Titles: []credit.Title{
-				{
-					Title: filePath,
-				},
-			},
-			Dates: []credit.EventDate{
-				{
-					Date:  file.Date,
-					Event: "Created",
-				},
-				{
-					Date:  file.AddedDate,
-					Event: "Accepted",
-				},
-				{
-					Date:  file.ModifiedDate,
-					Event: "Updated",
-				},
-			},
-			Publisher: credit.Organization{
-				OrganizationId:   "ROR:04xm1d337",
-				OrganizationName: "Joint Genome Institute",
-			},
-			RelatedIdentifiers: []credit.PermanentID{
-				{
-					Id:               file.Metadata.Proposal.DOI,
-					Description:      "Proposal DOI",
-					RelationshipType: "IsCitedBy",
-				},
-				{
-					Id:               file.Metadata.Proposal.AwardDOI,
-					Description:      "Awarded proposal DOI",
-					RelationshipType: "IsCitedBy",
-				},
-			},
-			Contributors: []credit.Contributor{
-				{
-					ContributorType: "Person",
-					// ContributorId: nothing yet
-					Name:       strings.TrimSpace(fmt.Sprintf("%s, %s %s", pi.LastName, pi.FirstName, pi.MiddleName)),
-					GivenName:  strings.TrimSpace(fmt.Sprintf("%s %s", pi.FirstName, pi.MiddleName)),
-					FamilyName: strings.TrimSpace(pi.LastName),
-					Affiliations: []credit.Organization{
-						{
-							OrganizationName: pi.Institution,
-						},
-					},
-					ContributorRoles: "PI",
-				},
-			},
-			Version: file.Date,
-		},
+		Id:          id,
+		Name:        dataResourceName(dataObject.Name),
+		Description: dataObject.Description,
+		Path:        filepath.Join(db.Endpoint().Root(), strings.Replace(dataObject.URL, baseDataURL, "")),
+		Format:      formatFromType(dataObject.Type),
+		MediaType:   mimeTypeFromFormat(formatFromType(dataObject.Type)),
+		Bytes:       dataObject.FileSizeBytes,
+		Hash:        dataObject.MD5Checksum,
 	}
 }
 
-// fetches metadata for data objects based on the given parameters
+// fetches metadata for data objects (no credit metadata, alas) based on the
+// given URL search parameters
 func (db *Database) dataObjects(params url.Values) (databases.SearchResults, error) {
 	var results databases.SearchResults
 
@@ -429,50 +321,155 @@ func (db *Database) dataObjects(params url.Values) (databases.SearchResults, err
 		params.Del("extra")
 	}
 
-	resp, err := db.get("data_objects/", params)
-	if err != nil {
-		return results, err
-	}
-	defer resp.Body.Close()
-	var body []byte
-	body, err = io.ReadAll(resp.Body)
-	if err != nil {
-		return results, err
-	}
+	body, err := db.get("data_objects/", params)
 	type DataObjectResults struct {
-    // NOTE: we only extract the results field for now
-    Results []DataObject `json:"results"`
+		// NOTE: we only extract the results field for now
+		Results []DataObject `json:"results"`
 	}
 	var dataObjectResults DataObjectResults
 	err = json.Unmarshal(body, &dataObjectResults)
 	if err != nil {
 		return results, err
 	}
-  results.Resources = make([]frictionless.DataResource, len(dataObjectResults.Results))
-  for i, dataObject := range dataObjectResults.Results {
-    results.Resources[i] = dataResourcesFromDataObjects(dataObject)
-  }
+
+	// fetch credit metadata (FIXME: no way to do this currently)
+	var creditMetadata credit.Metadata
+
+	results.Resources = make([]frictionless.DataResource, len(dataObjectResults.Results))
+	for i, dataObject := range dataObjectResults.Results {
+		results.Resources[i] = dataResourceFromDataObject(dataObject)
+		results.Resources[i].Credit = creditMetadata
+		results.Resources[i].Credit.Identifier = resources[i].Id
+		// FIXME: we can probably chase down credit metadata dates using the
+		// FIXME: generated_by (Activity) field, instantiated as one of the
+		// FIXME: concrete types listed here: https://microbiomedata.github.io/nmdc-schema/WorkflowExecutionActivity/
+	}
+
 	return results, nil
 }
 
-// fetches metadata for data objects associated with the given study
+// fetches credit metadata for the study with the given ID
+func (db *Database) creditMetadataForStudy(studyId string) (credit.Metadata, error) {
+	// vvv credit-related NMDC schema types vvv
+
+	// https://microbiomedata.github.io/nmdc-schema/CreditAssociation/
+	type CreditAssociation struct {
+		AppliedRoles    []string    `json:"applied_roles"`
+		AppliesToPerson PersonValue `json:"applies_to_person"`
+		Type            string      `json:"type,omitempty"`
+	}
+
+	// https://microbiomedata.github.io/nmdc-schema/Doi/
+	type Doi struct {
+		Value    string `json:"doi_value"`
+		Provider string `json:"doi_provider,omitempty"`
+		Category string `json:"doi_category"`
+	}
+
+	// https://microbiomedata.github.io/nmdc-schema/PersonValue/
+	type PersonValue struct {
+		Email    string   `json:"email,omitempty"`
+		Name     string   `json:"name,omitempty"`
+		Orcid    string   `json:"orcid,omitempty"`
+		Websites []string `json:"websites,omitempty"`
+		RawValue string   `json:"has_raw_value,omitempty"` // name in 'FIRST LAST' format (if present)
+	}
+
+	// https://microbiomedata.github.io/nmdc-schema/Study/
+	type Study struct { // partial representation, includes only relevant fields
+		Id                    string              `json:"id"`
+		AlternativeNames      []string            `json:"alternative_names,omitempty"`
+		AlternativeTitles     []string            `json:"alternative_titles,omitempty"`
+		AssociatedDois        []Doi               `json:"associated_dois,omitempty"`
+		Description           string              `json:"description,omitempty"`
+		FundingSources        []string            `json:"funding_sources,omitempty"`
+		HasCreditAssociations []CreditAssociation `json:"has_credit_associations,omitempty"`
+		Name                  string              `json:"name,omitempty"`
+		PrincipalInvestigator PersonValue         `json:"principal_investigator,omitempty"`
+		RelatedIdentifiers    string              `json:"related_identifiers,omitempty"`
+		Title                 string              `json:"title,omitempty"`
+	}
+
+	// fetch the study with the given ID
+	var creditMetadata credit.Metadata
+	body, err := db.get(fmt.Sprintf("studies/%s", studyId), url.Values{})
+	if err != nil {
+		return creditMetadata, err
+	}
+	var study Study
+	err = json.Unmarshal(body, &study)
+	if err != nil {
+		return creditMetadata, err
+	}
+
+	// fish metadata out of the study
+	contributors := []credit.Contributor{
+		{
+			ContributorType:  "Person",
+			Name:             study.PrincipalInvestigator.Name,
+			ContributorRoles: "PI",
+		},
+	}
+	if study.PrincipalInvestigator.RawValue != "" {
+		names := strings.Split(study.PrincipalInvestigator.RawValue)
+		contributors[0].GivenName = names[0]
+		contributors[0].FamilyName = names[1]
+	}
+
+	var titles []credit.Title
+	if study.Title != "" {
+		titles = make([]credit.Title, len(study.AlternativeTitles)+1)
+		titles[0].Title = study.Title
+		for i, title := range titles {
+			titles[i+1].Title = title
+		}
+	}
+
+	var relatedIdentifiers []credit.PermanentID
+	if len(study.AssociatedDois) > 0 {
+		relatedIdentifiers = make([]credit.PermanentID, len(study.AssociatedDois))
+		for i, doi := range study.AssociatedDois {
+			relatedIdentifiers[i] = credit.PermanentID{
+				Id:               doi.Value,
+				RelationshipType: "IsCitedBy",
+			}
+			switch doi.Category {
+			case "award_doi":
+				relatedIdentifiers[i].Description = "Awarded proposal DOI"
+			case "dataset_doi":
+				relatedIdentifiers[i].Description = "Dataset DOI"
+			case "publication_doi":
+				relatedIdentifiers[i].Description = "Publication DOI"
+			case "data_management_plan_doi":
+				relatedIdentifiers[i].Description = "Data management plan DOI"
+			}
+		}
+	}
+
+	creditMetadata = credit.Metadata{
+		// Identifier, Dates, and Version fields are specific to DataResources, omitted here
+		ResourceType: "dataset",
+		Titles:       titles,
+		Publisher: credit.Organization{
+			OrganizationId:   "ROR:05cwx3318",
+			OrganizationName: "National Microbiome Data Collaborative",
+		},
+		RelatedIdentifiers: relatedIdentifiers,
+		Contributors:       contributors,
+	}
+
+	return creditMetadata, err
+}
+
+// fetches file metadata for data objects associated with the given study
 func (db *Database) dataObjectsForStudy(studyId string) (databases.SearchResults, error) {
 	var results databases.SearchResults
 
-	resp, err := db.get(fmt.Sprintf("data_objects/study/%s", studyId), url.Values{})
-	if err != nil {
-		return results, err
-	}
-	defer resp.Body.Close()
-	var body []byte
-	body, err = io.ReadAll(resp.Body)
-	if err != nil {
-		return results, err
-	}
+	body, err := db.get(fmt.Sprintf("data_objects/study/%s", studyId), url.Values{})
 
 	type DataObjectsByStudyResults struct {
-    BiosampleId string `json:"biosample_id"`
-    DataObjectSet []string `json:"data_object_set"`
+		BiosampleId   string   `json:"biosample_id"`
+		DataObjectSet []string `json:"data_object_set"`
 	}
 	var results []DataObjectsByStudyResults
 	err = json.Unmarshal(body, &results)
@@ -480,15 +477,27 @@ func (db *Database) dataObjectsForStudy(studyId string) (databases.SearchResults
 		return results, err
 	}
 
-  // gather all the data object IDs into a single list (they should already have
-  // an "nmdc:" CURIE prefix) and fetch their metadata
-  dataObjectIds := make([]string, 0)
-  for _, result := range results {
-    for _, dataObjectId := range result.DataObjectSet {
-      dataObjectIds.append(dataObjectId)
-    }
-  }
-  return db.Resources(dataObjectIds), nil
+	// gather all the data object IDs into a single list (they should already have
+	// an "nmdc:" CURIE prefix) and fetch their metadata
+	dataObjectIds := make([]string, 0)
+	for _, result := range results {
+		for _, dataObjectId := range result.DataObjectSet {
+			dataObjectIds.append(dataObjectId)
+		}
+	}
+	resources := db.Resources(dataObjectIds)
+
+	// add the credit metadata to each resource
+	creditMetadata := creditMetadataFromStudy(studyId)
+	for i, _ := range resources {
+		resources[i].Credit = creditMetadata
+		resources[i].Credit.Identifier = resources[i].Id
+		// FIXME: we can probably chase down credit metadata dates using the
+		// FIXME: generated_by (Activity) field, instantiated as one of the
+		// FIXME: concrete types listed here: https://microbiomedata.github.io/nmdc-schema/WorkflowExecutionActivity/
+	}
+
+	return resources, nil
 }
 
 // returns the page number and page size corresponding to the given Pagination
@@ -513,17 +522,17 @@ func pageNumberAndSize(offset, maxNum int) (int, int) {
 }
 
 func (db Database) SpecificSearchParameters() map[string]interface{} {
-  // for details about NMDC-specific search parameters, see
-  // https://api.microbiomedata.org/docs#/find:~:text=Find%20NMDC-,metadata,-entities.
+	// for details about NMDC-specific search parameters, see
+	// https://api.microbiomedata.org/docs#/find:~:text=Find%20NMDC-,metadata,-entities.
 	return map[string]interface{}{
-    "activity_id": "",
-    "data_object_id": "",
-    "fields": "",
-    "filter": "",
-    "sort": "",
-		"sample_id": "",
-		"study_id": "",
-		"extra": "",
+		"activity_id":    "",
+		"data_object_id": "",
+		"fields":         "",
+		"filter":         "",
+		"sort":           "",
+		"sample_id":      "",
+		"study_id":       "",
+		"extra":          "",
 	}
 }
 
@@ -532,18 +541,17 @@ func (db Database) addSpecificSearchParameters(params map[string]json.RawMessage
 	paramSpec := db.SpecificSearchParameters()
 	for name, jsonValue := range params {
 		switch name {
-    case "activity_id", "data_object_id", "filter", "sort", "sample_id",
-         "study_id":
-  		var value string
-	  	err := json.Unmarshal(jsonValue, &value)
-  		if err != nil {
-	  		return &databases.InvalidSearchParameter{
-		 			Database: "nmdc",
-           Message:  fmt.Sprintf("Invalid value for parameter %s (must be string)", name)
-  			}
-       }
-		}
-    case "fields": // accepts comma-delimited strings
+		case "activity_id", "data_object_id", "filter", "sort", "sample_id",
+			"study_id":
+			var value string
+			err := json.Unmarshal(jsonValue, &value)
+			if err != nil {
+				return &databases.InvalidSearchParameter{
+					Database: "nmdc",
+					Message:  fmt.Sprintf("Invalid value for parameter %s (must be string)", name),
+				}
+			}
+		case "fields": // accepts comma-delimited strings
 			var value string
 			err := json.Unmarshal(jsonValue, &value)
 			if err != nil {
@@ -561,30 +569,30 @@ func (db Database) addSpecificSearchParameters(params map[string]json.RawMessage
 					Message:  fmt.Sprintf("Invalid requested extra field: %s", value),
 				}
 			}
-    case "extra": // accepts comma-delimited strings
+		case "extra": // accepts comma-delimited strings
 		default:
 			return &databases.InvalidSearchParameter{
 				Database: "nmdc",
 				Message:  fmt.Sprintf("Unrecognized NMDC-specific search parameter: %s", name),
 			}
-    }
-  p.Add(name, value)
+		}
+	}
 	return nil
 }
 
 func (db *Database) Search(params databases.SearchParameters) (databases.SearchResults, error) {
 	p := url.Values{}
 
-  // fetch pagination parameters
+	// fetch pagination parameters
 	pageNumber, pageSize := pageNumberAndSize(params.Pagination.Offset, params.Pagination.MaxNum)
 	p.Add("page", strconv.Itoa(pageNumber))
 	p.Add("per_page", strconv.Itoa(pageSize))
 
-  // NMDC's "search" parameter is not yet implemented, so we ignore it for now
-  // in favor of "filter"
+	// NMDC's "search" parameter is not yet implemented, so we ignore it for now
+	// in favor of "filter"
 	//p.Add("search", params.Query)
 
-  // add any NMDC-specific search parameters
+	// add any NMDC-specific search parameters
 	if params.Specific != nil {
 		err := db.addSpecificSearchParameters(params.Specific, &p)
 		if err != nil {
@@ -592,110 +600,48 @@ func (db *Database) Search(params databases.SearchParameters) (databases.SearchR
 		}
 	}
 
-  // dispatch the search to the proper endpoint, depending on whether we're
-  // looking for a study or individual data objects
-  if p.Has("study_id") {
-    return db.dataObjectsForStudy(p.Get("study_id"))
-  } else {
-    // simply call the data_objects/ endpoint with the given query string
-    p.Add("filter", params.Query) // FIXME: 
-    return db.dataObjects(p)
-  }
+	// dispatch the search to the proper endpoint, depending on whether we're
+	// looking for a study or individual data objects
+	if p.Has("study_id") {
+		return db.dataObjectsForStudy(p.Get("study_id"))
+	} else {
+		// simply call the data_objects/ endpoint with the given query string
+		p.Add("search", params.Query) // FIXME: not yet supported by NMDC!
+		return db.dataObjects(p)
+	}
 }
 
-func (db *Database) Resources(dataObjectIds []string) ([]frictionless.DataResource, error) {
-	type MetadataRequest struct {
-		Ids                []string `json:"ids"`
-		Aggregations       bool     `json:"aggregations"`
-		IncludePrivateData bool     `json:"include_private_data"`
-	}
-	data, err := json.Marshal(MetadataRequest{
-		Ids:                strippedFileIds,
-		Aggregations:       false,
-		IncludePrivateData: true,
-	})
-	if err != nil {
-		return nil, err
-	}
+func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, error) {
+	// we use the /data_objects/{data_object_id} GET endpoint to retrieve metadata
+	// for individual files
+	// (see https://api.microbiomedata.org/docs#/find/find_data_object_by_id_data_objects__data_object_id__get)
+	// FIXME: this endpoint only allows the retrieval of metadata for a single file
+	// FIXME: this endpoint does not provide any credit metadata, nor a way to get it
 
-	resp, err := db.post("search/by_file_ids/", bytes.NewReader(data))
-	defer resp.Body.Close()
-	var body []byte
-	body, err = io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	type MetadataResponse struct {
-		Hits struct {
-			Hits []struct {
-				Type   string `json:"_type"`
-				Id     string `json:"_id"`
-				Source struct {
-					Date         string `json:"file_date"`
-					AddedDate    string `json:"added_date"`
-					ModifiedDate string `json:"modified_date"`
-					FilePath     string `json:"file_path"`
-					FileName     string `json:"file_name"`
-					FileSize     int    `json:"file_size"`
-					MD5Sum       string `json:"md5sum"`
-					Metadata     Metadata
-				} `json:"_source"`
-			} `json:"hits"`
-		} `json:"hits"`
-	}
-	var jdpResp MetadataResponse
-	err = json.Unmarshal(body, &jdpResp)
-	if err != nil {
-		return nil, err
-	}
-
-	// translate the response
-	resources := make([]frictionless.DataResource, len(strippedFileIds))
-	for i, md := range jdpResp.Hits.Hits {
-		if md.Id == "" { // permissions problem
-			return nil, &PermissionDeniedError{fileIds[i]}
+	resource := make([]frictionless.DataResource, len(fileIds))
+	for i, fileId := range fileIds {
+		body, err := db.get(fmt.Sprintf("data_objects/%s", fileId))
+		var dataObject DataObject
+		err = json.Unmarshal(body, &dataObject)
+		if err != nil {
+			return nil, err
 		}
-		index, found := indexForId[md.Id]
-		if !found {
-			return nil, &FileIdNotFoundError{fileIds[i]}
-		}
-		file := File{
-			Id:           md.Id,
-			Name:         md.Source.FileName,
-			Path:         md.Source.FilePath,
-			Date:         md.Source.Date,
-			AddedDate:    md.Source.AddedDate,
-			ModifiedDate: md.Source.ModifiedDate,
-			Size:         md.Source.FileSize,
-			Metadata:     md.Source.Metadata,
-			MD5Sum:       md.Source.MD5Sum,
-		}
-		resources[index] = dataResourceFromFile(file)
-		if resources[index].Path == "" || resources[index].Path == "/" { // permissions probem
-			return nil, &PermissionDeniedError{fileIds[index]}
-		}
-
-		// fill in holes where we can and patch up discrepancies
-		// NOTE: we don't retrieve hits.hits._source.file_type because it can be
-		// NOTE: either a string or an array of strings, and I'm just trying for a
-		// NOTE: solution
-		resources[index].Format = formatFromFileName(resources[index].Path)
-		resources[index].MediaType = mimeTypeFromFormatAndTypes(resources[index].Format, []string{})
+		resources[i] = db.dataResourceFromDataObject(dataObject)
 	}
 	return resources, err
 }
 
 func (db *Database) StageFiles(fileIds []string) (uuid.UUID, error) {
-  // NMDC keeps all of its NERSC data on disk, so all files are already staged.
-  // We simply generate a new UUID that can be handed to db.StagingStatus,
-  // which returns databases.StagingStatusSucceeded.
-  //
-  // "We may eventually use tape but don't need to yet." -Shreyas Cholia, 2024-09-04
-  return uuid.New(), nil
+	// NMDC keeps all of its NERSC data on disk, so all files are already staged.
+	// We simply generate a new UUID that can be handed to db.StagingStatus,
+	// which returns databases.StagingStatusSucceeded.
+	//
+	// "We may eventually use tape but don't need to yet." -Shreyas Cholia, 2024-09-04
+	return uuid.New(), nil
 }
 
 func (db *Database) StagingStatus(id uuid.UUID) (databases.StagingStatus, error) {
-  // all files are hot!
+	// all files are hot!
 	return databases.StagingStatusSucceeded, nil
 }
 

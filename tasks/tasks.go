@@ -40,6 +40,7 @@ import (
 	"github.com/kbase/dts/databases"
 	"github.com/kbase/dts/databases/jdp"
 	"github.com/kbase/dts/databases/kbase"
+	"github.com/kbase/dts/databases/nmdc"
 	"github.com/kbase/dts/endpoints"
 	"github.com/kbase/dts/endpoints/globus"
 	"github.com/kbase/dts/endpoints/local"
@@ -725,6 +726,7 @@ func Start() error {
 		endpoints.RegisterEndpointProvider("local", local.NewEndpoint)
 		databases.RegisterDatabase("jdp", jdp.NewDatabase)
 		databases.RegisterDatabase("kbase", kbase.NewDatabase)
+		databases.RegisterDatabase("nmdc", nmdc.NewDatabase)
 		firstCall = false
 	}
 

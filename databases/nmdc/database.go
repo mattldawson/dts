@@ -22,7 +22,6 @@
 package nmdc
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -83,7 +82,7 @@ var fileTypeToFormat = map[string]string{
 	"BAI File":                     "bai",
 	"CATH FunFams (Functional Families) Annotation GFF": "gff3",
 	"Centrifuge Krona Plot":                             "html",
-	"Clusters of Orthologous Groups (COG) Annotation GFF", "gff3",
+	"Clusters of Orthologous Groups (COG) Annotation GFF": "gff3",
 	"CRT Annotation GFF":                 "gff3",
 	"Direct Infusion FT ICR-MS Raw Data": "raw",
 	"Error Corrected Reads":              "fastq",
@@ -229,9 +228,9 @@ func (db Database) addAuthHeader(request *http.Request) {
 
 // performs a GET request on the given resource, returning the resulting
 // response body and/or error
-func (db *Database) get(resource string, values url.Values) (*http.Response, error) {
+func (db *Database) get(resource string, values url.Values) ([]byte, error) {
 	var u *url.URL
-	u, err := url.ParseRequestURI(jdpBaseURL)
+	u, err := url.ParseRequestURI(baseApiURL)
 	if err != nil {
 		return nil, err
 	}
@@ -246,17 +245,16 @@ func (db *Database) get(resource string, values url.Values) (*http.Response, err
 	db.addAuthHeader(req)
 	resp, err := db.Client.Do(req)
 	if err != nil {
-		return results, err
+		return nil, err
 	}
 	defer resp.Body.Close()
-	var body []byte
 	return io.ReadAll(resp.Body)
 }
 
 // performs a POST request on the given resource, returning the resulting
 // response body and/or error
-func (db *Database) post(resource string, body io.Reader) (*http.Response, error) {
-	u, err := url.ParseRequestURI(jdpBaseURL)
+func (db *Database) post(resource string, body io.Reader) ([]byte, error) {
+	u, err := url.ParseRequestURI(baseApiURL)
 	if err != nil {
 		return nil, err
 	}
@@ -271,10 +269,9 @@ func (db *Database) post(resource string, body io.Reader) (*http.Response, error
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := db.Client.Do(req)
 	if err != nil {
-		return results, err
+		return nil, err
 	}
 	defer resp.Body.Close()
-	var body []byte
 	return io.ReadAll(resp.Body)
 }
 
@@ -295,11 +292,12 @@ type DataObject struct {
 }
 
 func (db *Database) dataResourceFromDataObject(dataObject DataObject) frictionless.DataResource {
+  endpoint, _ := db.Endpoint()
 	return frictionless.DataResource{
-		Id:          id,
+		Id:          dataObject.Id,
 		Name:        dataResourceName(dataObject.Name),
 		Description: dataObject.Description,
-		Path:        filepath.Join(db.Endpoint().Root(), strings.Replace(dataObject.URL, baseDataURL, "")),
+		Path:        filepath.Join(endpoint.Root(), strings.Replace(dataObject.URL, baseDataURL, "", 1)),
 		Format:      formatFromType(dataObject.Type),
 		MediaType:   mimeTypeFromFormat(formatFromType(dataObject.Type)),
 		Bytes:       dataObject.FileSizeBytes,
@@ -312,19 +310,22 @@ func (db *Database) dataResourceFromDataObject(dataObject DataObject) frictionle
 func (db *Database) dataObjects(params url.Values) (databases.SearchResults, error) {
 	var results databases.SearchResults
 
-	idEncountered := make(map[string]bool) // keep track of duplicates
-
+  /* FIXME: uncomment when we add extra metadata fields below
 	// extract any requested "extra" metadata fields (and scrub them from params)
 	var extraFields []string
 	if params.Has("extra") {
 		extraFields = strings.Split(params.Get("extra"), ",")
 		params.Del("extra")
 	}
+  */
 
 	body, err := db.get("data_objects/", params)
 	type DataObjectResults struct {
 		// NOTE: we only extract the results field for now
 		Results []DataObject `json:"results"`
+	}
+	if err != nil {
+		return results, err
 	}
 	var dataObjectResults DataObjectResults
 	err = json.Unmarshal(body, &dataObjectResults)
@@ -333,13 +334,13 @@ func (db *Database) dataObjects(params url.Values) (databases.SearchResults, err
 	}
 
 	// fetch credit metadata (FIXME: no way to do this currently)
-	var creditMetadata credit.Metadata
+	var creditMetadata credit.CreditMetadata
 
 	results.Resources = make([]frictionless.DataResource, len(dataObjectResults.Results))
 	for i, dataObject := range dataObjectResults.Results {
-		results.Resources[i] = dataResourceFromDataObject(dataObject)
+		results.Resources[i] = db.dataResourceFromDataObject(dataObject)
 		results.Resources[i].Credit = creditMetadata
-		results.Resources[i].Credit.Identifier = resources[i].Id
+		results.Resources[i].Credit.Identifier = results.Resources[i].Id
 		// FIXME: we can probably chase down credit metadata dates using the
 		// FIXME: generated_by (Activity) field, instantiated as one of the
 		// FIXME: concrete types listed here: https://microbiomedata.github.io/nmdc-schema/WorkflowExecutionActivity/
@@ -349,8 +350,17 @@ func (db *Database) dataObjects(params url.Values) (databases.SearchResults, err
 }
 
 // fetches credit metadata for the study with the given ID
-func (db *Database) creditMetadataForStudy(studyId string) (credit.Metadata, error) {
+func (db *Database) creditMetadataForStudy(studyId string) (credit.CreditMetadata, error) {
 	// vvv credit-related NMDC schema types vvv
+
+	// https://microbiomedata.github.io/nmdc-schema/PersonValue/
+	type PersonValue struct {
+		Email    string   `json:"email,omitempty"`
+		Name     string   `json:"name,omitempty"`
+		Orcid    string   `json:"orcid,omitempty"`
+		Websites []string `json:"websites,omitempty"`
+		RawValue string   `json:"has_raw_value,omitempty"` // name in 'FIRST LAST' format (if present)
+	}
 
 	// https://microbiomedata.github.io/nmdc-schema/CreditAssociation/
 	type CreditAssociation struct {
@@ -364,15 +374,6 @@ func (db *Database) creditMetadataForStudy(studyId string) (credit.Metadata, err
 		Value    string `json:"doi_value"`
 		Provider string `json:"doi_provider,omitempty"`
 		Category string `json:"doi_category"`
-	}
-
-	// https://microbiomedata.github.io/nmdc-schema/PersonValue/
-	type PersonValue struct {
-		Email    string   `json:"email,omitempty"`
-		Name     string   `json:"name,omitempty"`
-		Orcid    string   `json:"orcid,omitempty"`
-		Websites []string `json:"websites,omitempty"`
-		RawValue string   `json:"has_raw_value,omitempty"` // name in 'FIRST LAST' format (if present)
 	}
 
 	// https://microbiomedata.github.io/nmdc-schema/Study/
@@ -391,7 +392,7 @@ func (db *Database) creditMetadataForStudy(studyId string) (credit.Metadata, err
 	}
 
 	// fetch the study with the given ID
-	var creditMetadata credit.Metadata
+	var creditMetadata credit.CreditMetadata
 	body, err := db.get(fmt.Sprintf("studies/%s", studyId), url.Values{})
 	if err != nil {
 		return creditMetadata, err
@@ -411,7 +412,7 @@ func (db *Database) creditMetadataForStudy(studyId string) (credit.Metadata, err
 		},
 	}
 	if study.PrincipalInvestigator.RawValue != "" {
-		names := strings.Split(study.PrincipalInvestigator.RawValue)
+		names := strings.Split(study.PrincipalInvestigator.RawValue, " ")
 		contributors[0].GivenName = names[0]
 		contributors[0].FamilyName = names[1]
 	}
@@ -420,8 +421,8 @@ func (db *Database) creditMetadataForStudy(studyId string) (credit.Metadata, err
 	if study.Title != "" {
 		titles = make([]credit.Title, len(study.AlternativeTitles)+1)
 		titles[0].Title = study.Title
-		for i, title := range titles {
-			titles[i+1].Title = title
+		for i, _ := range titles {
+			titles[i+1].Title = study.AlternativeTitles[i]
 		}
 	}
 
@@ -446,7 +447,7 @@ func (db *Database) creditMetadataForStudy(studyId string) (credit.Metadata, err
 		}
 	}
 
-	creditMetadata = credit.Metadata{
+	creditMetadata = credit.CreditMetadata{
 		// Identifier, Dates, and Version fields are specific to DataResources, omitted here
 		ResourceType: "dataset",
 		Titles:       titles,
@@ -471,8 +472,8 @@ func (db *Database) dataObjectsForStudy(studyId string) (databases.SearchResults
 		BiosampleId   string   `json:"biosample_id"`
 		DataObjectSet []string `json:"data_object_set"`
 	}
-	var results []DataObjectsByStudyResults
-	err = json.Unmarshal(body, &results)
+	var objects []DataObjectsByStudyResults
+	err = json.Unmarshal(body, &objects)
 	if err != nil {
 		return results, err
 	}
@@ -480,24 +481,28 @@ func (db *Database) dataObjectsForStudy(studyId string) (databases.SearchResults
 	// gather all the data object IDs into a single list (they should already have
 	// an "nmdc:" CURIE prefix) and fetch their metadata
 	dataObjectIds := make([]string, 0)
-	for _, result := range results {
-		for _, dataObjectId := range result.DataObjectSet {
-			dataObjectIds.append(dataObjectId)
+	for _, object := range objects {
+		for _, dataObjectId := range object.DataObjectSet {
+			dataObjectIds = append(dataObjectIds, dataObjectId)
 		}
 	}
-	resources := db.Resources(dataObjectIds)
+	results.Resources, err = db.Resources(dataObjectIds)
+	if err != nil {
+		return results, err
+	}
 
 	// add the credit metadata to each resource
-	creditMetadata := creditMetadataFromStudy(studyId)
-	for i, _ := range resources {
-		resources[i].Credit = creditMetadata
-		resources[i].Credit.Identifier = resources[i].Id
+  var creditMetadata credit.CreditMetadata
+	// creditMetadata := creditMetadataFromStudy(studyId)
+	for i, _ := range results.Resources {
+		results.Resources[i].Credit = creditMetadata
+		results.Resources[i].Credit.Identifier = results.Resources[i].Id
 		// FIXME: we can probably chase down credit metadata dates using the
 		// FIXME: generated_by (Activity) field, instantiated as one of the
 		// FIXME: concrete types listed here: https://microbiomedata.github.io/nmdc-schema/WorkflowExecutionActivity/
 	}
 
-	return resources, nil
+	return results, nil
 }
 
 // returns the page number and page size corresponding to the given Pagination
@@ -618,17 +623,17 @@ func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, er
 	// FIXME: this endpoint only allows the retrieval of metadata for a single file
 	// FIXME: this endpoint does not provide any credit metadata, nor a way to get it
 
-	resource := make([]frictionless.DataResource, len(fileIds))
+	resources := make([]frictionless.DataResource, len(fileIds))
 	for i, fileId := range fileIds {
-		body, err := db.get(fmt.Sprintf("data_objects/%s", fileId))
-		var dataObject DataObject
-		err = json.Unmarshal(body, &dataObject)
+		body, err := db.get(fmt.Sprintf("data_objects/%s", fileId), url.Values{})
 		if err != nil {
 			return nil, err
 		}
+    var dataObject DataObject
+    json.Unmarshal(body, &dataObject)
 		resources[i] = db.dataResourceFromDataObject(dataObject)
 	}
-	return resources, err
+	return resources, nil
 }
 
 func (db *Database) StageFiles(fileIds []string) (uuid.UUID, error) {

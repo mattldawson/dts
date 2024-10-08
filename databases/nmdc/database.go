@@ -80,39 +80,39 @@ var fileTypeToFormat = map[string]string{
 	"Assembly Info File":           "texinfo",
 	"Assembly Scaffolds":           "fasta",
 	"BAI File":                     "bai",
-	"CATH FunFams (Functional Families) Annotation GFF": "gff3",
-	"Centrifuge Krona Plot":                             "html",
+	"CATH FunFams (Functional Families) Annotation GFF":   "gff3",
+	"Centrifuge Krona Plot":                               "html",
 	"Clusters of Orthologous Groups (COG) Annotation GFF": "gff3",
-	"CRT Annotation GFF":                 "gff3",
-	"Direct Infusion FT ICR-MS Raw Data": "raw",
-	"Error Corrected Reads":              "fastq",
-	"Filtered Sequencing Reads":          "fastq",
-	"Functional Annotation GFF":          "gff3",
-	"Genemark Annotation GFF":            "gff3",
-	"Gene Phylogeny tsv":                 "tsv",
-	"GOTTCHA2 Krona Plot":                "html",
-	"KO_EC Annotation GFF":               "gff3",
-	"Kraken2 Krona Plot":                 "html",
-	"LC-DDA-MS/MS Raw Data":              "raw",
-	"Metagenome Bins":                    "fasta",
-	"Metagenome Raw Reads":               "raw",
-	"Metagenome Raw Read 1":              "raw",
-	"Metagenome Raw Read 2":              "raw",
-	"Misc Annotation GFF":                "gff3",
-	"Pfam Annotation GFF":                "gff3",
-	"Prodigal Annotation GFF":            "gff3",
-	"QC non-rRNA R1":                     "fastq",
-	"QC non-rRNA R2":                     "fastq",
-	"Read Count and RPKM":                "json",
-	"RFAM Annotation GFF":                "gff3",
-	"Scaffold Lineage tsv":               "tsv",
-	"Structural Annotation GFF":          "gff3",
-	"Structural Annotation Stats Json":   "json",
-	"SUPERFam Annotation GFF":            "gff3",
-	"SMART Annotation GFF":               "gff3",
-	"TIGRFam Annotation GFF":             "gff3",
-	"TMRNA Annotation GFF":               "gff3",
-	"TRNA Annotation GFF":                "gff3",
+	"CRT Annotation GFF":                                  "gff3",
+	"Direct Infusion FT ICR-MS Raw Data":                  "raw",
+	"Error Corrected Reads":                               "fastq",
+	"Filtered Sequencing Reads":                           "fastq",
+	"Functional Annotation GFF":                           "gff3",
+	"Genemark Annotation GFF":                             "gff3",
+	"Gene Phylogeny tsv":                                  "tsv",
+	"GOTTCHA2 Krona Plot":                                 "html",
+	"KO_EC Annotation GFF":                                "gff3",
+	"Kraken2 Krona Plot":                                  "html",
+	"LC-DDA-MS/MS Raw Data":                               "raw",
+	"Metagenome Bins":                                     "fasta",
+	"Metagenome Raw Reads":                                "raw",
+	"Metagenome Raw Read 1":                               "raw",
+	"Metagenome Raw Read 2":                               "raw",
+	"Misc Annotation GFF":                                 "gff3",
+	"Pfam Annotation GFF":                                 "gff3",
+	"Prodigal Annotation GFF":                             "gff3",
+	"QC non-rRNA R1":                                      "fastq",
+	"QC non-rRNA R2":                                      "fastq",
+	"Read Count and RPKM":                                 "json",
+	"RFAM Annotation GFF":                                 "gff3",
+	"Scaffold Lineage tsv":                                "tsv",
+	"Structural Annotation GFF":                           "gff3",
+	"Structural Annotation Stats Json":                    "json",
+	"SUPERFam Annotation GFF":                             "gff3",
+	"SMART Annotation GFF":                                "gff3",
+	"TIGRFam Annotation GFF":                              "gff3",
+	"TMRNA Annotation GFF":                                "gff3",
+	"TRNA Annotation GFF":                                 "gff3",
 }
 
 // a mapping from file format labels to mime types
@@ -278,21 +278,25 @@ func (db *Database) post(resource string, body io.Reader) ([]byte, error) {
 // data object type for JSON marshalling
 // (see https://microbiomedata.github.io/nmdc-schema/DataObject/)
 type DataObject struct {
-	FileSizeBytes   int    `json:"file_size_bytes"`
-	MD5Checksum     string `json:"md5_checksum"`
-	DataObjectType  string `json:"data_object_type"`
-	CompressionType string `json:"compression_type"`
-	// NOTE: no representation of was_generated_by (abstract type) at the moment
-	URL                    string   `json:"url"`
-	Type                   string   `json:"type"`
-	Id                     string   `json:"id"`
-	Name                   string   `json:"name"`
-	Description            string   `json:"description"`
-	AlternativeIdentifiers []string `json:"alternative_identifiers,omitempty"`
+	FileSizeBytes          int            `json:"file_size_bytes"`
+	MD5Checksum            string         `json:"md5_checksum"`
+	DataObjectType         string         `json:"data_object_type"`
+	CompressionType        string         `json:"compression_type"`
+	URL                    string         `json:"url"`
+	Type                   string         `json:"type"`
+	Id                     string         `json:"id"`
+	Name                   string         `json:"name"`
+	Description            string         `json:"description"`
+	WasGeneratedBy         DataGeneration `json:"was_informed_by"`
+	AlternativeIdentifiers []string       `json:"alternative_identifiers,omitempty"`
+}
+
+type DataGeneration struct {
+	AssociatedStudies []string
 }
 
 func (db *Database) dataResourceFromDataObject(dataObject DataObject) frictionless.DataResource {
-  endpoint, _ := db.Endpoint()
+	endpoint, _ := db.Endpoint()
 	return frictionless.DataResource{
 		Id:          dataObject.Id,
 		Name:        dataResourceName(dataObject.Name),
@@ -310,14 +314,13 @@ func (db *Database) dataResourceFromDataObject(dataObject DataObject) frictionle
 func (db *Database) dataObjects(params url.Values) (databases.SearchResults, error) {
 	var results databases.SearchResults
 
-  /* FIXME: uncomment when we add extra metadata fields below
 	// extract any requested "extra" metadata fields (and scrub them from params)
-	var extraFields []string
+	// FIXME: no extra fields yet, so we simply remove this parameter
+	//var extraFields []string
 	if params.Has("extra") {
-		extraFields = strings.Split(params.Get("extra"), ",")
+		//extraFields = strings.Split(params.Get("extra"), ",")
 		params.Del("extra")
 	}
-  */
 
 	body, err := db.get("data_objects/", params)
 	type DataObjectResults struct {
@@ -333,17 +336,10 @@ func (db *Database) dataObjects(params url.Values) (databases.SearchResults, err
 		return results, err
 	}
 
-	// fetch credit metadata (FIXME: no way to do this currently)
-	var creditMetadata credit.CreditMetadata
-
 	results.Resources = make([]frictionless.DataResource, len(dataObjectResults.Results))
 	for i, dataObject := range dataObjectResults.Results {
 		results.Resources[i] = db.dataResourceFromDataObject(dataObject)
-		results.Resources[i].Credit = creditMetadata
-		results.Resources[i].Credit.Identifier = results.Resources[i].Id
-		// FIXME: we can probably chase down credit metadata dates using the
-		// FIXME: generated_by (Activity) field, instantiated as one of the
-		// FIXME: concrete types listed here: https://microbiomedata.github.io/nmdc-schema/WorkflowExecutionActivity/
+		// FIXME: can't currently fetch metadata this way
 	}
 
 	return results, nil
@@ -364,9 +360,9 @@ func (db *Database) creditMetadataForStudy(studyId string) (credit.CreditMetadat
 
 	// https://microbiomedata.github.io/nmdc-schema/CreditAssociation/
 	type CreditAssociation struct {
-		AppliedRoles    []string    `json:"applied_roles"`
-		AppliesToPerson PersonValue `json:"applies_to_person"`
-		Type            string      `json:"type,omitempty"`
+		Roles  []string    `json:"applied_roles"`
+		Person PersonValue `json:"applies_to_person"`
+		Type   string      `json:"type,omitempty"`
 	}
 
 	// https://microbiomedata.github.io/nmdc-schema/Doi/
@@ -384,7 +380,7 @@ func (db *Database) creditMetadataForStudy(studyId string) (credit.CreditMetadat
 		AssociatedDois        []Doi               `json:"associated_dois,omitempty"`
 		Description           string              `json:"description,omitempty"`
 		FundingSources        []string            `json:"funding_sources,omitempty"`
-		HasCreditAssociations []CreditAssociation `json:"has_credit_associations,omitempty"`
+		CreditAssociations    []CreditAssociation `json:"has_credit_associations,omitempty"`
 		Name                  string              `json:"name,omitempty"`
 		PrincipalInvestigator PersonValue         `json:"principal_investigator,omitempty"`
 		RelatedIdentifiers    string              `json:"related_identifiers,omitempty"`
@@ -404,17 +400,20 @@ func (db *Database) creditMetadataForStudy(studyId string) (credit.CreditMetadat
 	}
 
 	// fish metadata out of the study
-	contributors := []credit.Contributor{
-		{
+
+	contributors := make([]credit.Contributor, len(study.CreditAssociations))
+	for i, association := range study.CreditAssociations {
+		contributors[i] = credit.Contributor{
 			ContributorType:  "Person",
-			Name:             study.PrincipalInvestigator.Name,
-			ContributorRoles: "PI",
-		},
-	}
-	if study.PrincipalInvestigator.RawValue != "" {
-		names := strings.Split(study.PrincipalInvestigator.RawValue, " ")
-		contributors[0].GivenName = names[0]
-		contributors[0].FamilyName = names[1]
+			ContributorId:    association.Person.Orcid,
+			Name:             association.Person.Name,
+			ContributorRoles: strings.Join(association.Roles, ","),
+		}
+		names := strings.Split(" ", association.Person.Name)
+		contributors[i].GivenName = names[0]
+		if len(names) > 1 {
+			contributors[i].FamilyName = names[len(names)-1]
+		}
 	}
 
 	var titles []credit.Title
@@ -458,6 +457,9 @@ func (db *Database) creditMetadataForStudy(studyId string) (credit.CreditMetadat
 		RelatedIdentifiers: relatedIdentifiers,
 		Contributors:       contributors,
 	}
+	// FIXME: we can probably chase down credit metadata dates using the
+	// FIXME: generated_by (Activity) field, instantiated as one of the
+	// FIXME: concrete types listed here: https://microbiomedata.github.io/nmdc-schema/WorkflowExecutionActivity/
 
 	return creditMetadata, err
 }
@@ -469,37 +471,31 @@ func (db *Database) dataObjectsForStudy(studyId string) (databases.SearchResults
 	body, err := db.get(fmt.Sprintf("data_objects/study/%s", studyId), url.Values{})
 
 	type DataObjectsByStudyResults struct {
-		BiosampleId   string   `json:"biosample_id"`
-		DataObjectSet []string `json:"data_object_set"`
+		BiosampleId   string       `json:"biosample_id"`
+		DataObjectSet []DataObject `json:"data_object_set"`
 	}
-	var objects []DataObjectsByStudyResults
-	err = json.Unmarshal(body, &objects)
+	var objectSets []DataObjectsByStudyResults
+	err = json.Unmarshal(body, &objectSets)
 	if err != nil {
 		return results, err
 	}
 
-	// gather all the data object IDs into a single list (they should already have
-	// an "nmdc:" CURIE prefix) and fetch their metadata
-	dataObjectIds := make([]string, 0)
-	for _, object := range objects {
-		for _, dataObjectId := range object.DataObjectSet {
-			dataObjectIds = append(dataObjectIds, dataObjectId)
+	// create resources for the data objects
+	results.Resources = make([]frictionless.DataResource, 0)
+	for _, objectSet := range objectSets {
+		for _, dataObject := range objectSet.DataObjectSet {
+			results.Resources = append(results.Resources, db.dataResourceFromDataObject(dataObject))
 		}
-	}
-	results.Resources, err = db.Resources(dataObjectIds)
-	if err != nil {
-		return results, err
 	}
 
 	// add the credit metadata to each resource
-  var creditMetadata credit.CreditMetadata
-	// creditMetadata := creditMetadataFromStudy(studyId)
+	creditMetadata, err := db.creditMetadataForStudy(studyId)
+	if err != nil {
+		return results, err
+	}
 	for i, _ := range results.Resources {
 		results.Resources[i].Credit = creditMetadata
 		results.Resources[i].Credit.Identifier = results.Resources[i].Id
-		// FIXME: we can probably chase down credit metadata dates using the
-		// FIXME: generated_by (Activity) field, instantiated as one of the
-		// FIXME: concrete types listed here: https://microbiomedata.github.io/nmdc-schema/WorkflowExecutionActivity/
 	}
 
 	return results, nil
@@ -629,8 +625,8 @@ func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, er
 		if err != nil {
 			return nil, err
 		}
-    var dataObject DataObject
-    json.Unmarshal(body, &dataObject)
+		var dataObject DataObject
+		json.Unmarshal(body, &dataObject)
 		resources[i] = db.dataResourceFromDataObject(dataObject)
 	}
 	return resources, nil

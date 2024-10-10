@@ -28,7 +28,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -208,16 +207,18 @@ func NewDatabase(orcid string) (databases.Database, error) {
 		return nil, fmt.Errorf("No ORCID ID was given")
 	}
 
+	/* FIXME: we don't need authentication for searches
 	// make sure we have a shared secret or an SSO token
 	secret, haveSecret := os.LookupEnv("DTS_NMDC_SECRET")
 	if !haveSecret {
 		return nil, fmt.Errorf("No shared secret was found for NMDC authentication")
 	}
+	*/
 
 	return &Database{
-		Id:     "nmdc",
-		Orcid:  orcid,
-		Secret: secret,
+		Id:    "nmdc",
+		Orcid: orcid,
+		//		Secret: secret,
 	}, nil
 }
 
@@ -420,7 +421,7 @@ func (db *Database) creditMetadataForStudy(studyId string) (credit.CreditMetadat
 	if study.Title != "" {
 		titles = make([]credit.Title, len(study.AlternativeTitles)+1)
 		titles[0].Title = study.Title
-		for i, _ := range titles {
+		for i, _ := range study.AlternativeTitles {
 			titles[i+1].Title = study.AlternativeTitles[i]
 		}
 	}
@@ -552,6 +553,7 @@ func (db Database) addSpecificSearchParameters(params map[string]json.RawMessage
 					Message:  fmt.Sprintf("Invalid value for parameter %s (must be string)", name),
 				}
 			}
+			p.Add(name, value)
 		case "fields": // accepts comma-delimited strings
 			var value string
 			err := json.Unmarshal(jsonValue, &value)

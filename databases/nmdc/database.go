@@ -248,8 +248,15 @@ func (db *Database) get(resource string, values url.Values) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
-	return io.ReadAll(resp.Body)
+	switch resp.StatusCode {
+	case 200:
+		defer resp.Body.Close()
+		return io.ReadAll(resp.Body)
+	case 503:
+		return nil, fmt.Errorf("Could not reach the NMDC database (it may be down)")
+	default:
+		return nil, fmt.Errorf("An unknown error occurred with the NMDC database")
+	}
 }
 
 // performs a POST request on the given resource, returning the resulting
@@ -272,8 +279,15 @@ func (db *Database) post(resource string, body io.Reader) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
-	return io.ReadAll(resp.Body)
+	switch resp.StatusCode {
+	case 200, 201, 204:
+		defer resp.Body.Close()
+		return io.ReadAll(resp.Body)
+	case 503:
+		return nil, fmt.Errorf("Could not reach the NMDC database (it may be down)")
+	default:
+		return nil, fmt.Errorf("An unknown error occurred with the NMDC database")
+	}
 }
 
 // data object type for JSON marshalling
@@ -421,8 +435,8 @@ func (db *Database) creditMetadataForStudy(studyId string) (credit.CreditMetadat
 	if study.Title != "" {
 		titles = make([]credit.Title, len(study.AlternativeTitles)+1)
 		titles[0].Title = study.Title
-		for i, _ := range study.AlternativeTitles {
-			titles[i+1].Title = study.AlternativeTitles[i]
+		for i, alternativeTitle := range study.AlternativeTitles {
+			titles[i+1].Title = alternativeTitle
 		}
 	}
 
@@ -470,6 +484,9 @@ func (db *Database) dataObjectsForStudy(studyId string) (databases.SearchResults
 	var results databases.SearchResults
 
 	body, err := db.get(fmt.Sprintf("data_objects/study/%s", studyId), url.Values{})
+	if err != nil {
+		return results, err
+	}
 
 	type DataObjectsByStudyResults struct {
 		BiosampleId   string       `json:"biosample_id"`
@@ -494,9 +511,9 @@ func (db *Database) dataObjectsForStudy(studyId string) (databases.SearchResults
 	if err != nil {
 		return results, err
 	}
-	for i, _ := range results.Resources {
+	for i, resource := range results.Resources {
 		results.Resources[i].Credit = creditMetadata
-		results.Resources[i].Credit.Identifier = results.Resources[i].Id
+		results.Resources[i].Credit.Identifier = resource.Id
 	}
 
 	return results, nil

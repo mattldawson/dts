@@ -17,15 +17,6 @@ type ServiceInfoResponse struct {
 	Documentation string `json:"documentation" example:"/docs" doc:"The OpenAPI documentation endpoint"`
 }
 
-// This type holds information about an error that occurred responding to a
-// request.
-type ErrorResponse struct {
-	// An HTTP error code
-	Code int `json:"code"`
-	// A descriptive error message
-	Error string `json:"message"`
-}
-
 // a response for a database-related query (GET)
 type DatabaseResponse struct {
 	Id           string `json:"id" example:"jdp" `

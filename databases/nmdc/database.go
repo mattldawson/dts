@@ -230,16 +230,16 @@ func (db Database) addAuthHeader(request *http.Request) {
 // performs a GET request on the given resource, returning the resulting
 // response body and/or error
 func (db *Database) get(resource string, values url.Values) ([]byte, error) {
-	var u *url.URL
-	u, err := url.ParseRequestURI(baseApiURL)
+	res, err := url.Parse(baseApiURL)
 	if err != nil {
 		return nil, err
 	}
-	u.Path = resource
-	u.RawQuery = values.Encode()
-	res := fmt.Sprintf("%v", u)
-	slog.Debug(fmt.Sprintf("GET: %s", res))
-	req, err := http.NewRequest(http.MethodGet, res, http.NoBody)
+	res.Path += resource
+	res.RawQuery = values.Encode()
+	// NOTE: we must escape the colon in "nmdc:" for study/object IDs
+	escapedResource := strings.ReplaceAll(res.String(), "nmdc:", "nmdc%3A")
+	slog.Debug(fmt.Sprintf("GET: %s", escapedResource))
+	req, err := http.NewRequest(http.MethodGet, escapedResource, http.NoBody)
 	if err != nil {
 		return nil, err
 	}
@@ -253,23 +253,27 @@ func (db *Database) get(resource string, values url.Values) ([]byte, error) {
 		defer resp.Body.Close()
 		return io.ReadAll(resp.Body)
 	case 503:
-		return nil, fmt.Errorf("Could not reach the NMDC database (it may be down)")
+		return nil, &databases.UnavailableError{
+			Database: "nmdc",
+		}
 	default:
-		return nil, fmt.Errorf("An unknown error occurred with the NMDC database")
+		return nil, fmt.Errorf("An error occurred with the NMDC database (%d)",
+			resp.StatusCode)
 	}
 }
 
 // performs a POST request on the given resource, returning the resulting
 // response body and/or error
 func (db *Database) post(resource string, body io.Reader) ([]byte, error) {
-	u, err := url.ParseRequestURI(baseApiURL)
+	res, err := url.Parse(baseApiURL)
 	if err != nil {
 		return nil, err
 	}
-	u.Path = resource
-	res := fmt.Sprintf("%v", u)
-	slog.Debug(fmt.Sprintf("POST: %s", res))
-	req, err := http.NewRequest(http.MethodPost, res, body)
+	res.Path += resource
+	// NOTE: we must escape the colon in "nmdc:" for study/object IDs
+	escapedResource := strings.ReplaceAll(res.String(), "nmdc:", "nmdc%3A")
+	slog.Debug(fmt.Sprintf("POST: %s", escapedResource))
+	req, err := http.NewRequest(http.MethodPost, escapedResource, body)
 	if err != nil {
 		return nil, err
 	}
@@ -284,9 +288,12 @@ func (db *Database) post(resource string, body io.Reader) ([]byte, error) {
 		defer resp.Body.Close()
 		return io.ReadAll(resp.Body)
 	case 503:
-		return nil, fmt.Errorf("Could not reach the NMDC database (it may be down)")
+		return nil, &databases.UnavailableError{
+			Database: "nmdc",
+		}
 	default:
-		return nil, fmt.Errorf("An unknown error occurred with the NMDC database")
+		return nil, fmt.Errorf("An error occurred with the NMDC database (%d)",
+			resp.StatusCode)
 	}
 }
 

@@ -121,6 +121,16 @@ func (e AlreadyRegisteredError) Error() string {
 	return fmt.Sprintf("Cannot register database %s (already registered).", e.dbName)
 }
 
+// This error type is returned when a database exists but is currently
+// unavailable
+type UnavailableError struct {
+	Database string
+}
+
+func (e UnavailableError) Error() string {
+	return fmt.Sprintf("Cannot reach database %s (unavailable).", e.Database)
+}
+
 // This error type is returned when an invalid database-specific search
 // parameter is specified
 type InvalidSearchParameter struct {

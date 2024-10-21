@@ -28,7 +28,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -236,10 +235,8 @@ func (db *Database) get(resource string, values url.Values) ([]byte, error) {
 	}
 	res.Path += resource
 	res.RawQuery = values.Encode()
-	// NOTE: we must escape the colon in "nmdc:" for study/object IDs
-	escapedResource := strings.ReplaceAll(res.String(), "nmdc:", "nmdc%3A")
-	slog.Debug(fmt.Sprintf("GET: %s", escapedResource))
-	req, err := http.NewRequest(http.MethodGet, escapedResource, http.NoBody)
+	slog.Debug(fmt.Sprintf("GET: %s", res.String()))
+	req, err := http.NewRequest(http.MethodGet, res.String(), http.NoBody)
 	if err != nil {
 		return nil, err
 	}
@@ -270,10 +267,8 @@ func (db *Database) post(resource string, body io.Reader) ([]byte, error) {
 		return nil, err
 	}
 	res.Path += resource
-	// NOTE: we must escape the colon in "nmdc:" for study/object IDs
-	escapedResource := strings.ReplaceAll(res.String(), "nmdc:", "nmdc%3A")
-	slog.Debug(fmt.Sprintf("POST: %s", escapedResource))
-	req, err := http.NewRequest(http.MethodPost, escapedResource, body)
+	slog.Debug(fmt.Sprintf("POST: %s", res.String()))
+	req, err := http.NewRequest(http.MethodPost, res.String(), body)
 	if err != nil {
 		return nil, err
 	}
@@ -318,12 +313,15 @@ type DataGeneration struct {
 }
 
 func (db *Database) dataResourceFromDataObject(dataObject DataObject) frictionless.DataResource {
-	endpoint, _ := db.Endpoint()
+	// NOTE: we fetch the file path from the URL field, but we need to scrub the
+	// NOTE: base URL portion from it; since this base URL need not be the same
+	// NOTE: as our "baseDataURL", we need to be careful about what we assume
+	fileURL, _ := url.Parse(dataObject.URL)
 	return frictionless.DataResource{
 		Id:          dataObject.Id,
 		Name:        dataResourceName(dataObject.Name),
 		Description: dataObject.Description,
-		Path:        filepath.Join(endpoint.Root(), strings.Replace(dataObject.URL, baseDataURL, "", 1)),
+		Path:        fileURL.Path[1:], // omit first '/'
 		Format:      formatFromType(dataObject.Type),
 		MediaType:   mimeTypeFromFormat(formatFromType(dataObject.Type)),
 		Bytes:       dataObject.FileSizeBytes,
@@ -490,6 +488,9 @@ func (db *Database) creditMetadataForStudy(studyId string) (credit.CreditMetadat
 func (db *Database) dataObjectsForStudy(studyId string) (databases.SearchResults, error) {
 	var results databases.SearchResults
 
+	// NOTE: we must escape the colon in "nmdc:" for study/object IDs
+	//studyId = strings.ReplaceAll(studyId, "nmdc:", "nmdc%3A")
+
 	body, err := db.get(fmt.Sprintf("data_objects/study/%s", studyId), url.Values{})
 	if err != nil {
 		return results, err
@@ -647,6 +648,9 @@ func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, er
 
 	resources := make([]frictionless.DataResource, len(fileIds))
 	for i, fileId := range fileIds {
+		// NOTE: we must escape the colon in "nmdc:" for study/object IDs
+		//fileId = strings.ReplaceAll(fileId, "nmdc:", "nmdc%3A")
+
 		body, err := db.get(fmt.Sprintf("data_objects/%s", fileId), url.Values{})
 		if err != nil {
 			return nil, err

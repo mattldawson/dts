@@ -28,7 +28,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"path/filepath"
+	//	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -44,8 +44,9 @@ import (
 )
 
 const (
-	baseApiURL  = "https://api.microbiomedata.org/"
-	baseDataURL = "https://data.microbiomedata.org/data/"
+	// NOTE: for now, we use the dev environment (-dev), not prod (which has bugs!)
+	baseApiURL  = "https://api-dev.microbiomedata.org/"
+	baseDataURL = "https://data-dev.microbiomedata.org/data/"
 )
 
 // this error type is returned when a file is requested for which the requester
@@ -297,12 +298,20 @@ type DataGeneration struct {
 }
 
 func (db *Database) dataResourceFromDataObject(dataObject DataObject) frictionless.DataResource {
-	endpoint, _ := db.Endpoint()
+	//endpoint, _ := db.Endpoint()
+
+	// FIXME: this seems bad! But I'm seeing some weird URLs that are getting in the
+	// FIXME: way, so we need to eradicate them at the moment
+	badPaths := []string{"https://nmdcdemo.emsl.pnnl.gov/"}
+	objectURL := dataObject.URL
+	for _, badPath := range badPaths {
+		objectURL = strings.ReplaceAll(objectURL, badPath, "")
+	}
 	return frictionless.DataResource{
 		Id:          dataObject.Id,
 		Name:        dataResourceName(dataObject.Name),
 		Description: dataObject.Description,
-		Path:        filepath.Join(endpoint.Root(), strings.Replace(dataObject.URL, baseDataURL, "", 1)),
+		Path:        objectURL,
 		Format:      formatFromType(dataObject.Type),
 		MediaType:   mimeTypeFromFormat(formatFromType(dataObject.Type)),
 		Bytes:       dataObject.FileSizeBytes,
@@ -340,7 +349,14 @@ func (db *Database) dataObjects(params url.Values) (databases.SearchResults, err
 	results.Resources = make([]frictionless.DataResource, len(dataObjectResults.Results))
 	for i, dataObject := range dataObjectResults.Results {
 		results.Resources[i] = db.dataResourceFromDataObject(dataObject)
-		// FIXME: can't currently fetch metadata this way
+		// FIXME: metadata notes from hackathon:
+		//
+		// * Object relations: https://portal.nersc.gov/project/m3408/refscan/graph-collections-v11.0.3.html
+		// * input:					     output:
+		//   sample -> data_generation_set -> data object
+		// * data_generation_set has associated_studies (study_set) for credit metadata
+		// * data_generation_set has was_informed_by (workflow_execution_set) which associates data object outputs via has_output
+		// * favor dataset API, which is backed by PostGres, which is going to (hopefully) end up as the only source of truth(!)0
 	}
 
 	return results, nil
@@ -421,8 +437,8 @@ func (db *Database) creditMetadataForStudy(studyId string) (credit.CreditMetadat
 	if study.Title != "" {
 		titles = make([]credit.Title, len(study.AlternativeTitles)+1)
 		titles[0].Title = study.Title
-		for i, _ := range study.AlternativeTitles {
-			titles[i+1].Title = study.AlternativeTitles[i]
+		for i, alternativeTitle := range study.AlternativeTitles {
+			titles[i+1].Title = alternativeTitle
 		}
 	}
 
@@ -472,8 +488,8 @@ func (db *Database) dataObjectsForStudy(studyId string) (databases.SearchResults
 	body, err := db.get(fmt.Sprintf("data_objects/study/%s", studyId), url.Values{})
 
 	type DataObjectsByStudyResults struct {
-		BiosampleId   string       `json:"biosample_id"`
-		DataObjectSet []DataObject `json:"data_object_set"`
+		BiosampleId string       `json:"biosample_id"`
+		DataObjects []DataObject `json:"data_objects"`
 	}
 	var objectSets []DataObjectsByStudyResults
 	err = json.Unmarshal(body, &objectSets)
@@ -484,7 +500,7 @@ func (db *Database) dataObjectsForStudy(studyId string) (databases.SearchResults
 	// create resources for the data objects
 	results.Resources = make([]frictionless.DataResource, 0)
 	for _, objectSet := range objectSets {
-		for _, dataObject := range objectSet.DataObjectSet {
+		for _, dataObject := range objectSet.DataObjects {
 			results.Resources = append(results.Resources, db.dataResourceFromDataObject(dataObject))
 		}
 	}
@@ -494,9 +510,9 @@ func (db *Database) dataObjectsForStudy(studyId string) (databases.SearchResults
 	if err != nil {
 		return results, err
 	}
-	for i, _ := range results.Resources {
+	for i, resource := range results.Resources {
 		results.Resources[i].Credit = creditMetadata
-		results.Resources[i].Credit.Identifier = results.Resources[i].Id
+		results.Resources[i].Credit.Identifier = resource.Id
 	}
 
 	return results, nil

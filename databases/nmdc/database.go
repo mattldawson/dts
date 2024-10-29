@@ -28,7 +28,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	//	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -231,16 +230,14 @@ func (db Database) addAuthHeader(request *http.Request) {
 // performs a GET request on the given resource, returning the resulting
 // response body and/or error
 func (db *Database) get(resource string, values url.Values) ([]byte, error) {
-	var u *url.URL
-	u, err := url.ParseRequestURI(baseApiURL)
+	res, err := url.Parse(baseApiURL)
 	if err != nil {
 		return nil, err
 	}
-	u.Path = resource
-	u.RawQuery = values.Encode()
-	res := fmt.Sprintf("%v", u)
-	slog.Debug(fmt.Sprintf("GET: %s", res))
-	req, err := http.NewRequest(http.MethodGet, res, http.NoBody)
+	res.Path += resource
+	res.RawQuery = values.Encode()
+	slog.Debug(fmt.Sprintf("GET: %s", res.String()))
+	req, err := http.NewRequest(http.MethodGet, res.String(), http.NoBody)
 	if err != nil {
 		return nil, err
 	}
@@ -249,21 +246,30 @@ func (db *Database) get(resource string, values url.Values) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
-	return io.ReadAll(resp.Body)
+	switch resp.StatusCode {
+	case 200:
+		defer resp.Body.Close()
+		return io.ReadAll(resp.Body)
+	case 503:
+		return nil, &databases.UnavailableError{
+			Database: "nmdc",
+		}
+	default:
+		return nil, fmt.Errorf("An error occurred with the NMDC database (%d)",
+			resp.StatusCode)
+	}
 }
 
 // performs a POST request on the given resource, returning the resulting
 // response body and/or error
 func (db *Database) post(resource string, body io.Reader) ([]byte, error) {
-	u, err := url.ParseRequestURI(baseApiURL)
+	res, err := url.Parse(baseApiURL)
 	if err != nil {
 		return nil, err
 	}
-	u.Path = resource
-	res := fmt.Sprintf("%v", u)
-	slog.Debug(fmt.Sprintf("POST: %s", res))
-	req, err := http.NewRequest(http.MethodPost, res, body)
+	res.Path += resource
+	slog.Debug(fmt.Sprintf("POST: %s", res.String()))
+	req, err := http.NewRequest(http.MethodPost, res.String(), body)
 	if err != nil {
 		return nil, err
 	}
@@ -273,8 +279,18 @@ func (db *Database) post(resource string, body io.Reader) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
-	return io.ReadAll(resp.Body)
+	switch resp.StatusCode {
+	case 200, 201, 204:
+		defer resp.Body.Close()
+		return io.ReadAll(resp.Body)
+	case 503:
+		return nil, &databases.UnavailableError{
+			Database: "nmdc",
+		}
+	default:
+		return nil, fmt.Errorf("An error occurred with the NMDC database (%d)",
+			resp.StatusCode)
+	}
 }
 
 // data object type for JSON marshalling
@@ -298,8 +314,6 @@ type DataGeneration struct {
 }
 
 func (db *Database) dataResourceFromDataObject(dataObject DataObject) frictionless.DataResource {
-	//endpoint, _ := db.Endpoint()
-
 	// FIXME: this seems bad! But I'm seeing some weird URLs that are getting in the
 	// FIXME: way, so we need to eradicate them at the moment
 	badPaths := []string{"https://nmdcdemo.emsl.pnnl.gov/"}
@@ -485,7 +499,13 @@ func (db *Database) creditMetadataForStudy(studyId string) (credit.CreditMetadat
 func (db *Database) dataObjectsForStudy(studyId string) (databases.SearchResults, error) {
 	var results databases.SearchResults
 
+	// NOTE: we must escape the colon in "nmdc:" for study/object IDs
+	//studyId = strings.ReplaceAll(studyId, "nmdc:", "nmdc%3A")
+
 	body, err := db.get(fmt.Sprintf("data_objects/study/%s", studyId), url.Values{})
+	if err != nil {
+		return results, err
+	}
 
 	type DataObjectsByStudyResults struct {
 		BiosampleId string       `json:"biosample_id"`
@@ -639,6 +659,9 @@ func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, er
 
 	resources := make([]frictionless.DataResource, len(fileIds))
 	for i, fileId := range fileIds {
+		// NOTE: we must escape the colon in "nmdc:" for study/object IDs
+		//fileId = strings.ReplaceAll(fileId, "nmdc:", "nmdc%3A")
+
 		body, err := db.get(fmt.Sprintf("data_objects/%s", fileId), url.Values{})
 		if err != nil {
 			return nil, err

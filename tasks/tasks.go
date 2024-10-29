@@ -724,9 +724,15 @@ func Start() error {
 	if firstCall {
 		endpoints.RegisterEndpointProvider("globus", globus.NewEndpoint)
 		endpoints.RegisterEndpointProvider("local", local.NewEndpoint)
-		databases.RegisterDatabase("jdp", jdp.NewDatabase)
-		databases.RegisterDatabase("kbase", kbase.NewDatabase)
-		databases.RegisterDatabase("nmdc", nmdc.NewDatabase)
+		if _, found := config.Databases["jdp"]; found {
+			databases.RegisterDatabase("jdp", jdp.NewDatabase)
+		}
+		if _, found := config.Databases["kbase"]; found {
+			databases.RegisterDatabase("kbase", kbase.NewDatabase)
+		}
+		if _, found := config.Databases["nmdc"]; found {
+			databases.RegisterDatabase("nmdc", nmdc.NewDatabase)
+		}
 		firstCall = false
 	}
 

@@ -28,6 +28,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -44,8 +45,12 @@ import (
 
 const (
 	// NOTE: for now, we use the dev environment (-dev), not prod (which has bugs!)
-	baseApiURL  = "https://api-dev.microbiomedata.org/"
-	baseDataURL = "https://data-dev.microbiomedata.org/data/"
+	// NOTE: note also that NMDC is backed by two databases: one MongoDB and one PostGres,
+	// NOTE: which are synced daily-esque. They will sort this out in the coming year,
+	// NOTE: and it looks like PostGres is probably going to prevail.
+	// NOTE: (See https://github.com/microbiomedata/NMDC_documentation/blob/main/docs/howto_guides/portal_guide.md)
+	baseApiURL  = "https://api-dev.microbiomedata.org/"       // mongoDB
+	baseDataURL = "https://data-dev.microbiomedata.org/data/" // postgres (use in future)
 )
 
 // this error type is returned when a file is requested for which the requester
@@ -177,7 +182,7 @@ func dataResourceName(filename string) string {
 				end++
 			}
 			if end < len(name) {
-				name = name[:start] + string('_') + name[end+1:]
+				name = name[:start] + string('_') + name[end:]
 			} else {
 				name = name[:start] + string('_')
 			}
@@ -314,18 +319,21 @@ type DataGeneration struct {
 }
 
 func (db *Database) dataResourceFromDataObject(dataObject DataObject) frictionless.DataResource {
-	// FIXME: this seems bad! But I'm seeing some weird URLs that are getting in the
+	// strip the hostname from the URL to get the data object's path
+	hostPattern, _ := regexp.Compile(`^https:\/\/.+\/`)
+	objectPath := hostPattern.ReplaceAllLiteralString(dataObject.URL, "")
+	/* FIXME: this seems bad! But I'm seeing some weird URLs that are getting in the
 	// FIXME: way, so we need to eradicate them at the moment
 	badPaths := []string{"https://nmdcdemo.emsl.pnnl.gov/"}
 	objectURL := dataObject.URL
 	for _, badPath := range badPaths {
 		objectURL = strings.ReplaceAll(objectURL, badPath, "")
-	}
+	}*/
 	return frictionless.DataResource{
 		Id:          dataObject.Id,
 		Name:        dataResourceName(dataObject.Name),
 		Description: dataObject.Description,
-		Path:        objectURL,
+		Path:        objectPath,
 		Format:      formatFromType(dataObject.Type),
 		MediaType:   mimeTypeFromFormat(formatFromType(dataObject.Type)),
 		Bytes:       dataObject.FileSizeBytes,

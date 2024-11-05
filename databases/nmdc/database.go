@@ -22,6 +22,7 @@
 package nmdc
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -341,6 +342,105 @@ func (db *Database) dataResourceFromDataObject(dataObject DataObject) frictionle
 	}
 }
 
+func (db *Database) studyIdsForDataObjectIds(dataObjectIds []string) (map[string]string, error) {
+	// We create an aggregation query on the data_generation_set collection.
+	// The data_generation_set collection associates studies with data objects:
+	// * the associated_studies field points to a study_set collection
+	// * the was_informed_by field points to a workflow_execution_set collection,
+	//   whose has_output field points to a data_object_set collection
+	//
+	// NOTE: The API documentation for find/aggregate queries
+	// NOTE: (https://api.microbiomedata.org/docs#/queries/run_query_queries_run_post)
+	// NOTE: includes words of caution:
+	// NOTE:
+	// NOTE: > For `find` and `aggregate`, note that cursor batching/pagination does
+	// NOTE: > not work via this API, so ensure that you construct a command that
+	// NOTE: > will return what you need in the "first batch". Also, the maximum
+	// NOTE: > size of the returned payload is 16MB.
+	// NOTE:
+	// NOTE: If we need to, we can break up our aggregate queries into smaller
+	// NOTE: chunks, since these queries are independent.
+	type MatchOperation struct {
+		// matches a single record by ID
+		Id string `json:"id,omitempty"`
+		// matches a record whose ID is in the given list
+		In []string `json:"in,omitempty"`
+	}
+	type LookupOperation struct {
+		From         string `json:"from"`
+		LocalField   string `json:"localField"`
+		ForeignField string `json:"foreignField"`
+		As           string `json:"as"`
+	}
+	type PipelineOperation struct {
+		// this is a bit cheesy but is simple and works
+		Match  MatchOperation  `json:"$match,omitempty"`
+		Lookup LookupOperation `json:"$lookup,omitempty"`
+	}
+	type CursorProperty struct {
+		BatchSize int `json:"batchsize,omitempty"`
+	}
+	type AggregateRequest struct {
+		Aggregate string              `json:"aggregate"`
+		Pipeline  []PipelineOperation `json:"pipeline"`
+		Cursor    CursorProperty      `json:"cursor"`
+	}
+	data, err := json.Marshal(AggregateRequest{
+		Aggregate: "data_object_set",
+		Pipeline: []PipelineOperation{
+			// match against our set of data object IDs
+			{
+				Match: MatchOperation{
+					In: dataObjectIds,
+				},
+			},
+			// look up the data object's workflow execution set
+			{
+				Lookup: LookupOperation{
+					From:         "data_generation_set",
+					LocalField:   "was_generated_by",
+					ForeignField: "id",
+					As:           "data_generation_id",
+				},
+			},
+			// look up the study for the data generation set
+			{
+				Lookup: LookupOperation{
+					From:         "study_set",
+					LocalField:   "associated_studies",
+					ForeignField: "id",
+					As:           "study_id",
+				},
+			},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// run the query and extract the results
+	body, err := db.post("queries:run", bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	type DataObjectStudyPair struct {
+		DataObjectId string `json:"id"`
+		StudyId      string `json:"study_id"`
+	}
+	var pairs []DataObjectStudyPair
+	err = json.Unmarshal(body, &pairs)
+	if err != nil {
+		return nil, err
+	}
+
+	// map each data object ID to the corresponding study ID
+	studyIdForDataObjectId := make(map[string]string)
+	for _, pair := range pairs {
+		studyIdForDataObjectId[pair.DataObjectId] = pair.StudyId
+	}
+	return studyIdForDataObjectId, err
+}
+
 // fetches metadata for data objects (no credit metadata, alas) based on the
 // given URL search parameters
 func (db *Database) dataObjects(params url.Values) (databases.SearchResults, error) {
@@ -368,17 +468,34 @@ func (db *Database) dataObjects(params url.Values) (databases.SearchResults, err
 		return results, err
 	}
 
-	results.Resources = make([]frictionless.DataResource, len(dataObjectResults.Results))
+	// map data object IDs to study IDs so we can retrieve credit info
+
+	// assemble all data object identifiers and map them to study IDs
+	dataObjectIds := make([]string, len(dataObjectResults.Results))
 	for i, dataObject := range dataObjectResults.Results {
+		dataObjectIds[i] = dataObject.Id
+	}
+	studyIdForDataObjectId, err := db.studyIdsForDataObjectIds(dataObjectIds)
+	if err != nil {
+		return results, err
+	}
+
+	// create data resources from data objects, fetch study metadata, and fill in
+	// data resource credit information
+	results.Resources = make([]frictionless.DataResource, len(dataObjectResults.Results))
+	creditForStudyId := make(map[string]credit.CreditMetadata)
+	for i, dataObject := range dataObjectResults.Results {
+		studyId := studyIdForDataObjectId[dataObject.Id]
+		credit, foundStudyCredit := creditForStudyId[studyId]
+		if !foundStudyCredit {
+			credit, err = db.creditMetadataForStudy(studyId)
+			if err != nil {
+				return results, err
+			}
+			creditForStudyId[studyId] = credit // cache for other data objects
+		}
 		results.Resources[i] = db.dataResourceFromDataObject(dataObject)
-		// FIXME: metadata notes from hackathon:
-		//
-		// * Object relations: https://portal.nersc.gov/project/m3408/refscan/graph-collections-v11.0.3.html
-		// * input:					     output:
-		//   sample -> data_generation_set -> data object
-		// * data_generation_set has associated_studies (study_set) for credit metadata
-		// * data_generation_set has was_informed_by (workflow_execution_set) which associates data object outputs via has_output
-		// * favor dataset API, which is backed by PostGres, which is going to (hopefully) end up as the only source of truth(!)0
+		results.Resources[i].Credit = credit
 	}
 
 	return results, nil
@@ -507,9 +624,6 @@ func (db *Database) creditMetadataForStudy(studyId string) (credit.CreditMetadat
 func (db *Database) dataObjectsForStudy(studyId string) (databases.SearchResults, error) {
 	var results databases.SearchResults
 
-	// NOTE: we must escape the colon in "nmdc:" for study/object IDs
-	//studyId = strings.ReplaceAll(studyId, "nmdc:", "nmdc%3A")
-
 	body, err := db.get(fmt.Sprintf("data_objects/study/%s", studyId), url.Values{})
 	if err != nil {
 		return results, err
@@ -635,10 +749,6 @@ func (db *Database) Search(params databases.SearchParameters) (databases.SearchR
 	p.Add("page", strconv.Itoa(pageNumber))
 	p.Add("per_page", strconv.Itoa(pageSize))
 
-	// NMDC's "search" parameter is not yet implemented, so we ignore it for now
-	// in favor of "filter"
-	//p.Add("search", params.Query)
-
 	// add any NMDC-specific search parameters
 	if params.Specific != nil {
 		err := db.addSpecificSearchParameters(params.Specific, &p)
@@ -653,7 +763,8 @@ func (db *Database) Search(params databases.SearchParameters) (databases.SearchR
 		return db.dataObjectsForStudy(p.Get("study_id"))
 	} else {
 		// simply call the data_objects/ endpoint with the given query string
-		p.Add("search", params.Query) // FIXME: not yet supported by NMDC!
+		//p.Add("search", params.Query) // FIXME: not yet supported by NMDC!
+		p.Add("filter", params.Query)
 		return db.dataObjects(p)
 	}
 }
@@ -661,15 +772,27 @@ func (db *Database) Search(params databases.SearchParameters) (databases.SearchR
 func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, error) {
 	// we use the /data_objects/{data_object_id} GET endpoint to retrieve metadata
 	// for individual files
-	// (see https://api.microbiomedata.org/docs#/find/find_data_object_by_id_data_objects__data_object_id__get)
-	// FIXME: this endpoint only allows the retrieval of metadata for a single file
-	// FIXME: this endpoint does not provide any credit metadata, nor a way to get it
 
+	// gather relevant study IDs and use them to build credit metadata
+	studyIdForDataObjectId, err := db.studyIdsForDataObjectIds(fileIds)
+	if err != nil {
+		return nil, err
+	}
+	creditForStudyId := make(map[string]credit.CreditMetadata)
+	for _, studyId := range studyIdForDataObjectId {
+		credit, foundStudyCredit := creditForStudyId[studyId]
+		if !foundStudyCredit {
+			credit, err = db.creditMetadataForStudy(studyId)
+			if err != nil {
+				return nil, err
+			}
+			creditForStudyId[studyId] = credit // cache for other data objects
+		}
+	}
+
+	// construct data resources from the IDs
 	resources := make([]frictionless.DataResource, len(fileIds))
 	for i, fileId := range fileIds {
-		// NOTE: we must escape the colon in "nmdc:" for study/object IDs
-		//fileId = strings.ReplaceAll(fileId, "nmdc:", "nmdc%3A")
-
 		body, err := db.get(fmt.Sprintf("data_objects/%s", fileId), url.Values{})
 		if err != nil {
 			return nil, err
@@ -677,6 +800,10 @@ func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, er
 		var dataObject DataObject
 		json.Unmarshal(body, &dataObject)
 		resources[i] = db.dataResourceFromDataObject(dataObject)
+
+		// add credit metadata
+		studyId := studyIdForDataObjectId[resources[i].Id]
+		resources[i].Credit = creditForStudyId[studyId]
 	}
 	return resources, nil
 }

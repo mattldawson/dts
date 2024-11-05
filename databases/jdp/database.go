@@ -671,6 +671,7 @@ func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, er
 	if err != nil {
 		return nil, err
 	}
+
 	type MetadataResponse struct {
 		Hits struct {
 			Hits []struct {

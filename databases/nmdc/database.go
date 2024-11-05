@@ -29,7 +29,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -320,21 +319,11 @@ type DataGeneration struct {
 }
 
 func (db *Database) dataResourceFromDataObject(dataObject DataObject) frictionless.DataResource {
-	// strip the hostname from the URL to get the data object's path
-	hostPattern, _ := regexp.Compile(`^https:\/\/.+\/`)
-	objectPath := hostPattern.ReplaceAllLiteralString(dataObject.URL, "")
-	/* FIXME: this seems bad! But I'm seeing some weird URLs that are getting in the
-	// FIXME: way, so we need to eradicate them at the moment
-	badPaths := []string{"https://nmdcdemo.emsl.pnnl.gov/"}
-	objectURL := dataObject.URL
-	for _, badPath := range badPaths {
-		objectURL = strings.ReplaceAll(objectURL, badPath, "")
-	}*/
 	return frictionless.DataResource{
 		Id:          dataObject.Id,
 		Name:        dataResourceName(dataObject.Name),
 		Description: dataObject.Description,
-		Path:        objectPath,
+		Path:        dataObject.URL,
 		Format:      formatFromType(dataObject.Type),
 		MediaType:   mimeTypeFromFormat(formatFromType(dataObject.Type)),
 		Bytes:       dataObject.FileSizeBytes,

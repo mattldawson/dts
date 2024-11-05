@@ -31,6 +31,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"time"
 
 	"github.com/google/uuid"
@@ -294,6 +295,13 @@ func (task *taskType) createManifest() frictionless.DataPackage {
 	}
 	copy(manifest.Resources, task.Resources)
 	copy(manifest.Instructions, task.Instructions)
+
+	// strip URL prefixes from resource paths
+	hostPattern, _ := regexp.Compile(`^https:\/\/.+\/`)
+	for i, resource := range manifest.Resources {
+		manifest.Resources[i].Path = hostPattern.ReplaceAllLiteralString(resource.Path, "")
+	}
+
 	return manifest
 }
 

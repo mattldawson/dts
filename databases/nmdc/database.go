@@ -55,20 +55,29 @@ const (
 // this error type is returned when a file is requested for which the requester
 // does not have permission
 type PermissionDeniedError struct {
-	fileId string
+	FileId string
 }
 
 func (e PermissionDeniedError) Error() string {
-	return fmt.Sprintf("Can't access file %s: permission denied.", e.fileId)
+	return fmt.Sprintf("Can't access file %s: permission denied.", e.FileId)
 }
 
 // this error type is returned when a file is requested and is not found
 type FileIdNotFoundError struct {
-	fileId string
+	FileId string
 }
 
 func (e FileIdNotFoundError) Error() string {
-	return fmt.Sprintf("Can't access file %s: not found.", e.fileId)
+	return fmt.Sprintf("Can't access file %s: not found.", e.FileId)
+}
+
+// this error type is returned when an endpoint cannot be found for a file ID
+type FileIdEndpointNotFoundError struct {
+	FileId string
+}
+
+func (e FileIdEndpointNotFoundError) Error() string {
+	return fmt.Sprintf("Can't determine endpoint for file %s", e.FileId)
 }
 
 // a mapping from NMDC file types to format labels
@@ -777,6 +786,15 @@ func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, er
 	// we use the /data_objects/{data_object_id} GET endpoint to retrieve metadata
 	// for individual files
 
+	// fetch functional endpoint names and map URLs to them
+	// (see https://nmdc-documentation.readthedocs.io/en/latest/howto_guides/globus.html)
+	nerscEndpoint := config.Databases["jdp"].Endpoints["nersc"]
+	emslEndpoint := config.Databases["jdp"].Endpoints["emsl"]
+	endpointForHost := map[string]string{
+		"https://data.microbiomedata.org/data/": nerscEndpoint,
+		"https://nmdcdemo.emsl.pnnl.gov/":       emslEndpoint,
+	}
+
 	// gather relevant study IDs and use them to build credit metadata
 	studyIdForDataObjectId, err := db.studyIdsForDataObjectIds(fileIds)
 	if err != nil {
@@ -808,6 +826,19 @@ func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, er
 		// add credit metadata
 		studyId := studyIdForDataObjectId[resources[i].Id]
 		resources[i].Credit = creditForStudyId[studyId]
+
+		// strip the host from the resource's path and assign it an endpoint
+		for hostURL, endpoint := range endpointForHost {
+			if strings.Contains(resources[i].Path, hostURL) {
+				resources[i].Path = strings.Replace(resources[i].Path, hostURL, "", 1)
+				resources[i].Endpoint = endpoint
+			}
+		}
+		if resources[i].Endpoint == "" {
+			return nil, FileIdEndpointNotFoundError{
+				FileId: resources[i].Id,
+			}
+		}
 	}
 	return resources, nil
 }

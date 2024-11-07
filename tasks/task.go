@@ -26,7 +26,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"time"
 
 	"github.com/google/uuid"
@@ -179,12 +178,6 @@ func (task *TransferTask) createManifest() DataPackage {
 	}
 	copy(manifest.Resources, resources)
 	copy(manifest.Instructions, task.Instructions)
-
-	// strip URL prefixes from resource paths
-	hostPattern, _ := regexp.Compile(`^https:\/\/.+\/`)
-	for i, resource := range manifest.Resources {
-		manifest.Resources[i].Path = hostPattern.ReplaceAllLiteralString(resource.Path, "")
-	}
 
 	return manifest
 }

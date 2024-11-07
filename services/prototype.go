@@ -321,7 +321,8 @@ func searchDatabase(ctx context.Context,
 	slog.Info(fmt.Sprintf("Searching database %s for files...", input.Database))
 	db, err := databases.NewDatabase(userInfo.Orcid, input.Database)
 	if err != nil {
-		return nil, err
+		slog.Error(err.Error())
+		return nil, huma.Error500InternalServerError(err.Error(), err)
 	}
 
 	results, err := db.Search(databases.SearchParameters{
@@ -337,11 +338,16 @@ func searchDatabase(ctx context.Context,
 		slog.Error(err.Error())
 		switch err.(type) {
 		case *databases.InvalidSearchParameter:
-			return nil, huma.Error400BadRequest(err.Error())
+			return nil, huma.Error400BadRequest(err.Error(), err)
 		case *databases.UnavailableError:
-			return nil, huma.Error503ServiceUnavailable(err.Error())
+			return nil, huma.Error503ServiceUnavailable(err.Error(), err)
+		case *databases.PermissionDeniedError:
+			return nil, huma.Error401Unauthorized(err.Error(), err)
+		case *databases.NotFoundError, *databases.ResourceNotFoundError, *databases.ResourceEndpointNotFoundError:
+			return nil, huma.Error404NotFound(err.Error(), err)
+		default:
+			return nil, huma.Error500InternalServerError(err.Error(), err)
 		}
-		return nil, err
 	}
 	return &SearchResultsOutput{
 		Body: SearchResultsResponse{

@@ -99,54 +99,6 @@ type Database interface {
 	LocalUser(orcid string) (string, error)
 }
 
-// This error type is returned when a database is sought but not found.
-type NotFoundError struct {
-	dbName string
-}
-
-func (e NotFoundError) Error() string {
-	return fmt.Sprintf("The database %s was not found.", e.dbName)
-}
-
-// This error type is returned when a database is already registered and
-// an attempt is made to register it again.
-type AlreadyRegisteredError struct {
-	dbName string
-}
-
-func (e AlreadyRegisteredError) Error() string {
-	return fmt.Sprintf("Cannot register database %s (already registered).", e.dbName)
-}
-
-// This error type is returned when a database exists but is currently
-// unavailable
-type UnavailableError struct {
-	Database string
-}
-
-func (e UnavailableError) Error() string {
-	return fmt.Sprintf("Cannot reach database %s (unavailable).", e.Database)
-}
-
-// This error type is returned when an invalid database-specific search
-// parameter is specified
-type InvalidSearchParameter struct {
-	Database, Message string
-}
-
-func (e InvalidSearchParameter) Error() string {
-	return fmt.Sprintf("Invalid search parameter for database %s: %s", e.Database, e.Message)
-}
-
-// this error type is returned when a database's endpoint configuration is invalid
-type InvalidEndpointsError struct {
-	Database, Message string
-}
-
-func (e InvalidEndpointsError) Error() string {
-	return fmt.Sprintf("Invalid endpoint configuration for database %s: %s", e.Database, e.Message)
-}
-
 // we maintain a table of database instances, identified by their names
 var allDatabases = make(map[string]Database)
 
@@ -157,7 +109,9 @@ var createDatabaseFuncs = make(map[string]func(name string) (Database, error))
 // to allow for e.g. test database implementations
 func RegisterDatabase(dbName string, createDb func(orcid string) (Database, error)) error {
 	if _, found := createDatabaseFuncs[dbName]; found {
-		return AlreadyRegisteredError{dbName: dbName}
+		return AlreadyRegisteredError{
+			Database: dbName,
+		}
 	} else {
 		createDatabaseFuncs[dbName] = createDb
 		return nil

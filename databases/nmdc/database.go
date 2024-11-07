@@ -52,34 +52,6 @@ const (
 	baseDataURL = "https://data-dev.microbiomedata.org/data/" // postgres (use in future)
 )
 
-// this error type is returned when a file is requested for which the requester
-// does not have permission
-type PermissionDeniedError struct {
-	FileId string
-}
-
-func (e PermissionDeniedError) Error() string {
-	return fmt.Sprintf("Can't access file %s: permission denied.", e.FileId)
-}
-
-// this error type is returned when a file is requested and is not found
-type FileIdNotFoundError struct {
-	FileId string
-}
-
-func (e FileIdNotFoundError) Error() string {
-	return fmt.Sprintf("Can't access file %s: not found.", e.FileId)
-}
-
-// this error type is returned when an endpoint cannot be found for a file ID
-type FileIdEndpointNotFoundError struct {
-	FileId string
-}
-
-func (e FileIdEndpointNotFoundError) Error() string {
-	return fmt.Sprintf("Can't determine endpoint for file %s", e.FileId)
-}
-
 // a mapping from NMDC file types to format labels
 // (see https://microbiomedata.github.io/nmdc-schema/FileTypeEnum/)
 var fileTypeToFormat = map[string]string{
@@ -217,29 +189,36 @@ type Database struct {
 
 func NewDatabase(orcid string) (databases.Database, error) {
 	if orcid == "" {
-		return nil, fmt.Errorf("No ORCID ID was given")
+		return nil, databases.UnauthorizedError{
+			Database: "nmdc",
+			Message:  "No ORCID ID was given",
+		}
 	}
 
 	/* FIXME: we don't need authentication for searches
-	// make sure we have a shared secret or an SSO token
-	secret, haveSecret := os.LookupEnv("DTS_NMDC_SECRET")
-	if !haveSecret {
-		return nil, fmt.Errorf("No shared secret was found for NMDC authentication")
-	}
+		// make sure we have a shared secret or an SSO token
+		secret, haveSecret := os.LookupEnv("DTS_NMDC_SECRET")
+		if !haveSecret {
+			return nil, databases.UnauthorizedError{
+	      Database: "nmdc",
+	      Message: "No shared secret was found for NMDC authentication",
+	    }
+		}
 	*/
 
 	// check for "nersc" and "emsl" Globus endpoints
 	if config.Databases["nmdc"].Endpoint != "" {
 		return nil, databases.InvalidEndpointsError{
 			Database: "nmdc",
-			Message:  "NMDC requires \"nersc\" and \"emsl\" endpoints to be specified",
+			Message:  "NMDC requires nersc and emsl endpoints to be specified",
 		}
 	}
-	for _, functionalName := range []string{"nersc", "esml"} {
+	for _, functionalName := range []string{"nersc", "emsl"} {
+		// was this functional name assigned to an endpoint?
 		if _, found := config.Databases["nmdc"].Endpoints[functionalName]; !found {
 			return nil, databases.InvalidEndpointsError{
 				Database: "nmdc",
-				Message:  fmt.Sprintf("Could not find \"%s\" endpoint for NMDC database", functionalName),
+				Message:  fmt.Sprintf("Could not find %s endpoint for NMDC database", functionalName),
 			}
 		}
 	}
@@ -835,7 +814,7 @@ func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, er
 			}
 		}
 		if resources[i].Endpoint == "" {
-			return nil, FileIdEndpointNotFoundError{
+			return nil, databases.ResourceEndpointNotFoundError{
 				FileId: resources[i].Id,
 			}
 		}

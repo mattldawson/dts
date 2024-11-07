@@ -111,34 +111,48 @@ func readConfig(bytes []byte) error {
 
 func validateServiceParameters(params serviceConfig) error {
 	if params.Port < 0 || params.Port > 65535 {
-		return fmt.Errorf("Invalid port: %d (must be 0-65535)", params.Port)
+		return InvalidServiceConfigError{
+			Message: fmt.Sprintf("Invalid port: %d (must be 0-65535)", params.Port),
+		}
 	}
 	if params.MaxConnections <= 0 {
-		return fmt.Errorf("Invalid max_connections: %d (must be positive)",
-			params.MaxConnections)
+		return InvalidServiceConfigError{
+			Message: fmt.Sprintf("Invalid max_connections: %d (must be positive)",
+				params.MaxConnections),
+		}
 	}
 	if params.Endpoint != "" {
-		if _, endpointFound := Endpoints[params.Endpoint]; !endpointFound {
-			return fmt.Errorf("Invalid service endpoint: %s", params.Endpoint)
+		return InvalidServiceConfigError{
+			Message: fmt.Sprintf("Invalid service endpoint: %s", params.Endpoint),
 		}
 	}
 	if params.PollInterval <= 0 {
-		return fmt.Errorf("Non-positive poll interval specified: (%d s)",
-			params.PollInterval)
+		return InvalidServiceConfigError{
+			Message: fmt.Sprintf("Non-positive poll interval specified: (%d s)",
+				params.PollInterval),
+		}
 	}
 	if params.DeleteAfter <= 0 {
-		return fmt.Errorf("Non-positive task deletion period specified: (%d h)",
-			params.DeleteAfter)
+		return InvalidServiceConfigError{
+			Message: fmt.Sprintf("Non-positive task deletion period specified: (%d h)",
+				params.DeleteAfter),
+		}
 	}
 	return nil
 }
 
 func validateEndpoints(endpoints map[string]endpointConfig) error {
-	for label, endpoint := range endpoints {
+	for name, endpoint := range endpoints {
 		if endpoint.Id.String() == "" { // invalid endpoint UUID
-			return fmt.Errorf("Invalid UUID specified for endpoint '%s'", label)
+			return InvalidEndpointConfigError{
+				Endpoint: name,
+				Message:  "Invalid UUID",
+			}
 		} else if endpoint.Provider == "" { // no provider given
-			return fmt.Errorf("No provider specified for endpoint '%s'", label)
+			return InvalidEndpointConfigError{
+				Endpoint: name,
+				Message:  "No provider specified",
+			}
 		}
 	}
 	return nil
@@ -147,9 +161,33 @@ func validateEndpoints(endpoints map[string]endpointConfig) error {
 func validateDatabases(databases map[string]databaseConfig) error {
 	for name, db := range databases {
 		if db.Endpoint == "" && len(db.Endpoints) == 0 {
-			return fmt.Errorf("No endpoints given for database '%s'", name)
+			return InvalidDatabaseConfigError{
+				Database: name,
+				Message:  "No endpoints specified",
+			}
 		} else if db.Endpoint != "" && len(db.Endpoints) > 0 {
-			return fmt.Errorf("Database '%s' may have EITHER endpoint OR endpoints specified, but not both", name)
+			return InvalidDatabaseConfigError{
+				Database: name,
+				Message:  "EITHER endpoint OR endpoints may be specified, but not both",
+			}
+		} else if db.Endpoint != "" {
+			// does the endpoint exist in our configuration?
+			if endpointName, found := Endpoints[db.Endpoint]; !found {
+				return InvalidDatabaseConfigError{
+					Database: "nmdc",
+					Message:  fmt.Sprintf("Invalid endpoint for database %s: %s", name, endpointName),
+				}
+			}
+		} else {
+			// do all functional endpoints exist in our configuration?
+			for functionalName, endpointName := range db.Endpoints {
+				if _, found := Endpoints[endpointName]; !found {
+					return InvalidDatabaseConfigError{
+						Database: "nmdc",
+						Message:  fmt.Sprintf("Invalid %s endpoint for database %s: %s", functionalName, name, endpointName),
+					}
+				}
+			}
 		}
 	}
 	return nil

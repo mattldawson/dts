@@ -57,16 +57,6 @@ type TransferTask struct {
 	UserInfo          auth.UserInfo     // info about user requesting transfer
 }
 
-// This error type is returned when a payload is requested that is too large.
-type PayloadTooLargeError struct {
-	size float64 // size of the requested payload in gigabytes
-}
-
-func (e PayloadTooLargeError) Error() string {
-	return fmt.Sprintf("Requested payload is too large: %g GB (limit is %g GB).",
-		e.size, config.Service.MaxPayloadSize)
-}
-
 // computes the size of a payload for a transfer task (in gigabytes)
 func payloadSize(resources []DataResource) float64 {
 	var size uint64
@@ -87,6 +77,16 @@ func (task *TransferTask) start() error {
 	resources, err := source.Resources(task.FileIds)
 	if err != nil {
 		return err
+	}
+
+	// check that each resource is associated with an endpoint
+	for _, resource := range resources {
+		if resource.Endpoint == "" {
+			return databases.ResourceEndpointNotFoundError{
+				Database:   task.Source,
+				ResourceId: resource.Id,
+			}
+		}
 	}
 
 	// make sure the size of the payload doesn't exceed our specified limit
@@ -118,12 +118,12 @@ func (task *TransferTask) start() error {
 		}
 	}
 	task.Subtasks = make([]TransferSubtask, len(distinctEndpoints))
-	for endpoint := range distinctEndpoints {
+	for sourceEndpoint := range distinctEndpoints {
 		// pick out the files corresponding to the source endpoint
 		// NOTE: this is slow, but preserves file ID ordering
 		resourcesForEndpoint := make([]DataResource, 0)
 		for _, resource := range resources {
-			if resource.Endpoint == endpoint {
+			if resource.Endpoint == sourceEndpoint {
 				resourcesForEndpoint = append(resourcesForEndpoint, resource)
 			}
 		}
@@ -135,7 +135,7 @@ func (task *TransferTask) start() error {
 			DestinationFolder:   task.DestinationFolder,
 			Resources:           resourcesForEndpoint,
 			Source:              task.Source,
-			SourceEndpoint:      endpoint,
+			SourceEndpoint:      sourceEndpoint,
 			UserInfo:            task.UserInfo,
 		})
 	}
@@ -357,10 +357,7 @@ func (task *TransferTask) update() error {
 
 			// begin transferring the manifest
 			// FIXME: how do we determine the database's destination endpoint?
-			destinationEndpointName, found := config.Databases[task.Destination].Endpoints["destination"]
-			if !found {
-				destinationEndpointName = config.Databases[task.Destination].Endpoint
-			}
+			destinationEndpointName := config.Databases[task.Destination].Endpoint
 			destinationEndpoint, err := endpoints.NewEndpoint(destinationEndpointName)
 			if err != nil {
 				return err

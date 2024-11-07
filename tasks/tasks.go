@@ -312,33 +312,8 @@ var running bool                // true if tasks are processing, false if not
 var taskChannels channelsType   // channels used for processing tasks
 var stopHeartbeat chan struct{} // send a pulse to this channel to halt polling
 
-// This error type is returned when a task is sought but not found.
-type NotFoundError struct {
-	Id uuid.UUID
-}
-
-func (t NotFoundError) Error() string {
-	return fmt.Sprintf("The task %s was not found.", t.Id.String())
-}
-
-// This error type is returned if Start() is called when tasks are being
-// processed
-type AlreadyRunningError struct{}
-
-func (t AlreadyRunningError) Error() string {
-	return fmt.Sprintf("Tasks are already running and cannot be started again.")
-}
-
-// This error type is returned if Stop() is called when tasks are not being
-// processed
-type NotRunningError struct{}
-
-func (t NotRunningError) Error() string {
-	return fmt.Sprintf("Tasks are not currently being processed.")
-}
-
-// Starts processing tasks according to the given configuration, returning an
-// informative error if anything prevents this.
+// starts processing tasks according to the given configuration, returning an
+// informative error if anything prevents this
 func Start() error {
 	if running {
 		return AlreadyRunningError{}

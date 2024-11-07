@@ -352,14 +352,6 @@ func (db *Database) dataResourceFromDataObject(dataObject DataObject) (frictionl
 		}
 	}
 
-	// if we can't determine an endpoint, we have a problem
-	if resource.Endpoint == "" {
-		return resource, databases.ResourceEndpointNotFoundError{
-			Database:   "nmdc",
-			ResourceId: resource.Id,
-		}
-	}
-
 	return resource, nil
 }
 

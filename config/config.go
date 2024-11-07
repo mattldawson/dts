@@ -122,8 +122,10 @@ func validateServiceParameters(params serviceConfig) error {
 		}
 	}
 	if params.Endpoint != "" {
-		return InvalidServiceConfigError{
-			Message: fmt.Sprintf("Invalid service endpoint: %s", params.Endpoint),
+		if _, found := Endpoints[params.Endpoint]; !found {
+			return InvalidServiceConfigError{
+				Message: fmt.Sprintf("Invalid endpoint: %s", params.Endpoint),
+			}
 		}
 	}
 	if params.PollInterval <= 0 {

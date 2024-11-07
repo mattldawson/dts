@@ -185,6 +185,8 @@ type Database struct {
 	Client http.Client
 	// shared secret used for authentication
 	Secret string
+	// mapping of host URLs to endpoints
+	EndpointForHost map[string]string
 }
 
 func NewDatabase(orcid string) (databases.Database, error) {
@@ -223,10 +225,19 @@ func NewDatabase(orcid string) (databases.Database, error) {
 		}
 	}
 
+	// fetch functional endpoint names and map URLs to them
+	// (see https://nmdc-documentation.readthedocs.io/en/latest/howto_guides/globus.html)
+	nerscEndpoint := config.Databases["nmdc"].Endpoints["nersc"]
+	emslEndpoint := config.Databases["nmdc"].Endpoints["emsl"]
+
 	return &Database{
 		Id:    "nmdc",
 		Orcid: orcid,
 		//		Secret: secret,
+		EndpointForHost: map[string]string{
+			"https://data.microbiomedata.org/data/": nerscEndpoint,
+			"https://nmdcdemo.emsl.pnnl.gov/":       emslEndpoint,
+		},
 	}, nil
 }
 
@@ -321,8 +332,8 @@ type DataGeneration struct {
 	AssociatedStudies []string
 }
 
-func (db *Database) dataResourceFromDataObject(dataObject DataObject) frictionless.DataResource {
-	return frictionless.DataResource{
+func (db *Database) dataResourceFromDataObject(dataObject DataObject) (frictionless.DataResource, error) {
+	resource := frictionless.DataResource{
 		Id:          dataObject.Id,
 		Name:        dataResourceName(dataObject.Name),
 		Description: dataObject.Description,
@@ -332,6 +343,24 @@ func (db *Database) dataResourceFromDataObject(dataObject DataObject) frictionle
 		Bytes:       dataObject.FileSizeBytes,
 		Hash:        dataObject.MD5Checksum,
 	}
+
+	// strip the host from the resource's path and assign it an endpoint
+	for hostURL, endpoint := range db.EndpointForHost {
+		if strings.Contains(resource.Path, hostURL) {
+			resource.Path = strings.Replace(resource.Path, hostURL, "", 1)
+			resource.Endpoint = endpoint
+		}
+	}
+
+	// if we can't determine an endpoint, we have a problem
+	if resource.Endpoint == "" {
+		return resource, databases.ResourceEndpointNotFoundError{
+			Database:   "nmdc",
+			ResourceId: resource.Id,
+		}
+	}
+
+	return resource, nil
 }
 
 func (db *Database) studyIdsForDataObjectIds(dataObjectIds []string) (map[string]string, error) {
@@ -486,7 +515,10 @@ func (db *Database) dataObjects(params url.Values) (databases.SearchResults, err
 			}
 			creditForStudyId[studyId] = credit // cache for other data objects
 		}
-		results.Resources[i] = db.dataResourceFromDataObject(dataObject)
+		results.Resources[i], err = db.dataResourceFromDataObject(dataObject)
+		if err != nil {
+			return results, err
+		}
 		results.Resources[i].Credit = credit
 	}
 
@@ -635,7 +667,11 @@ func (db *Database) dataObjectsForStudy(studyId string) (databases.SearchResults
 	results.Resources = make([]frictionless.DataResource, 0)
 	for _, objectSet := range objectSets {
 		for _, dataObject := range objectSet.DataObjects {
-			results.Resources = append(results.Resources, db.dataResourceFromDataObject(dataObject))
+			resource, err := db.dataResourceFromDataObject(dataObject)
+			if err != nil {
+				return results, err
+			}
+			results.Resources = append(results.Resources, resource)
 		}
 	}
 
@@ -765,15 +801,6 @@ func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, er
 	// we use the /data_objects/{data_object_id} GET endpoint to retrieve metadata
 	// for individual files
 
-	// fetch functional endpoint names and map URLs to them
-	// (see https://nmdc-documentation.readthedocs.io/en/latest/howto_guides/globus.html)
-	nerscEndpoint := config.Databases["jdp"].Endpoints["nersc"]
-	emslEndpoint := config.Databases["jdp"].Endpoints["emsl"]
-	endpointForHost := map[string]string{
-		"https://data.microbiomedata.org/data/": nerscEndpoint,
-		"https://nmdcdemo.emsl.pnnl.gov/":       emslEndpoint,
-	}
-
 	// gather relevant study IDs and use them to build credit metadata
 	studyIdForDataObjectId, err := db.studyIdsForDataObjectIds(fileIds)
 	if err != nil {
@@ -800,24 +827,14 @@ func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, er
 		}
 		var dataObject DataObject
 		json.Unmarshal(body, &dataObject)
-		resources[i] = db.dataResourceFromDataObject(dataObject)
+		resources[i], err = db.dataResourceFromDataObject(dataObject)
+		if err != nil {
+			return nil, err
+		}
 
 		// add credit metadata
 		studyId := studyIdForDataObjectId[resources[i].Id]
 		resources[i].Credit = creditForStudyId[studyId]
-
-		// strip the host from the resource's path and assign it an endpoint
-		for hostURL, endpoint := range endpointForHost {
-			if strings.Contains(resources[i].Path, hostURL) {
-				resources[i].Path = strings.Replace(resources[i].Path, hostURL, "", 1)
-				resources[i].Endpoint = endpoint
-			}
-		}
-		if resources[i].Endpoint == "" {
-			return nil, databases.ResourceEndpointNotFoundError{
-				FileId: resources[i].Id,
-			}
-		}
 	}
 	return resources, nil
 }

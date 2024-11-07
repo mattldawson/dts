@@ -103,9 +103,9 @@ func (e ResourceNotFoundError) Error() string {
 
 // this error type is returned when an endpoint cannot be found for a file ID
 type ResourceEndpointNotFoundError struct {
-	FileId string
+	Database, ResourceId string
 }
 
 func (e ResourceEndpointNotFoundError) Error() string {
-	return fmt.Sprintf("Can't determine endpoint for resource %s", e.FileId)
+	return fmt.Sprintf("Can't determine endpoint for resource %s in database %s", e.ResourceId, e.Database)
 }

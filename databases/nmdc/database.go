@@ -39,7 +39,6 @@ import (
 	"github.com/kbase/dts/config"
 	"github.com/kbase/dts/credit"
 	"github.com/kbase/dts/databases"
-	"github.com/kbase/dts/endpoints"
 	"github.com/kbase/dts/frictionless"
 )
 
@@ -219,6 +218,22 @@ func NewDatabase(orcid string) (databases.Database, error) {
 		return nil, fmt.Errorf("No shared secret was found for NMDC authentication")
 	}
 	*/
+
+	// check for "nersc" and "emsl" Globus endpoints
+	if config.Databases["nmdc"].Endpoint != "" {
+		return nil, databases.InvalidEndpointsError{
+			Database: "nmdc",
+			Message:  "NMDC requires \"nersc\" and \"emsl\" endpoints to be specified",
+		}
+	}
+	for _, functionalName := range []string{"nersc", "esml"} {
+		if _, found := config.Databases["nmdc"].Endpoints[functionalName]; !found {
+			return nil, databases.InvalidEndpointsError{
+				Database: "nmdc",
+				Message:  fmt.Sprintf("Could not find \"%s\" endpoint for NMDC database", functionalName),
+			}
+		}
+	}
 
 	return &Database{
 		Id:    "nmdc",
@@ -809,10 +824,6 @@ func (db *Database) StageFiles(fileIds []string) (uuid.UUID, error) {
 func (db *Database) StagingStatus(id uuid.UUID) (databases.StagingStatus, error) {
 	// all files are hot!
 	return databases.StagingStatusSucceeded, nil
-}
-
-func (db *Database) Endpoint() (endpoints.Endpoint, error) {
-	return endpoints.NewEndpoint(config.Databases[db.Id].Endpoint)
 }
 
 func (db *Database) LocalUser(orcid string) (string, error) {

@@ -98,6 +98,8 @@ type DataResource struct {
 	Sources []DataSource `json:"sources,omitempty"`
 	// a title or label for the resource (optional)
 	Title string `json:"title,omitempty"`
+	// the name of the endpoint at which this resource is accessed (not exposed to JSON)
+	Endpoint string
 }
 
 // call this to get a string containing the name of the hashing algorithm used

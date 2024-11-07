@@ -27,6 +27,10 @@ type databaseConfig struct {
 	Name string `yaml:"name"`
 	// the name of the organization hosting the database
 	Organization string `yaml:"organization"`
-	// the name of an endpoint for this database
-	Endpoint string `yaml:"endpoint"`
+	// if set, the name of the single endpoint available to this database
+	// (only one of Endpoint and Endpoints may be set)
+	Endpoint string `yaml:"endpoint,omitempty"`
+	// if set, a set of endpoints assigned functional names, available to thi
+	// database (only one of Endpoint and Endpoints may be set)
+	Endpoints map[string]string `yaml:"endpoints,omitempty"`
 }

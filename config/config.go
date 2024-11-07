@@ -146,8 +146,10 @@ func validateEndpoints(endpoints map[string]endpointConfig) error {
 
 func validateDatabases(databases map[string]databaseConfig) error {
 	for name, db := range databases {
-		if db.Endpoint == "" {
-			return fmt.Errorf("No endpoint given for database '%s'", name)
+		if db.Endpoint == "" && len(db.Endpoints) == 0 {
+			return fmt.Errorf("No endpoints given for database '%s'", name)
+		} else if db.Endpoint != "" && len(db.Endpoints) > 0 {
+			return fmt.Errorf("Database '%s' may have EITHER endpoint OR endpoints specified, but not both", name)
 		}
 	}
 	return nil

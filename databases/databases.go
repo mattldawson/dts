@@ -27,7 +27,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/kbase/dts/endpoints"
 	"github.com/kbase/dts/frictionless"
 )
 
@@ -96,8 +95,6 @@ type Database interface {
 	StageFiles(fileIds []string) (uuid.UUID, error)
 	// returns the status of a given staging operation
 	StagingStatus(id uuid.UUID) (StagingStatus, error)
-	// returns the endpoint associated with this database
-	Endpoint() (endpoints.Endpoint, error)
 	// returns the local username associated with the given Orcid ID
 	LocalUser(orcid string) (string, error)
 }
@@ -139,6 +136,15 @@ type InvalidSearchParameter struct {
 
 func (e InvalidSearchParameter) Error() string {
 	return fmt.Sprintf("Invalid search parameter for database %s: %s", e.Database, e.Message)
+}
+
+// this error type is returned when a database's endpoint configuration is invalid
+type InvalidEndpointsError struct {
+	Database, Message string
+}
+
+func (e InvalidEndpointsError) Error() string {
+	return fmt.Sprintf("Invalid endpoint configuration for database %s: %s", e.Database, e.Message)
 }
 
 // we maintain a table of database instances, identified by their names

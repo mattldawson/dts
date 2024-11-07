@@ -41,7 +41,6 @@ import (
 	"github.com/kbase/dts/config"
 	"github.com/kbase/dts/credit"
 	"github.com/kbase/dts/databases"
-	"github.com/kbase/dts/endpoints"
 	"github.com/kbase/dts/frictionless"
 )
 
@@ -359,6 +358,14 @@ func NewDatabase(orcid string) (databases.Database, error) {
 		}
 	}
 
+	// make sure we are using only a single endpoint
+	if config.Databases["jdp"].Endpoint == "" {
+		return nil, databases.InvalidEndpointsError{
+			Database: "jdp",
+			Message:  "The JGI data portal should only have a single endpoint configured.",
+		}
+	}
+
 	return &Database{
 		Id:         "jdp",
 		Orcid:      orcid,
@@ -641,6 +648,10 @@ func (db *Database) Search(params databases.SearchParameters) (databases.SearchR
 }
 
 func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, error) {
+	// the JDP only uses a single Globus endpoint, so we can associate all
+	// resources with this endpoint
+	resourceEndpoint := config.Databases["jdp"].Endpoint
+
 	// strip the "JDP:" prefix from our files and create a mapping from IDs to
 	// their original order so we can hand back metadata accordingly
 	strippedFileIds := make([]string, len(fileIds))
@@ -728,6 +739,9 @@ func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, er
 		// NOTE: solution
 		resources[index].Format = formatFromFileName(resources[index].Path)
 		resources[index].MediaType = mimeTypeFromFormatAndTypes(resources[index].Format, []string{})
+
+		// set the endpoint for the resource
+		resources[index].Endpoint = resourceEndpoint
 	}
 	return resources, err
 }
@@ -823,10 +837,6 @@ func (db *Database) StagingStatus(id uuid.UUID) (databases.StagingStatus, error)
 	} else {
 		return databases.StagingStatusUnknown, nil
 	}
-}
-
-func (db *Database) Endpoint() (endpoints.Endpoint, error) {
-	return endpoints.NewEndpoint(config.Databases[db.Id].Endpoint)
 }
 
 func (db *Database) LocalUser(orcid string) (string, error) {

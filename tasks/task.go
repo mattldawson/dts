@@ -219,13 +219,22 @@ func (task TransferTask) Age() time.Duration {
 
 // returns true if the task has completed (successfully or not), false otherwise
 func (task TransferTask) completed() bool {
-	for _, subtask := range task.Subtasks {
-		if subtask.TransferStatus.Code != TransferStatusSucceeded &&
-			subtask.TransferStatus.Code != TransferStatusFailed {
+	if task.Status.Code == TransferStatusSucceeded ||
+		task.Status.Code == TransferStatusFailed {
+		return true
+	} else { // check subtask statuses
+		if len(task.Subtasks) == 0 { // task not started
 			return false
+		} else {
+			for _, subtask := range task.Subtasks {
+				if subtask.TransferStatus.Code != TransferStatusSucceeded &&
+					subtask.TransferStatus.Code != TransferStatusFailed {
+					return false
+				}
+			}
 		}
+		return true
 	}
-	return true
 }
 
 // requests that the task be canceled
@@ -261,10 +270,9 @@ func (task *TransferTask) update() error {
 		subtaskStaging := false
 		allTransfersSucceeded := true
 		for _, subtask := range task.Subtasks {
-			subErr := subtask.update()
-			// FIXME: vvv is this the right thing to do?? vvv
-			if subErr != nil {
-				err = subErr
+			err := subtask.update()
+			if err != nil {
+				return err
 			}
 
 			if subtask.StagingStatus == databases.StagingStatusFailed {

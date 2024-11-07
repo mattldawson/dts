@@ -151,7 +151,7 @@ type channelsType struct {
 
 // this function runs in its own goroutine, using the given local endpoint
 // for local file transfers, and the given channels to communicate with
-// the TaskManager
+// the main thread
 func processTasks() {
 	// create or recreate a persistent table of transfer-related tasks
 	dataStore := filepath.Join(config.Service.DataDirectory, "dts.gob")

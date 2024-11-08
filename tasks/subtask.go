@@ -88,6 +88,7 @@ func (subtask *TransferSubtask) start() error {
 
 // initiates a file transfer on a set of staged files
 func (subtask *TransferSubtask) beginTransfer() error {
+	// assemble a list of file transfers
 	fileXfers := make([]FileTransfer, len(subtask.Resources))
 	for i, resource := range subtask.Resources {
 		destinationPath := filepath.Join(subtask.DestinationFolder, resource.Path)
@@ -159,6 +160,7 @@ func (subtask *TransferSubtask) checkTransfer() error {
 	return nil
 }
 
+// issues a cancellation request to the endpoint associated with the subtask
 func (subtask *TransferSubtask) cancel() error {
 	if subtask.Transfer.Valid { // we're transferring
 		// fetch the source endpoint

@@ -117,7 +117,7 @@ func (task *TransferTask) start() error {
 			distinctEndpoints[resource.Endpoint] = struct{}{}
 		}
 	}
-	task.Subtasks = make([]TransferSubtask, len(distinctEndpoints))
+	task.Subtasks = make([]TransferSubtask, 0)
 	for sourceEndpoint := range distinctEndpoints {
 		// pick out the files corresponding to the source endpoint
 		// NOTE: this is slow, but preserves file ID ordering

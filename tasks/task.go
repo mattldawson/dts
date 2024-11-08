@@ -141,8 +141,8 @@ func (task *TransferTask) start() error {
 	}
 
 	// start the subtasks
-	for _, subtask := range task.Subtasks {
-		subErr := subtask.start()
+	for i := range task.Subtasks {
+		subErr := task.Subtasks[i].start()
 		if subErr != nil {
 			err = subErr
 		}
@@ -239,9 +239,9 @@ func (task TransferTask) completed() bool {
 
 // requests that the task be canceled
 func (task *TransferTask) cancel() error {
-	task.Canceled = true                    // mark as canceled
-	for _, subtask := range task.Subtasks { // cancel subtasks
-		subtask.cancel()
+	task.Canceled = true           // mark as canceled
+	for i := range task.Subtasks { // cancel subtasks
+		task.Subtasks[i].cancel()
 	}
 	return nil
 }
@@ -252,8 +252,8 @@ func (task *TransferTask) update() error {
 	if len(task.Subtasks) == 0 { // new task!
 		err = task.start()
 	} else if task.Canceled { // cancellation requested
-		for _, subtask := range task.Subtasks {
-			err = subtask.checkCancellation()
+		for i := range task.Subtasks {
+			err = task.Subtasks[i].checkCancellation()
 		}
 		if task.completed() {
 			task.CompletionTime = time.Now()
@@ -261,7 +261,6 @@ func (task *TransferTask) update() error {
 	} else if task.Manifest.Valid { // we're generating/sending a manifest
 		err = task.checkManifest()
 	} else { // update subtasks
-
 		// track subtask failures
 		var subtaskFailed bool
 		var failedSubtaskStatus TransferStatus
@@ -269,22 +268,22 @@ func (task *TransferTask) update() error {
 		// update each subtask and check for failures
 		subtaskStaging := false
 		allTransfersSucceeded := true
-		for _, subtask := range task.Subtasks {
-			err := subtask.update()
+		for i := range task.Subtasks {
+			err := task.Subtasks[i].update()
 			if err != nil {
 				return err
 			}
 
-			if subtask.StagingStatus == databases.StagingStatusFailed {
+			if task.Subtasks[i].StagingStatus == databases.StagingStatusFailed {
 				subtaskFailed = true
 				failedSubtaskStatus.Code = TransferStatusUnknown
 				failedSubtaskStatus.Message = "task cancelled because of staging failure"
-			} else if subtask.TransferStatus.Code == TransferStatusFailed {
+			} else if task.Subtasks[i].TransferStatus.Code == TransferStatusFailed {
 				subtaskFailed = true
 				failedSubtaskStatus.Code = TransferStatusFailed
 				failedSubtaskStatus.Message = "task cancelled because of transfer failure"
 			}
-			if subtask.TransferStatus.Code != TransferStatusSucceeded {
+			if task.Subtasks[i].TransferStatus.Code != TransferStatusSucceeded {
 				allTransfersSucceeded = false
 			}
 		}
@@ -371,10 +370,6 @@ func (task *TransferTask) update() error {
 				Code: TransferStatusFinalizing,
 			}
 			task.Manifest.Valid = true
-		} else {
-			// the transfer failed, so make sure we cancel it in case it's still
-			// trying (because e.g. Globus continues trying transfers for ~3 days!!)
-			task.cancel()
 		}
 	}
 	return err

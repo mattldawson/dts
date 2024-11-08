@@ -22,6 +22,8 @@
 package tasks
 
 import (
+	"fmt"
+	"log/slog"
 	"path/filepath"
 
 	"github.com/google/uuid"
@@ -88,6 +90,8 @@ func (subtask *TransferSubtask) start() error {
 
 // initiates a file transfer on a set of staged files
 func (subtask *TransferSubtask) beginTransfer() error {
+	slog.Debug(fmt.Sprintf("Transferring %d files from %s to %s",
+		len(subtask.Resources), subtask.SourceEndpoint, subtask.DestinationEndpoint))
 	// assemble a list of file transfers
 	fileXfers := make([]FileTransfer, len(subtask.Resources))
 	for i, resource := range subtask.Resources {

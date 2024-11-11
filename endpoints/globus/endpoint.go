@@ -304,9 +304,18 @@ func (ep *Endpoint) Status(id uuid.UUID) (endpoints.TransferStatus, error) {
 			// find the first error event
 			for _, event := range eventList.Data {
 				if event.IsError {
-					return endpoints.TransferStatus{},
-						fmt.Errorf("%s (%s):\n%s", event.Description, event.Code,
-							event.Details)
+					// sometimes Globus throws an AUTH error here during a network burp, so we
+					// ignore it and report a failed status check (after all, we can't get here
+					// without AUTHing successfully!)
+					if response.NiceStatus == "AUTH" {
+						slog.Debug(fmt.Sprintf("Globus task %s: status check failed with AUTH error below (probably bogus, ignoring): ", id.String()))
+						slog.Debug(fmt.Sprintf("Globus task %s: %s (%s):\n%s", id.String(), event.Description, event.Code, event.Details))
+					} else {
+						// it's probably real
+						return endpoints.TransferStatus{},
+							fmt.Errorf("%s (%s):\n%s", event.Description, event.Code,
+								event.Details)
+					}
 				}
 			}
 		}

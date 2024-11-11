@@ -235,9 +235,9 @@ func (task *TransferTask) Update() error {
 			if err != nil {
 				return fmt.Errorf("marshalling manifest content: %s", err.Error())
 			}
-			task.ManifestFile = filepath.Join(config.Service.ManifestDirectory,
-				fmt.Sprintf("manifest-%s.json", task.Id.String()))
-			manifestFile, err := os.Create(task.ManifestFile)
+			task.ManifestFile = fmt.Sprintf("manifest-%s.json", task.Id.String())
+			manifestFile, err := os.Create(filepath.Join(config.Service.ManifestDirectory,
+				task.ManifestFile))
 			if err != nil {
 				return fmt.Errorf("creating manifest file: %s", err.Error())
 			}
@@ -304,18 +304,8 @@ func (task TransferTask) Completed() bool {
 	if task.Status.Code == TransferStatusSucceeded ||
 		task.Status.Code == TransferStatusFailed {
 		return true
-	} else { // check subtask statuses
-		if len(task.Subtasks) == 0 { // task not started
-			return false
-		} else {
-			for _, subtask := range task.Subtasks {
-				if subtask.TransferStatus.Code != TransferStatusSucceeded &&
-					subtask.TransferStatus.Code != TransferStatusFailed {
-					return false
-				}
-			}
-		}
-		return true
+	} else {
+		return false
 	}
 }
 

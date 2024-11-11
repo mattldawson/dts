@@ -88,6 +88,17 @@ func (subtask *TransferSubtask) start() error {
 	return err
 }
 
+// updates the state of a subtask, setting its status as necessary
+func (subtask *TransferSubtask) update() error {
+	var err error
+	if subtask.Staging.Valid { // we're staging
+		err = subtask.checkStaging()
+	} else if subtask.Transfer.Valid { // we're transferring
+		err = subtask.checkTransfer()
+	}
+	return err
+}
+
 // initiates a file transfer on a set of staged files
 func (subtask *TransferSubtask) beginTransfer() error {
 	slog.Debug(fmt.Sprintf("Transferring %d file(s) from %s to %s",
@@ -95,7 +106,6 @@ func (subtask *TransferSubtask) beginTransfer() error {
 	// assemble a list of file transfers
 	fileXfers := make([]FileTransfer, len(subtask.Resources))
 	for i, resource := range subtask.Resources {
-		slog.Debug(fmt.Sprintf("Resource path: %s", resource.Path))
 		destinationPath := filepath.Join(subtask.DestinationFolder, resource.Path)
 		fileXfers[i] = FileTransfer{
 			SourcePath:      resource.Path,
@@ -161,12 +171,12 @@ func (subtask *TransferSubtask) checkTransfer() error {
 	if err != nil {
 		return err
 	}
-	xferStatus, err := sourceEndpoint.Status(subtask.Transfer.UUID)
+	subtask.TransferStatus, err = sourceEndpoint.Status(subtask.Transfer.UUID)
 	if err != nil {
 		return err
 	}
-	if xferStatus.Code == TransferStatusSucceeded ||
-		xferStatus.Code == TransferStatusFailed { // transfer finished
+	if subtask.TransferStatus.Code == TransferStatusSucceeded ||
+		subtask.TransferStatus.Code == TransferStatusFailed { // transfer finished
 		subtask.Transfer = uuid.NullUUID{}
 	}
 	return nil
@@ -203,15 +213,4 @@ func (subtask *TransferSubtask) checkCancellation() error {
 		subtask.TransferStatus.Message = "Task canceled at user request"
 	}
 	return nil
-}
-
-// updates the state of a subtask, setting its status as necessary
-func (subtask *TransferSubtask) update() error {
-	var err error
-	if subtask.Staging.Valid { // we're staging
-		err = subtask.checkStaging()
-	} else if subtask.Transfer.Valid { // we're transferring
-		err = subtask.checkTransfer()
-	}
-	return err
 }

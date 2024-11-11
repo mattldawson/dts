@@ -182,7 +182,7 @@ func processTasks() {
 		case taskId := <-cancelTaskChan: // Cancel() called
 			if task, found := tasks[taskId]; found {
 				slog.Info(fmt.Sprintf("Task %s: received cancellation request", taskId.String()))
-				err := task.cancel()
+				err := task.Cancel()
 				if err != nil {
 					task.Status.Code = TransferStatusUnknown
 					task.Status.Message = fmt.Sprintf("error in cancellation: %s", err.Error())
@@ -203,9 +203,9 @@ func processTasks() {
 			}
 		case <-pollChan: // time to move things along
 			for taskId, task := range tasks {
-				if !task.completed() {
+				if !task.Completed() {
 					oldStatus := task.Status
-					err := task.update()
+					err := task.Update()
 					if err != nil {
 						// We log task update errors but do not propagate them. All
 						// task errors result in a failed status.

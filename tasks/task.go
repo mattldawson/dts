@@ -150,104 +150,8 @@ func (task *TransferTask) start() error {
 	return err
 }
 
-// creates a DataPackage that serves as the transfer manifest
-func (task *TransferTask) createManifest() DataPackage {
-	resources := make([]DataResource, 0)
-	for _, subtask := range task.Subtasks {
-		n := len(resources)
-		resources = resources[:len(subtask.Resources)]
-		copy(resources[n:], subtask.Resources)
-	}
-
-	manifest := DataPackage{
-		Name:      "manifest",
-		Resources: resources,
-		Created:   time.Now().Format(time.RFC3339),
-		Profile:   "data-package",
-		Keywords:  []string{"dts", "manifest"},
-		Contributors: []Contributor{
-			{
-				Title:        task.UserInfo.Name,
-				Email:        task.UserInfo.Email,
-				Role:         "author",
-				Organization: task.UserInfo.Organization,
-			},
-		},
-		Description:  task.Description,
-		Instructions: make(json.RawMessage, len(task.Instructions)),
-	}
-	copy(manifest.Resources, resources)
-	copy(manifest.Instructions, task.Instructions)
-
-	return manifest
-}
-
-// checks whether the file manifest for a task has been generated and, if so,
-// marks the task as completed
-func (task *TransferTask) checkManifest() error {
-	// has the manifest transfer completed?
-	localEndpoint, err := endpoints.NewEndpoint(config.Service.Endpoint)
-	if err != nil {
-		return err
-	}
-	xferStatus, err := localEndpoint.Status(task.Manifest.UUID)
-	if err != nil {
-		return err
-	}
-	if xferStatus.Code == TransferStatusSucceeded ||
-		xferStatus.Code == TransferStatusFailed { // manifest transferred
-		task.Manifest = uuid.NullUUID{}
-		os.Remove(task.ManifestFile)
-		task.ManifestFile = ""
-		task.Status.Code = xferStatus.Code
-		task.Status.Message = ""
-		task.CompletionTime = time.Now()
-	}
-	return nil
-}
-
-// returns the duration since the task completed (successfully or otherwise),
-// or 0 if the task has not completed
-func (task TransferTask) Age() time.Duration {
-	if task.Status.Code == TransferStatusSucceeded ||
-		task.Status.Code == TransferStatusFailed {
-		return time.Since(task.CompletionTime)
-	} else {
-		return time.Duration(0)
-	}
-}
-
-// returns true if the task has completed (successfully or not), false otherwise
-func (task TransferTask) completed() bool {
-	if task.Status.Code == TransferStatusSucceeded ||
-		task.Status.Code == TransferStatusFailed {
-		return true
-	} else { // check subtask statuses
-		if len(task.Subtasks) == 0 { // task not started
-			return false
-		} else {
-			for _, subtask := range task.Subtasks {
-				if subtask.TransferStatus.Code != TransferStatusSucceeded &&
-					subtask.TransferStatus.Code != TransferStatusFailed {
-					return false
-				}
-			}
-		}
-		return true
-	}
-}
-
-// requests that the task be canceled
-func (task *TransferTask) cancel() error {
-	task.Canceled = true           // mark as canceled
-	for i := range task.Subtasks { // cancel subtasks
-		task.Subtasks[i].cancel()
-	}
-	return nil
-}
-
 // updates the state of a task, setting its status as necessary
-func (task *TransferTask) update() error {
+func (task *TransferTask) Update() error {
 	var err error
 	if len(task.Subtasks) == 0 { // new task!
 		err = task.start()
@@ -255,7 +159,7 @@ func (task *TransferTask) update() error {
 		for i := range task.Subtasks {
 			err = task.Subtasks[i].checkCancellation()
 		}
-		if task.completed() {
+		if task.Completed() {
 			task.CompletionTime = time.Now()
 		}
 	} else if task.Manifest.Valid { // we're generating/sending a manifest
@@ -294,7 +198,7 @@ func (task *TransferTask) update() error {
 			// overwrite only the error code and message fields
 			task.Status.Code = failedSubtaskStatus.Code
 			task.Status.Message = failedSubtaskStatus.Message
-			task.cancel()
+			task.Cancel()
 		} else {
 			// accumulate statistics
 			task.Status.NumFiles = 0
@@ -373,4 +277,104 @@ func (task *TransferTask) update() error {
 		}
 	}
 	return err
+}
+
+// requests that the task be canceled
+func (task *TransferTask) Cancel() error {
+	task.Canceled = true           // mark as canceled
+	for i := range task.Subtasks { // cancel subtasks
+		task.Subtasks[i].cancel()
+	}
+	return nil
+}
+
+// returns the duration since the task completed (successfully or otherwise),
+// or 0 if the task has not completed
+func (task TransferTask) Age() time.Duration {
+	if task.Status.Code == TransferStatusSucceeded ||
+		task.Status.Code == TransferStatusFailed {
+		return time.Since(task.CompletionTime)
+	} else {
+		return time.Duration(0)
+	}
+}
+
+// returns true if the task has completed (successfully or not), false otherwise
+func (task TransferTask) Completed() bool {
+	if task.Status.Code == TransferStatusSucceeded ||
+		task.Status.Code == TransferStatusFailed {
+		return true
+	} else { // check subtask statuses
+		if len(task.Subtasks) == 0 { // task not started
+			return false
+		} else {
+			for _, subtask := range task.Subtasks {
+				if subtask.TransferStatus.Code != TransferStatusSucceeded &&
+					subtask.TransferStatus.Code != TransferStatusFailed {
+					return false
+				}
+			}
+		}
+		return true
+	}
+}
+
+// creates a DataPackage that serves as the transfer manifest
+func (task *TransferTask) createManifest() DataPackage {
+	numResources := 0
+	for _, subtask := range task.Subtasks {
+		numResources += len(subtask.Resources)
+	}
+	resources := make([]DataResource, numResources)
+	n := 0
+	for _, subtask := range task.Subtasks {
+		copy(resources[n:], subtask.Resources)
+		n += len(subtask.Resources)
+	}
+
+	manifest := DataPackage{
+		Name:      "manifest",
+		Resources: resources,
+		Created:   time.Now().Format(time.RFC3339),
+		Profile:   "data-package",
+		Keywords:  []string{"dts", "manifest"},
+		Contributors: []Contributor{
+			{
+				Title:        task.UserInfo.Name,
+				Email:        task.UserInfo.Email,
+				Role:         "author",
+				Organization: task.UserInfo.Organization,
+			},
+		},
+		Description:  task.Description,
+		Instructions: make(json.RawMessage, len(task.Instructions)),
+	}
+	copy(manifest.Resources, resources)
+	copy(manifest.Instructions, task.Instructions)
+
+	return manifest
+}
+
+// checks whether the file manifest for a task has been generated and, if so,
+// marks the task as completed
+func (task *TransferTask) checkManifest() error {
+	// has the manifest transfer completed?
+	localEndpoint, err := endpoints.NewEndpoint(config.Service.Endpoint)
+	if err != nil {
+		return err
+	}
+	xferStatus, err := localEndpoint.Status(task.Manifest.UUID)
+	if err != nil {
+		return err
+	}
+	if xferStatus.Code == TransferStatusSucceeded ||
+		xferStatus.Code == TransferStatusFailed { // manifest transferred
+		task.Manifest = uuid.NullUUID{}
+		os.Remove(task.ManifestFile)
+		task.ManifestFile = ""
+		task.Status.Code = xferStatus.Code
+		task.Status.Message = ""
+		task.CompletionTime = time.Now()
+	}
+	return nil
 }

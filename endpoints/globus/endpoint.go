@@ -130,6 +130,233 @@ func NewEndpoint(endpointName string) (endpoints.Endpoint, error) {
 	return ep, nil
 }
 
+func (ep *Endpoint) Root() string {
+	return ep.RootDir
+}
+
+func (ep *Endpoint) FilesStaged(files []frictionless.DataResource) (bool, error) {
+	// find all the directories in which these files reside
+	filesInDir := make(map[string][]string)
+	for _, resource := range files {
+		dir, file := filepath.Split(resource.Path)
+		dir = filepath.Join(ep.RootDir, dir)
+		if _, found := filesInDir[dir]; !found {
+			filesInDir[dir] = make([]string, 0)
+		}
+		filesInDir[dir] = append(filesInDir[dir], file)
+	}
+
+	// for each directory, check for its existence and that its files are present
+	// (https://docs.globus.org/api/transfer/file_operations/#list_directory_contents)
+	for dir, files := range filesInDir {
+		values := url.Values{}
+		values.Add("path", "/"+dir)
+		values.Add("orderby", "name ASC")
+		resource := fmt.Sprintf("operation/endpoint/%s/ls", ep.Id.String())
+		body, err := ep.get(resource, values)
+		if err != nil {
+			globusErr := err.(*GlobusError)
+			switch globusErr.Code {
+			case "ClientError.NotFound":
+				// it's okay if the directory doesn't exist -- it might need to be staged
+				return false, nil
+			case "ExternalError.DirListingFailed.LoginFailed":
+				// unfortunately, Globus throws this error when there's a network hiccup,
+				// so we can't take it seriously as an actual error condition
+				return false, nil
+			default:
+				// propagate the error
+				return false, err
+			}
+		}
+
+		// https://docs.globus.org/api/transfer/file_operations/#dir_listing_response
+		type DirListingResponse struct {
+			Data []struct {
+				Name string `json:"name"`
+			} `json:"DATA"`
+		}
+		var response DirListingResponse
+		err = json.Unmarshal(body, &response)
+		if err != nil {
+			return false, err
+		}
+		filesPresent := make(map[string]bool)
+		for _, data := range response.Data {
+			filesPresent[data.Name] = true
+		}
+		for _, file := range files {
+			if _, present := filesPresent[file]; !present {
+				return false, nil
+			}
+		}
+	}
+	return true, nil
+}
+
+func (ep *Endpoint) Transfers() ([]uuid.UUID, error) {
+	// https://docs.globus.org/api/transfer/task/#get_task_list
+	values := url.Values{}
+	values.Add("fields", "task_id")
+	values.Add("filter", "status:ACTIVE,INACTIVE/label:DTS")
+	values.Add("limit", "1000")
+	values.Add("orderby", "name ASC")
+
+	body, err := ep.get("task_list", url.Values{})
+	if err != nil {
+		return nil, err
+	}
+	type TaskListResponse struct {
+		Length int `json:"length"`
+		Limit  int `json:"limіt"`
+		Data   []struct {
+			TaskId uuid.UUID `json:"task_id"`
+		} `json:"DATA"`
+	}
+	var response TaskListResponse
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		return nil, err
+	}
+	taskIds := make([]uuid.UUID, len(response.Data))
+	for i, data := range response.Data {
+		taskIds[i] = data.TaskId
+	}
+	return taskIds, nil
+}
+
+func (ep *Endpoint) Transfer(destination endpoints.Endpoint, files []endpoints.FileTransfer) (uuid.UUID, error) {
+	// NOTE: We don't check whether files are staged here, because the endpoint
+	// NOTE: itself doesn't always have a reliable staging check (e.g. JDP's
+	// NOTE: private data is invisible to Globus directory listings).
+	// NOTE: Consequently, we assume that files are staged by the time this
+	// NOTE: function is called.
+
+	// obtain a submission ID
+	submissionId, err := ep.getSubmissionId()
+	if err != nil {
+		return uuid.UUID{}, err
+	}
+
+	// now, submit the transfer task itself
+	return ep.submitTransfer(destination, submissionId, files)
+}
+
+// mapping of Globus status code strings to DTS status codes
+var statusCodesForStrings = map[string]endpoints.TransferStatusCode{
+	"ACTIVE":    endpoints.TransferStatusActive,
+	"INACTIVE":  endpoints.TransferStatusInactive,
+	"SUCCEEDED": endpoints.TransferStatusSucceeded,
+	"FAILED":    endpoints.TransferStatusFailed,
+}
+
+func (ep *Endpoint) Status(id uuid.UUID) (endpoints.TransferStatus, error) {
+	resource := fmt.Sprintf("task/%s", id.String())
+	body, err := ep.get(resource, url.Values{})
+	if err != nil {
+		return endpoints.TransferStatus{}, err
+	}
+	if responseIsError(body) {
+		var globusErr GlobusError
+		err := json.Unmarshal(body, &globusErr)
+		if err == nil {
+			err = &globusErr
+		}
+		return endpoints.TransferStatus{}, err
+	}
+	type TaskResponse struct {
+		Files                      int    `json:"files"`
+		FilesSkipped               int    `json:"files_skipped"`
+		FilesTransferred           int    `json:"files_transferred"`
+		IsPaused                   bool   `json:"is_paused"`
+		NiceStatus                 string `json:"nice_status"`
+		NiceStatusShortDescription string `json:"nice_status_short_description"`
+		Status                     string `json:"status"`
+	}
+	var response TaskResponse
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		return endpoints.TransferStatus{}, err
+	}
+	// check for an error condition in NiceStatus
+	if response.NiceStatus != "" && response.NiceStatus != "OK" && response.NiceStatus != "Queued" {
+		// get the event list for this task
+		resource := fmt.Sprintf("task/%s/event_list", id.String())
+		body, err := ep.get(resource, url.Values{})
+		if err != nil {
+			// fine, we'll just use the "nice status"
+			return endpoints.TransferStatus{}, fmt.Errorf(response.NiceStatusShortDescription)
+		}
+		type Event struct {
+			DataType    string `json:"DATA_TYPE"`
+			Code        string `json:"code"`
+			IsError     bool   `json:"is_error"`
+			Description string `json:"description"`
+			Details     string `json:"details"`
+			Time        string `json:"time"`
+		}
+		type EventList struct {
+			Data []Event `json:"DATA"`
+		}
+		var eventList EventList
+		err = json.Unmarshal(body, &eventList)
+		if err == nil {
+			// find the first error event
+			for _, event := range eventList.Data {
+				if event.IsError {
+					return endpoints.TransferStatus{},
+						fmt.Errorf("%s (%s):\n%s", event.Description, event.Code,
+							event.Details)
+				}
+			}
+		}
+		// fall back to the "nice status"
+		return endpoints.TransferStatus{}, fmt.Errorf(response.NiceStatusShortDescription)
+	}
+	return endpoints.TransferStatus{
+		Code:                statusCodesForStrings[response.Status],
+		NumFiles:            response.Files,
+		NumFilesSkipped:     response.FilesSkipped,
+		NumFilesTransferred: response.FilesTransferred,
+	}, nil
+}
+
+func (ep *Endpoint) Cancel(id uuid.UUID) error {
+	// Because cancellation requests can't be honored under all circumstances,
+	// this Globus call is asynchronous. Nevertheless, the Globus documentation
+	// (https://docs.globus.org/api/transfer/task/#cancel_task_by_id) claims the
+	// call can take up to 10 seconds before returning, which doesn't meet the
+	// needs of the DTS. The possible outcomes of the call are identified with
+	// these response codes:
+	// 1. "Canceled", indicating that the task has been canceled
+	// 2. "CancelAccepted", indicating that the cancellation request has been
+	//    acknowledged but not yet processed
+	// 3. "TaskComplete", indicating that the task is complete and not able to
+	//    be canceled.
+	//
+	// We live with the 10-second wait for now, since our polling interval is
+	// large.
+	type CancellationResponse struct {
+		Code      string `json:"code"` // should be "Canceled"
+		Message   string `json:"message"`
+		RequestId string `json:"request_id"`
+		Resource  string `json:"resource"`
+	}
+	resource := fmt.Sprintf("task/%s/cancel", id.String())
+	_, err := ep.post(resource, nil) // can take up to 10 ѕeconds!
+	// FIXME: if this ^^^ becomes an issue, we can dispatch the POST to a
+	// FIXME: persistent goroutine to handle the cancellation
+	if err != nil {
+		if globusError, ok := err.(*GlobusError); ok {
+			switch globusError.Code {
+			case "Canceled", "CancelAccepted", "TaskComplete": // it worked!
+				err = nil
+			}
+		}
+	}
+	return err
+}
+
 // (re)authenticates with Globus using its client ID and secret to obtain an
 // access token with consents for its relevant list of scopes
 // (https://docs.globus.org/api/auth/reference/#client_credentials_grant)
@@ -274,98 +501,6 @@ func (ep *Endpoint) post(resource string, body io.Reader) ([]byte, error) {
 	return ep.sendRequest(req)
 }
 
-func (ep *Endpoint) Root() string {
-	return ep.RootDir
-}
-
-func (ep *Endpoint) FilesStaged(files []frictionless.DataResource) (bool, error) {
-	// find all the directories in which these files reside
-	filesInDir := make(map[string][]string)
-	for _, resource := range files {
-		dir, file := filepath.Split(resource.Path)
-		dir = filepath.Join(ep.RootDir, dir)
-		if _, found := filesInDir[dir]; !found {
-			filesInDir[dir] = make([]string, 0)
-		}
-		filesInDir[dir] = append(filesInDir[dir], file)
-	}
-
-	// for each directory, check for its existence and that its files are present
-	// (https://docs.globus.org/api/transfer/file_operations/#list_directory_contents)
-	for dir, files := range filesInDir {
-		values := url.Values{}
-		values.Add("path", "/"+dir)
-		values.Add("orderby", "name ASC")
-		resource := fmt.Sprintf("operation/endpoint/%s/ls", ep.Id.String())
-		body, err := ep.get(resource, values)
-		if err != nil {
-			globusErr := err.(*GlobusError)
-			if globusErr.Code == "ClientError.NotFound" {
-				// it's okay if the directory doesn't exist -- it might need to be staged
-				return false, nil
-			} else if globusErr.Code == "ExternalError.DirListingFailed.LoginFailed" {
-				// unfortunately, Globus throws this error when there's a network hiccup,
-				// so we can't take it seriously as an actual error condition
-				return false, nil
-			}
-			return false, err
-		}
-
-		// https://docs.globus.org/api/transfer/file_operations/#dir_listing_response
-		type DirListingResponse struct {
-			Data []struct {
-				Name string `json:"name"`
-			} `json:"DATA"`
-		}
-		var response DirListingResponse
-		err = json.Unmarshal(body, &response)
-		if err != nil {
-			return false, err
-		}
-		filesPresent := make(map[string]bool)
-		for _, data := range response.Data {
-			filesPresent[data.Name] = true
-		}
-		for _, file := range files {
-			if _, present := filesPresent[file]; !present {
-				return false, nil
-			}
-		}
-	}
-	return true, nil
-}
-
-func (ep *Endpoint) Transfers() ([]uuid.UUID, error) {
-	// https://docs.globus.org/api/transfer/task/#get_task_list
-	values := url.Values{}
-	values.Add("fields", "task_id")
-	values.Add("filter", "status:ACTIVE,INACTIVE/label:DTS")
-	values.Add("limit", "1000")
-	values.Add("orderby", "name ASC")
-
-	body, err := ep.get("task_list", url.Values{})
-	if err != nil {
-		return nil, err
-	}
-	type TaskListResponse struct {
-		Length int `json:"length"`
-		Limit  int `json:"limіt"`
-		Data   []struct {
-			TaskId uuid.UUID `json:"task_id"`
-		} `json:"DATA"`
-	}
-	var response TaskListResponse
-	err = json.Unmarshal(body, &response)
-	if err != nil {
-		return nil, err
-	}
-	taskIds := make([]uuid.UUID, len(response.Data))
-	for i, data := range response.Data {
-		taskIds[i] = data.TaskId
-	}
-	return taskIds, nil
-}
-
 // https://docs.globus.org/api/transfer/task_submit/#get_submission_id
 func (ep *Endpoint) getSubmissionId() (uuid.UUID, error) {
 	var id uuid.UUID
@@ -461,136 +596,4 @@ func (ep *Endpoint) submitTransfer(destination endpoints.Endpoint,
 	slog.Debug(fmt.Sprintf("Initiated Globus transfer task %s (%d files)",
 		xferId.String(), len(files)))
 	return xferId, nil
-}
-
-func (ep *Endpoint) Transfer(destination endpoints.Endpoint, files []endpoints.FileTransfer) (uuid.UUID, error) {
-	// NOTE: We don't check whether files are staged here, because the endpoint
-	// NOTE: itself doesn't always have a reliable staging check (e.g. JDP's
-	// NOTE: private data is invisible to Globus directory listings).
-	// NOTE: Consequently, we assume that files are staged by the time this
-	// NOTE: function is called.
-
-	// obtain a submission ID
-	submissionId, err := ep.getSubmissionId()
-	if err != nil {
-		return uuid.UUID{}, err
-	}
-
-	// now, submit the transfer task itself
-	return ep.submitTransfer(destination, submissionId, files)
-}
-
-// mapping of Globus status code strings to DTS status codes
-var statusCodesForStrings = map[string]endpoints.TransferStatusCode{
-	"ACTIVE":    endpoints.TransferStatusActive,
-	"INACTIVE":  endpoints.TransferStatusInactive,
-	"SUCCEEDED": endpoints.TransferStatusSucceeded,
-	"FAILED":    endpoints.TransferStatusFailed,
-}
-
-func (ep *Endpoint) Status(id uuid.UUID) (endpoints.TransferStatus, error) {
-	resource := fmt.Sprintf("task/%s", id.String())
-	body, err := ep.get(resource, url.Values{})
-	if err != nil {
-		return endpoints.TransferStatus{}, err
-	}
-	if responseIsError(body) {
-		var globusErr GlobusError
-		err := json.Unmarshal(body, &globusErr)
-		if err == nil {
-			err = &globusErr
-		}
-		return endpoints.TransferStatus{}, err
-	}
-	type TaskResponse struct {
-		Files                      int    `json:"files"`
-		FilesSkipped               int    `json:"files_skipped"`
-		FilesTransferred           int    `json:"files_transferred"`
-		IsPaused                   bool   `json:"is_paused"`
-		NiceStatus                 string `json:"nice_status"`
-		NiceStatusShortDescription string `json:"nice_status_short_description"`
-		Status                     string `json:"status"`
-	}
-	var response TaskResponse
-	err = json.Unmarshal(body, &response)
-	if err != nil {
-		return endpoints.TransferStatus{}, err
-	}
-	// check for an error condition in NiceStatus
-	if response.NiceStatus != "" && response.NiceStatus != "OK" && response.NiceStatus != "Queued" {
-		// get the event list for this task
-		resource := fmt.Sprintf("task/%s/event_list", id.String())
-		body, err := ep.get(resource, url.Values{})
-		if err != nil {
-			// fine, we'll just use the "nice status"
-			return endpoints.TransferStatus{}, fmt.Errorf(response.NiceStatusShortDescription)
-		}
-		type Event struct {
-			DataType    string `json:"DATA_TYPE"`
-			Code        string `json:"code"`
-			IsError     bool   `json:"is_error"`
-			Description string `json:"description"`
-			Details     string `json:"details"`
-			Time        string `json:"time"`
-		}
-		type EventList struct {
-			Data []Event `json:"DATA"`
-		}
-		var eventList EventList
-		err = json.Unmarshal(body, &eventList)
-		if err == nil {
-			// find the first error event
-			for _, event := range eventList.Data {
-				if event.IsError {
-					return endpoints.TransferStatus{},
-						fmt.Errorf("%s (%s):\n%s", event.Description, event.Code,
-							event.Details)
-				}
-			}
-		}
-		// fall back to the "nice status"
-		return endpoints.TransferStatus{}, fmt.Errorf(response.NiceStatusShortDescription)
-	}
-	return endpoints.TransferStatus{
-		Code:                statusCodesForStrings[response.Status],
-		NumFiles:            response.Files,
-		NumFilesSkipped:     response.FilesSkipped,
-		NumFilesTransferred: response.FilesTransferred,
-	}, nil
-}
-
-func (ep *Endpoint) Cancel(id uuid.UUID) error {
-	// Because cancellation requests can't be honored under all circumstances,
-	// this Globus call is asynchronous. Nevertheless, the Globus documentation
-	// (https://docs.globus.org/api/transfer/task/#cancel_task_by_id) claims the
-	// call can take up to 10 seconds before returning, which doesn't meet the
-	// needs of the DTS. The possible outcomes of the call are identified with
-	// these response codes:
-	// 1. "Canceled", indicating that the task has been canceled
-	// 2. "CancelAccepted", indicating that the cancellation request has been
-	//    acknowledged but not yet processed
-	// 3. "TaskComplete", indicating that the task is complete and not able to
-	//    be canceled.
-	//
-	// We live with the 10-second wait for now, since our polling interval is
-	// large.
-	type CancellationResponse struct {
-		Code      string `json:"code"` // should be "Canceled"
-		Message   string `json:"message"`
-		RequestId string `json:"request_id"`
-		Resource  string `json:"resource"`
-	}
-	resource := fmt.Sprintf("task/%s/cancel", id.String())
-	_, err := ep.post(resource, nil) // can take up to 10 ѕeconds!
-	// FIXME: if this ^^^ becomes an issue, we can dispatch the POST to a
-	// FIXME: persistent goroutine to handle the cancellation
-	if err != nil {
-		if globusError, ok := err.(*GlobusError); ok {
-			switch globusError.Code {
-			case "Canceled", "CancelAccepted", "TaskComplete": // it worked!
-				err = nil
-			}
-		}
-	}
-	return err
 }

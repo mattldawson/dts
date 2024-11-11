@@ -90,11 +90,12 @@ func (subtask *TransferSubtask) start() error {
 
 // initiates a file transfer on a set of staged files
 func (subtask *TransferSubtask) beginTransfer() error {
-	slog.Debug(fmt.Sprintf("Transferring %d files from %s to %s",
+	slog.Debug(fmt.Sprintf("Transferring %d file(s) from %s to %s",
 		len(subtask.Resources), subtask.SourceEndpoint, subtask.DestinationEndpoint))
 	// assemble a list of file transfers
 	fileXfers := make([]FileTransfer, len(subtask.Resources))
 	for i, resource := range subtask.Resources {
+		slog.Debug(fmt.Sprintf("Resource path: %s", resource.Path))
 		destinationPath := filepath.Join(subtask.DestinationFolder, resource.Path)
 		fileXfers[i] = FileTransfer{
 			SourcePath:      resource.Path,
@@ -140,6 +141,13 @@ func (subtask *TransferSubtask) checkStaging() error {
 	}
 
 	if subtask.StagingStatus == databases.StagingStatusSucceeded { // staged!
+		// the database thinks the files are staged. Does its endpoint agree?
+		endpoint, _ := endpoints.NewEndpoint(subtask.SourceEndpoint)
+		staged, _ := endpoint.FilesStaged(subtask.Resources)
+		if !staged {
+			return fmt.Errorf("Database %s reports staged files, but endpoint %s cannot see them. Is the endpoint's root set properly?",
+				subtask.Source, subtask.SourceEndpoint)
+		}
 		return subtask.beginTransfer() // move along
 	}
 	return nil

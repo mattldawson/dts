@@ -299,28 +299,32 @@ func (ep *Endpoint) Status(id uuid.UUID) (endpoints.TransferStatus, error) {
 			Data []Event `json:"DATA"`
 		}
 		var eventList EventList
-		err = json.Unmarshal(body, &eventList)
-		if err == nil {
-			// find the first error event
+		json.Unmarshal(body, &eventList)
+		if response.NiceStatus == "AUTH" {
 			for _, event := range eventList.Data {
 				if event.IsError {
-					// sometimes Globus throws an AUTH error here during a network burp, so we
-					// ignore it and report a failed status check (after all, we can't get here
-					// without AUTHing successfully!)
-					if response.NiceStatus == "AUTH" {
-						slog.Debug(fmt.Sprintf("Globus task %s: status check failed with AUTH error below (probably bogus, ignoring): ", id.String()))
-						slog.Debug(fmt.Sprintf("Globus task %s: %s (%s):\n%s", id.String(), event.Description, event.Code, event.Details))
-					} else {
-						// it's probably real
+					slog.Debug(fmt.Sprintf("Globus task %s: status check failed with AUTH error below (probably bogus, ignoring): ", id.String()))
+					slog.Debug(fmt.Sprintf("Globus task %s: %s (%s):\n%s", id.String(), event.Description, event.Code, event.Details))
+				}
+			}
+		} else {
+			// it's probably real
+			if err == nil {
+				// find the first error event
+				for _, event := range eventList.Data {
+					if event.IsError {
+						// sometimes Globus throws an AUTH error here during a network burp, so we
+						// ignore it and report a failed status check (after all, we can't get here
+						// without AUTHing successfully!)
 						return endpoints.TransferStatus{},
 							fmt.Errorf("%s (%s):\n%s", event.Description, event.Code,
 								event.Details)
 					}
 				}
 			}
+			// fall back to the "nice status"
+			return endpoints.TransferStatus{}, fmt.Errorf(response.NiceStatusShortDescription)
 		}
-		// fall back to the "nice status"
-		return endpoints.TransferStatus{}, fmt.Errorf(response.NiceStatusShortDescription)
 	}
 	return endpoints.TransferStatus{
 		Code:                statusCodesForStrings[response.Status],

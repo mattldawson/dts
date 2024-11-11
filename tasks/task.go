@@ -235,9 +235,8 @@ func (task *TransferTask) Update() error {
 			if err != nil {
 				return fmt.Errorf("marshalling manifest content: %s", err.Error())
 			}
-			task.ManifestFile = fmt.Sprintf("manifest-%s.json", task.Id.String())
-			manifestFile, err := os.Create(filepath.Join(config.Service.ManifestDirectory,
-				task.ManifestFile))
+			task.ManifestFile = filepath.Join(config.Service.ManifestDirectory, fmt.Sprintf("manifest-%s.json", task.Id.String()))
+			manifestFile, err := os.Create(task.ManifestFile)
 			if err != nil {
 				return fmt.Errorf("creating manifest file: %s", err.Error())
 			}

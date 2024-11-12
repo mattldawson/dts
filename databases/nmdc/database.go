@@ -265,7 +265,7 @@ type Authorization struct {
 	// indicates whether the token expires
 	Expires bool
 	// time at which the token expires, if any
-	ExpiresAt time.Time
+	ExpirationTime time.Time
 }
 
 // fetches an access token / type from NMDC using a refresh token
@@ -286,12 +286,9 @@ func getAccessToken(refreshToken string) (Authorization, error) {
 	}
 
 	type AccessTokenResponse struct {
-		// a client secret
-		Token string `json:"access_token"`
-		// indicates how the secret should be included in a header (e.g. "bearer")
-		Type string `json:"token_type"`
-		// number of seconds after which the access token expires (-1 indicates no expiration)
-		ExpiresIn int `json:"expires_in"`
+		Token     string `json:"access_token"`
+		Type      string `json:"token_type"` // indicates how to include in auth header
+		ExpiresIn int    `json:"expires_in"` // number of seconds to expiration
 	}
 
 	switch response.StatusCode {
@@ -307,16 +304,14 @@ func getAccessToken(refreshToken string) (Authorization, error) {
 		if err != nil {
 			return auth, err
 		}
-		// convert the AccessTokenResponse to an Authorization by calculating its
-		// time of expiry
-		duration, err := time.ParseDuration(fmt.Sprintf("%ds",
-			tokenResponse.ExpiresIn-30)) // subtract 30 seconds for "slop"
+		// calculating the time of expiry, subtracting 30 seconds for "slop"
+		duration, err := time.ParseDuration(fmt.Sprintf("%ds", tokenResponse.ExpiresIn-30))
 		return Authorization{
-			RefreshToken: refreshToken,
-			Token:        tokenResponse.Token,
-			Type:         tokenResponse.Type,
-			Expires:      true,
-			ExpiresAt:    time.Now().Add(duration),
+			RefreshToken:   refreshToken,
+			Token:          tokenResponse.Token,
+			Type:           tokenResponse.Type,
+			Expires:        true,
+			ExpirationTime: time.Now().Add(duration),
 		}, err
 	case 503:
 		return auth, &databases.UnavailableError{
@@ -334,7 +329,7 @@ func getAccessToken(refreshToken string) (Authorization, error) {
 // checks our access token for expiration and renews if necessary
 func (db *Database) renewAccessTokenIfExpired() error {
 	var err error
-	if time.Now().After(db.Auth.ExpiresAt) { // token has expired
+	if time.Now().After(db.Auth.ExpirationTime) { // token has expired
 		db.Auth, err = getAccessToken(db.Auth.RefreshToken)
 	}
 	return err
@@ -539,7 +534,7 @@ func (db Database) studyIdsForDataObjectIds(dataObjectIds []string) (map[string]
 	}
 
 	// run the query and extract the results
-	body, err := db.post("queries:run", bytes.NewReader(data))
+	body, err := db.post("queries:run/", bytes.NewReader(data))
 	if err != nil {
 		return nil, err
 	}

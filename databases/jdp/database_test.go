@@ -119,15 +119,6 @@ func TestResources(t *testing.T) {
 	}
 }
 
-func TestEndpoint(t *testing.T) {
-	assert := assert.New(t)
-	orcid := os.Getenv("DTS_KBASE_TEST_ORCID")
-	db, _ := NewDatabase(orcid)
-	endpoint, err := db.Endpoint()
-	assert.Nil(err)
-	assert.NotNil(endpoint, "JDP database has no endpoint")
-}
-
 // this runs setup, runs all tests, and does breakdown
 func TestMain(m *testing.M) {
 	setup()

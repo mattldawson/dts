@@ -29,6 +29,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -42,138 +43,6 @@ import (
 	"github.com/kbase/dts/frictionless"
 )
 
-const (
-	// NOTE: for now, we use the dev environment (-dev), not prod (which has bugs!)
-	// NOTE: note also that NMDC is backed by two databases: one MongoDB and one PostGres,
-	// NOTE: which are synced daily-esque. They will sort this out in the coming year,
-	// NOTE: and it looks like PostGres is probably going to prevail.
-	// NOTE: (See https://github.com/microbiomedata/NMDC_documentation/blob/main/docs/howto_guides/portal_guide.md)
-	baseApiURL  = "https://api-dev.microbiomedata.org/"       // mongoDB
-	baseDataURL = "https://data-dev.microbiomedata.org/data/" // postgres (use in future)
-)
-
-// a mapping from NMDC file types to format labels
-// (see https://microbiomedata.github.io/nmdc-schema/FileTypeEnum/)
-var fileTypeToFormat = map[string]string{
-	"Annotation Amino Acid FASTA":  "fasta",
-	"Annotation Enzyme Commission": "tsv",
-	"Annotation KEGG Orthology":    "tsv",
-	"Assembly AGP":                 "agp",
-	"Assembly Contigs":             "fasta",
-	"Assembly Coverage BAM":        "bam",
-	"Assembly Info File":           "texinfo",
-	"Assembly Scaffolds":           "fasta",
-	"BAI File":                     "bai",
-	"CATH FunFams (Functional Families) Annotation GFF":   "gff3",
-	"Centrifuge Krona Plot":                               "html",
-	"Clusters of Orthologous Groups (COG) Annotation GFF": "gff3",
-	"CRT Annotation GFF":                                  "gff3",
-	"Direct Infusion FT ICR-MS Raw Data":                  "raw",
-	"Error Corrected Reads":                               "fastq",
-	"Filtered Sequencing Reads":                           "fastq",
-	"Functional Annotation GFF":                           "gff3",
-	"Genemark Annotation GFF":                             "gff3",
-	"Gene Phylogeny tsv":                                  "tsv",
-	"GOTTCHA2 Krona Plot":                                 "html",
-	"KO_EC Annotation GFF":                                "gff3",
-	"Kraken2 Krona Plot":                                  "html",
-	"LC-DDA-MS/MS Raw Data":                               "raw",
-	"Metagenome Bins":                                     "fasta",
-	"Metagenome Raw Reads":                                "raw",
-	"Metagenome Raw Read 1":                               "raw",
-	"Metagenome Raw Read 2":                               "raw",
-	"Misc Annotation GFF":                                 "gff3",
-	"Pfam Annotation GFF":                                 "gff3",
-	"Prodigal Annotation GFF":                             "gff3",
-	"QC non-rRNA R1":                                      "fastq",
-	"QC non-rRNA R2":                                      "fastq",
-	"Read Count and RPKM":                                 "json",
-	"RFAM Annotation GFF":                                 "gff3",
-	"Scaffold Lineage tsv":                                "tsv",
-	"Structural Annotation GFF":                           "gff3",
-	"Structural Annotation Stats Json":                    "json",
-	"SUPERFam Annotation GFF":                             "gff3",
-	"SMART Annotation GFF":                                "gff3",
-	"TIGRFam Annotation GFF":                              "gff3",
-	"TMRNA Annotation GFF":                                "gff3",
-	"TRNA Annotation GFF":                                 "gff3",
-}
-
-// a mapping from file format labels to mime types
-var formatToMimeType = map[string]string{
-	"agp":     "application/octet-stream",
-	"bam":     "application/octet-stream",
-	"bai":     "application/octet-stream",
-	"csv":     "text/csv",
-	"fasta":   "text/plain",
-	"fastq":   "text/plain",
-	"gff":     "text/plain",
-	"gff3":    "text/plain",
-	"gz":      "application/gzip",
-	"bz":      "application/x-bzip",
-	"bz2":     "application/x-bzip2",
-	"json":    "application/json",
-	"raw":     "application/octet-stream",
-	"tar":     "application/x-tar",
-	"text":    "text/plain",
-	"texinfo": "text/plain",
-	"tsv":     "text/plain",
-}
-
-// extracts the file format from the name and type of the file
-func formatFromType(fileType string) string {
-	if format, found := fileTypeToFormat[fileType]; found {
-		return format
-	}
-	return "unknown"
-}
-
-// extracts the file format from the name and type of the file
-func mimeTypeFromFormat(format string) string {
-	if mimeType, ok := formatToMimeType[format]; ok {
-		return mimeType
-	}
-	return "application/octet-stream"
-}
-
-// creates a Frictionless DataResource-savvy name for a file:
-// * the name consists of lower case characters plus '.', '-', and '_'
-// * all forbidden characters encountered in the filename are removed
-// * a number suffix is added if needed to make the name unique
-func dataResourceName(filename string) string {
-	name := strings.ToLower(filename)
-
-	// remove any file suffix
-	lastDot := strings.LastIndex(name, ".")
-	if lastDot != -1 {
-		name = name[:lastDot]
-	}
-
-	// replace sequences of invalid characters with '_'
-	for {
-		isInvalid := func(c rune) bool {
-			return !unicode.IsLetter(c) && !unicode.IsDigit(c) && c != '_' && c != '-' && c != '.'
-		}
-		start := strings.IndexFunc(name, isInvalid)
-		if start >= 0 {
-			nameRunes := []rune(name)
-			end := start + 1
-			for end < len(name) && isInvalid(nameRunes[end]) {
-				end++
-			}
-			if end < len(name) {
-				name = name[:start] + string('_') + name[end:]
-			} else {
-				name = name[:start] + string('_')
-			}
-		} else {
-			break
-		}
-	}
-
-	return name
-}
-
 // file database appropriate for handling searches and transfers
 // (implements the databases.Database interface)
 type Database struct {
@@ -183,8 +52,8 @@ type Database struct {
 	Orcid string
 	// HTTP client that caches queries
 	Client http.Client
-	// shared secret used for authentication
-	Secret string
+	// authorization secret and type
+	Secret, SecretType string
 	// mapping of host URLs to endpoints
 	EndpointForHost map[string]string
 }
@@ -197,22 +66,35 @@ func NewDatabase(orcid string) (databases.Database, error) {
 		}
 	}
 
-	/* FIXME: we don't need authentication for searches
-		// make sure we have a shared secret or an SSO token
-		secret, haveSecret := os.LookupEnv("DTS_NMDC_SECRET")
-		if !haveSecret {
-			return nil, databases.UnauthorizedError{
-	      Database: "nmdc",
-	      Message: "No shared secret was found for NMDC authentication",
-	    }
+	// obtain a secret (access token or shared secret) for NMDC authorization
+	var secret, secretType string
+	var err error
+	refreshToken, haveRefreshToken := os.LookupEnv("DTS_NMDC_REFRESH_TOKEN")
+	if haveRefreshToken {
+		// NOTE: A 1-year SSO refresh token can be obtained by logging into the data
+		// NOTE: portal with ORCID (https://data.microbiomedata.org/user).
+		// NOTE: With the refresh token, we can obtain a 24-hour access token
+		secret, secretType, err = getAccessToken(refreshToken)
+		if err != nil {
+			return nil, err
 		}
-	*/
+	} else {
+		var haveSecret bool
+		secret, haveSecret = os.LookupEnv("DTS_NMDC_SHARED_SECRET")
+		if !haveSecret {
+			secretType = "shared_secret"
+			return nil, databases.UnauthorizedError{
+				Database: "nmdc",
+				Message:  "No refresh token or shared secret was found for NMDC authentication",
+			}
+		}
+	}
 
 	// check for "nersc" and "emsl" Globus endpoints
 	if config.Databases["nmdc"].Endpoint != "" {
 		return nil, databases.InvalidEndpointsError{
 			Database: "nmdc",
-			Message:  "NMDC requires nersc and emsl endpoints to be specified",
+			Message:  "NMDC requires 'nersc' and 'emsl' endpoints to be specified",
 		}
 	}
 	for _, functionalName := range []string{"nersc", "emsl"} {
@@ -220,7 +102,7 @@ func NewDatabase(orcid string) (databases.Database, error) {
 		if _, found := config.Databases["nmdc"].Endpoints[functionalName]; !found {
 			return nil, databases.InvalidEndpointsError{
 				Database: "nmdc",
-				Message:  fmt.Sprintf("Could not find %s endpoint for NMDC database", functionalName),
+				Message:  fmt.Sprintf("Could not find '%s' endpoint for NMDC database", functionalName),
 			}
 		}
 	}
@@ -231,9 +113,10 @@ func NewDatabase(orcid string) (databases.Database, error) {
 	emslEndpoint := config.Databases["nmdc"].Endpoints["emsl"]
 
 	return &Database{
-		Id:    "nmdc",
-		Orcid: orcid,
-		//		Secret: secret,
+		Id:         "nmdc",
+		Orcid:      orcid,
+		Secret:     secret,
+		SecretType: secretType,
 		EndpointForHost: map[string]string{
 			"https://data.microbiomedata.org/data/": nerscEndpoint,
 			"https://nmdcdemo.emsl.pnnl.gov/":       emslEndpoint,
@@ -241,9 +124,183 @@ func NewDatabase(orcid string) (databases.Database, error) {
 	}, nil
 }
 
+func (db Database) SpecificSearchParameters() map[string]interface{} {
+	// for details about NMDC-specific search parameters, see
+	// https://api.microbiomedata.org/docs#/find:~:text=Find%20NMDC-,metadata,-entities.
+	return map[string]interface{}{
+		"activity_id":    "",
+		"data_object_id": "",
+		"fields":         "",
+		"filter":         "",
+		"sort":           "",
+		"sample_id":      "",
+		"study_id":       "",
+		"extra":          "",
+	}
+}
+
+func (db *Database) Search(params databases.SearchParameters) (databases.SearchResults, error) {
+	p := url.Values{}
+
+	// fetch pagination parameters
+	pageNumber, pageSize := pageNumberAndSize(params.Pagination.Offset, params.Pagination.MaxNum)
+	p.Add("page", strconv.Itoa(pageNumber))
+	p.Add("per_page", strconv.Itoa(pageSize))
+
+	// add any NMDC-specific search parameters
+	if params.Specific != nil {
+		err := db.addSpecificSearchParameters(params.Specific, &p)
+		if err != nil {
+			return databases.SearchResults{}, err
+		}
+	}
+
+	// dispatch the search to the proper endpoint, depending on whether we're
+	// looking for a study or individual data objects
+	if p.Has("study_id") {
+		return db.dataObjectsForStudy(p.Get("study_id"))
+	} else {
+		// simply call the data_objects/ endpoint with the given query string
+		//p.Add("search", params.Query) // FIXME: not yet supported by NMDC!
+		p.Add("filter", params.Query)
+		return db.dataObjects(p)
+	}
+}
+
+func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, error) {
+	// we use the /data_objects/{data_object_id} GET endpoint to retrieve metadata
+	// for individual files
+
+	// gather relevant study IDs and use them to build credit metadata
+	studyIdForDataObjectId, err := db.studyIdsForDataObjectIds(fileIds)
+	if err != nil {
+		return nil, err
+	}
+	creditForStudyId := make(map[string]credit.CreditMetadata)
+	for _, studyId := range studyIdForDataObjectId {
+		credit, foundStudyCredit := creditForStudyId[studyId]
+		if !foundStudyCredit {
+			credit, err = db.creditMetadataForStudy(studyId)
+			if err != nil {
+				return nil, err
+			}
+			creditForStudyId[studyId] = credit // cache for other data objects
+		}
+	}
+
+	// construct data resources from the IDs
+	resources := make([]frictionless.DataResource, len(fileIds))
+	for i, fileId := range fileIds {
+		body, err := db.get(fmt.Sprintf("data_objects/%s", fileId), url.Values{})
+		if err != nil {
+			return nil, err
+		}
+		var dataObject DataObject
+		json.Unmarshal(body, &dataObject)
+		resources[i], err = db.dataResourceFromDataObject(dataObject)
+		if err != nil {
+			return nil, err
+		}
+
+		// add credit metadata
+		studyId := studyIdForDataObjectId[resources[i].Id]
+		resources[i].Credit = creditForStudyId[studyId]
+	}
+	return resources, nil
+}
+
+func (db *Database) StageFiles(fileIds []string) (uuid.UUID, error) {
+	// NMDC keeps all of its NERSC data on disk, so all files are already staged.
+	// We simply generate a new UUID that can be handed to db.StagingStatus,
+	// which returns databases.StagingStatusSucceeded.
+	//
+	// "We may eventually use tape but don't need to yet." -Shreyas Cholia, 2024-09-04
+	return uuid.New(), nil
+}
+
+func (db *Database) StagingStatus(id uuid.UUID) (databases.StagingStatus, error) {
+	// all files are hot!
+	return databases.StagingStatusSucceeded, nil
+}
+
+func (db *Database) LocalUser(orcid string) (string, error) {
+	// no current mechanism for this
+	return "localuser", nil
+}
+
+//--------------------
+// Internal machinery
+//--------------------
+
+const (
+	// NOTE: for now, we use the dev environment (-dev), not prod (which has bugs!)
+	// NOTE: note also that NMDC is backed by two databases: one MongoDB and one PostGres,
+	// NOTE: which are synced daily-esque. They will sort this out in the coming year,
+	// NOTE: and it looks like PostGres is probably going to prevail.
+	// NOTE: (See https://github.com/microbiomedata/NMDC_documentation/blob/main/docs/howto_guides/portal_guide.md)
+	baseApiURL  = "https://api-dev.microbiomedata.org/"       // mongoDB
+	baseDataURL = "https://data-dev.microbiomedata.org/data/" // postgres (use in future)
+)
+
+// fetches an access token / type from NMDC using a refresh token
+func getAccessToken(refreshToken string) (string, string, error) {
+	resource := "https://data.microbiomedata.org/auth/refresh"
+	type AccessTokenRequest struct {
+		RefreshToken string `json:"refresh_token"`
+	}
+	data, err := json.Marshal(AccessTokenRequest{RefreshToken: refreshToken})
+	request, err := http.NewRequest(http.MethodPost, resource, bytes.NewReader(data))
+	request.Header.Set("Content-Type", "application/json")
+
+	var client http.Client
+	response, err := client.Do(request)
+	if err != nil {
+		return "", "", err
+	}
+
+	type AccessTokenResponse struct {
+		// the access token obtained from the refresh operation
+		AccessToken string `json:"access_token"`
+		// the type of token indicating how it should be included in a header (e.g. "bearer")
+		TokenType string `json:"token_type"`
+		// number of seconds after which the access token expires
+		ExpiresIn int `json:"expires_in"`
+	}
+	switch response.StatusCode {
+	case 200, 201, 204:
+		defer response.Body.Close()
+		var data []byte
+		data, err = io.ReadAll(response.Body)
+		if err != nil {
+			return "", "", err
+		}
+		var accessTokenResponse AccessTokenResponse
+		err = json.Unmarshal(data, &accessTokenResponse)
+		return accessTokenResponse.AccessToken, accessTokenResponse.TokenType, err
+	case 503:
+		return "", "", &databases.UnavailableError{
+			Database: "nmdc",
+		}
+	default:
+		return "", "", databases.UnauthorizedError{
+			Database: "nmdc",
+			Message: fmt.Sprintf("An error obtaining an access token for the NMDC database (%d)",
+				response.StatusCode),
+		}
+	}
+}
+
 // adds an appropriate authorization header to given HTTP request
 func (db Database) addAuthHeader(request *http.Request) {
-	request.Header.Add("Authorization", fmt.Sprintf("Token %s_%s", db.Orcid, db.Secret))
+	if db.Secret != "" {
+		if strings.ToLower(db.SecretType) == "bearer" {
+			// vvv SSO token syntax vvv
+			request.Header.Add("Authorization", fmt.Sprintf("Bearer %s", db.Secret))
+		} else if strings.ToLower(db.SecretType) == "shared_secret" {
+			// vvv shared sekret syntax used by JDP vvv
+			request.Header.Add("Authorization", fmt.Sprintf("Token %s_%s", db.Orcid, db.Secret))
+		}
+	}
 }
 
 // performs a GET request on the given resource, returning the resulting
@@ -701,19 +758,126 @@ func pageNumberAndSize(offset, maxNum int) (int, int) {
 	return pageNumber, pageSize
 }
 
-func (db Database) SpecificSearchParameters() map[string]interface{} {
-	// for details about NMDC-specific search parameters, see
-	// https://api.microbiomedata.org/docs#/find:~:text=Find%20NMDC-,metadata,-entities.
-	return map[string]interface{}{
-		"activity_id":    "",
-		"data_object_id": "",
-		"fields":         "",
-		"filter":         "",
-		"sort":           "",
-		"sample_id":      "",
-		"study_id":       "",
-		"extra":          "",
+// a mapping from NMDC file types to format labels
+// (see https://microbiomedata.github.io/nmdc-schema/FileTypeEnum/)
+var fileTypeToFormat = map[string]string{
+	"Annotation Amino Acid FASTA":  "fasta",
+	"Annotation Enzyme Commission": "tsv",
+	"Annotation KEGG Orthology":    "tsv",
+	"Assembly AGP":                 "agp",
+	"Assembly Contigs":             "fasta",
+	"Assembly Coverage BAM":        "bam",
+	"Assembly Info File":           "texinfo",
+	"Assembly Scaffolds":           "fasta",
+	"BAI File":                     "bai",
+	"CATH FunFams (Functional Families) Annotation GFF":   "gff3",
+	"Centrifuge Krona Plot":                               "html",
+	"Clusters of Orthologous Groups (COG) Annotation GFF": "gff3",
+	"CRT Annotation GFF":                                  "gff3",
+	"Direct Infusion FT ICR-MS Raw Data":                  "raw",
+	"Error Corrected Reads":                               "fastq",
+	"Filtered Sequencing Reads":                           "fastq",
+	"Functional Annotation GFF":                           "gff3",
+	"Genemark Annotation GFF":                             "gff3",
+	"Gene Phylogeny tsv":                                  "tsv",
+	"GOTTCHA2 Krona Plot":                                 "html",
+	"KO_EC Annotation GFF":                                "gff3",
+	"Kraken2 Krona Plot":                                  "html",
+	"LC-DDA-MS/MS Raw Data":                               "raw",
+	"Metagenome Bins":                                     "fasta",
+	"Metagenome Raw Reads":                                "raw",
+	"Metagenome Raw Read 1":                               "raw",
+	"Metagenome Raw Read 2":                               "raw",
+	"Misc Annotation GFF":                                 "gff3",
+	"Pfam Annotation GFF":                                 "gff3",
+	"Prodigal Annotation GFF":                             "gff3",
+	"QC non-rRNA R1":                                      "fastq",
+	"QC non-rRNA R2":                                      "fastq",
+	"Read Count and RPKM":                                 "json",
+	"RFAM Annotation GFF":                                 "gff3",
+	"Scaffold Lineage tsv":                                "tsv",
+	"Structural Annotation GFF":                           "gff3",
+	"Structural Annotation Stats Json":                    "json",
+	"SUPERFam Annotation GFF":                             "gff3",
+	"SMART Annotation GFF":                                "gff3",
+	"TIGRFam Annotation GFF":                              "gff3",
+	"TMRNA Annotation GFF":                                "gff3",
+	"TRNA Annotation GFF":                                 "gff3",
+}
+
+// a mapping from file format labels to mime types
+var formatToMimeType = map[string]string{
+	"agp":     "application/octet-stream",
+	"bam":     "application/octet-stream",
+	"bai":     "application/octet-stream",
+	"csv":     "text/csv",
+	"fasta":   "text/plain",
+	"fastq":   "text/plain",
+	"gff":     "text/plain",
+	"gff3":    "text/plain",
+	"gz":      "application/gzip",
+	"bz":      "application/x-bzip",
+	"bz2":     "application/x-bzip2",
+	"json":    "application/json",
+	"raw":     "application/octet-stream",
+	"tar":     "application/x-tar",
+	"text":    "text/plain",
+	"texinfo": "text/plain",
+	"tsv":     "text/plain",
+}
+
+// extracts the file format from the name and type of the file
+func formatFromType(fileType string) string {
+	if format, found := fileTypeToFormat[fileType]; found {
+		return format
 	}
+	return "unknown"
+}
+
+// extracts the file format from the name and type of the file
+func mimeTypeFromFormat(format string) string {
+	if mimeType, ok := formatToMimeType[format]; ok {
+		return mimeType
+	}
+	return "application/octet-stream"
+}
+
+// creates a Frictionless DataResource-savvy name for a file:
+// * the name consists of lower case characters plus '.', '-', and '_'
+// * all forbidden characters encountered in the filename are removed
+// * a number suffix is added if needed to make the name unique
+func dataResourceName(filename string) string {
+	name := strings.ToLower(filename)
+
+	// remove any file suffix
+	lastDot := strings.LastIndex(name, ".")
+	if lastDot != -1 {
+		name = name[:lastDot]
+	}
+
+	// replace sequences of invalid characters with '_'
+	for {
+		isInvalid := func(c rune) bool {
+			return !unicode.IsLetter(c) && !unicode.IsDigit(c) && c != '_' && c != '-' && c != '.'
+		}
+		start := strings.IndexFunc(name, isInvalid)
+		if start >= 0 {
+			nameRunes := []rune(name)
+			end := start + 1
+			for end < len(name) && isInvalid(nameRunes[end]) {
+				end++
+			}
+			if end < len(name) {
+				name = name[:start] + string('_') + name[end:]
+			} else {
+				name = name[:start] + string('_')
+			}
+		} else {
+			break
+		}
+	}
+
+	return name
 }
 
 // checks NMDC-specific search parameters
@@ -759,93 +923,4 @@ func (db Database) addSpecificSearchParameters(params map[string]json.RawMessage
 		}
 	}
 	return nil
-}
-
-func (db *Database) Search(params databases.SearchParameters) (databases.SearchResults, error) {
-	p := url.Values{}
-
-	// fetch pagination parameters
-	pageNumber, pageSize := pageNumberAndSize(params.Pagination.Offset, params.Pagination.MaxNum)
-	p.Add("page", strconv.Itoa(pageNumber))
-	p.Add("per_page", strconv.Itoa(pageSize))
-
-	// add any NMDC-specific search parameters
-	if params.Specific != nil {
-		err := db.addSpecificSearchParameters(params.Specific, &p)
-		if err != nil {
-			return databases.SearchResults{}, err
-		}
-	}
-
-	// dispatch the search to the proper endpoint, depending on whether we're
-	// looking for a study or individual data objects
-	if p.Has("study_id") {
-		return db.dataObjectsForStudy(p.Get("study_id"))
-	} else {
-		// simply call the data_objects/ endpoint with the given query string
-		//p.Add("search", params.Query) // FIXME: not yet supported by NMDC!
-		p.Add("filter", params.Query)
-		return db.dataObjects(p)
-	}
-}
-
-func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, error) {
-	// we use the /data_objects/{data_object_id} GET endpoint to retrieve metadata
-	// for individual files
-
-	// gather relevant study IDs and use them to build credit metadata
-	studyIdForDataObjectId, err := db.studyIdsForDataObjectIds(fileIds)
-	if err != nil {
-		return nil, err
-	}
-	creditForStudyId := make(map[string]credit.CreditMetadata)
-	for _, studyId := range studyIdForDataObjectId {
-		credit, foundStudyCredit := creditForStudyId[studyId]
-		if !foundStudyCredit {
-			credit, err = db.creditMetadataForStudy(studyId)
-			if err != nil {
-				return nil, err
-			}
-			creditForStudyId[studyId] = credit // cache for other data objects
-		}
-	}
-
-	// construct data resources from the IDs
-	resources := make([]frictionless.DataResource, len(fileIds))
-	for i, fileId := range fileIds {
-		body, err := db.get(fmt.Sprintf("data_objects/%s", fileId), url.Values{})
-		if err != nil {
-			return nil, err
-		}
-		var dataObject DataObject
-		json.Unmarshal(body, &dataObject)
-		resources[i], err = db.dataResourceFromDataObject(dataObject)
-		if err != nil {
-			return nil, err
-		}
-
-		// add credit metadata
-		studyId := studyIdForDataObjectId[resources[i].Id]
-		resources[i].Credit = creditForStudyId[studyId]
-	}
-	return resources, nil
-}
-
-func (db *Database) StageFiles(fileIds []string) (uuid.UUID, error) {
-	// NMDC keeps all of its NERSC data on disk, so all files are already staged.
-	// We simply generate a new UUID that can be handed to db.StagingStatus,
-	// which returns databases.StagingStatusSucceeded.
-	//
-	// "We may eventually use tape but don't need to yet." -Shreyas Cholia, 2024-09-04
-	return uuid.New(), nil
-}
-
-func (db *Database) StagingStatus(id uuid.UUID) (databases.StagingStatus, error) {
-	// all files are hot!
-	return databases.StagingStatusSucceeded, nil
-}
-
-func (db *Database) LocalUser(orcid string) (string, error) {
-	// no current mechanism for this
-	return "localuser", nil
 }

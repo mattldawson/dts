@@ -33,6 +33,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/google/uuid"
@@ -53,7 +54,7 @@ type Database struct {
 	// HTTP client that caches queries
 	Client http.Client
 	// authorization secret and type
-	Secret, SecretType string
+	Auth Authorization
 	// mapping of host URLs to endpoints
 	EndpointForHost map[string]string
 }
@@ -67,25 +68,29 @@ func NewDatabase(orcid string) (databases.Database, error) {
 	}
 
 	// obtain a secret (access token or shared secret) for NMDC authorization
-	var secret, secretType string
+	var auth Authorization
 	var err error
-	refreshToken, haveRefreshToken := os.LookupEnv("DTS_NMDC_REFRESH_TOKEN")
-	if haveRefreshToken {
-		// NOTE: A 1-year SSO refresh token can be obtained by logging into the data
-		// NOTE: portal with ORCID (https://data.microbiomedata.org/user).
-		// NOTE: With the refresh token, we can obtain a 24-hour access token
-		secret, secretType, err = getAccessToken(refreshToken)
-		if err != nil {
-			return nil, err
+	sharedSecret, haveSecret := os.LookupEnv("DTS_NMDC_SHARED_SECRET")
+	if haveSecret {
+		auth = Authorization{
+			Token:   sharedSecret,
+			Type:    "shared_secret",
+			Expires: false,
 		}
 	} else {
-		var haveSecret bool
-		secret, haveSecret = os.LookupEnv("DTS_NMDC_SHARED_SECRET")
-		if !haveSecret {
-			secretType = "shared_secret"
+		refreshToken, haveRefreshToken := os.LookupEnv("DTS_NMDC_REFRESH_TOKEN")
+		if haveRefreshToken {
+			// NOTE: A 1-year SSO refresh token can be obtained by logging into the data
+			// NOTE: portal with ORCID (https://data.microbiomedata.org/user).
+			// NOTE: With the refresh token, we can obtain a 24-hour access token
+			auth, err = getAccessToken(refreshToken)
+			if err != nil {
+				return nil, err
+			}
+		} else {
 			return nil, databases.UnauthorizedError{
 				Database: "nmdc",
-				Message:  "No refresh token or shared secret was found for NMDC authentication",
+				Message:  "No shared secret or refresh token was found for NMDC authentication",
 			}
 		}
 	}
@@ -113,10 +118,9 @@ func NewDatabase(orcid string) (databases.Database, error) {
 	emslEndpoint := config.Databases["nmdc"].Endpoints["emsl"]
 
 	return &Database{
-		Id:         "nmdc",
-		Orcid:      orcid,
-		Secret:     secret,
-		SecretType: secretType,
+		Id:    "nmdc",
+		Orcid: orcid,
+		Auth:  auth,
 		EndpointForHost: map[string]string{
 			"https://data.microbiomedata.org/data/": nerscEndpoint,
 			"https://nmdcdemo.emsl.pnnl.gov/":       emslEndpoint,
@@ -141,6 +145,8 @@ func (db Database) SpecificSearchParameters() map[string]interface{} {
 
 func (db *Database) Search(params databases.SearchParameters) (databases.SearchResults, error) {
 	p := url.Values{}
+
+	db.renewAccessTokenIfExpired()
 
 	// fetch pagination parameters
 	pageNumber, pageSize := pageNumberAndSize(params.Pagination.Offset, params.Pagination.MaxNum)
@@ -170,6 +176,8 @@ func (db *Database) Search(params databases.SearchParameters) (databases.SearchR
 func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, error) {
 	// we use the /data_objects/{data_object_id} GET endpoint to retrieve metadata
 	// for individual files
+
+	db.renewAccessTokenIfExpired()
 
 	// gather relevant study IDs and use them to build credit metadata
 	studyIdForDataObjectId, err := db.studyIdsForDataObjectIds(fileIds)
@@ -242,8 +250,21 @@ const (
 	baseDataURL = "https://data-dev.microbiomedata.org/data/" // postgres (use in future)
 )
 
+// auth information
+type Authorization struct {
+	// the refresh token used to obtain an access token, if any
+	RefreshToken string
+	// client token and type (indicating how it's used in an auth header)
+	Token, Type string
+	// indicates whether the token expires
+	Expires bool
+	// time at which the token expires, if any
+	ExpiresAt time.Time
+}
+
 // fetches an access token / type from NMDC using a refresh token
-func getAccessToken(refreshToken string) (string, string, error) {
+func getAccessToken(refreshToken string) (Authorization, error) {
+	var auth Authorization
 	resource := "https://data.microbiomedata.org/auth/refresh"
 	type AccessTokenRequest struct {
 		RefreshToken string `json:"refresh_token"`
@@ -255,57 +276,80 @@ func getAccessToken(refreshToken string) (string, string, error) {
 	var client http.Client
 	response, err := client.Do(request)
 	if err != nil {
-		return "", "", err
+		return auth, err
 	}
 
 	type AccessTokenResponse struct {
-		// the access token obtained from the refresh operation
-		AccessToken string `json:"access_token"`
-		// the type of token indicating how it should be included in a header (e.g. "bearer")
-		TokenType string `json:"token_type"`
-		// number of seconds after which the access token expires
+		// a client secret
+		Token string `json:"access_token"`
+		// indicates how the secret should be included in a header (e.g. "bearer")
+		Type string `json:"token_type"`
+		// number of seconds after which the access token expires (-1 indicates no expiration)
 		ExpiresIn int `json:"expires_in"`
 	}
+
 	switch response.StatusCode {
 	case 200, 201, 204:
 		defer response.Body.Close()
 		var data []byte
 		data, err = io.ReadAll(response.Body)
 		if err != nil {
-			return "", "", err
+			return auth, err
 		}
-		var accessTokenResponse AccessTokenResponse
-		err = json.Unmarshal(data, &accessTokenResponse)
-		return accessTokenResponse.AccessToken, accessTokenResponse.TokenType, err
+		var tokenResponse AccessTokenResponse
+		err = json.Unmarshal(data, &tokenResponse)
+		if err != nil {
+			return auth, err
+		}
+		// convert the AccessTokenResponse to an Authorization by calculating its
+		// time of expiry
+		duration, err := time.ParseDuration(fmt.Sprintf("%ds",
+			tokenResponse.ExpiresIn-30)) // subtract 30 seconds for "slop"
+		return Authorization{
+			RefreshToken: refreshToken,
+			Token:        tokenResponse.Token,
+			Type:         tokenResponse.Type,
+			Expires:      true,
+			ExpiresAt:    time.Now().Add(duration),
+		}, err
 	case 503:
-		return "", "", &databases.UnavailableError{
+		return auth, &databases.UnavailableError{
 			Database: "nmdc",
 		}
 	default:
-		return "", "", databases.UnauthorizedError{
+		return auth, &databases.UnauthorizedError{
 			Database: "nmdc",
-			Message: fmt.Sprintf("An error obtaining an access token for the NMDC database (%d)",
+			Message: fmt.Sprintf("An error occurred obtaining an access token for the NMDC database (%d)",
 				response.StatusCode),
 		}
 	}
 }
 
+// checks our access token for expiration and renews if necessary
+func (db *Database) renewAccessTokenIfExpired() error {
+	var err error
+	if time.Now().After(db.Auth.ExpiresAt) { // token has expired
+		db.Auth, err = getAccessToken(db.Auth.RefreshToken)
+	}
+	return err
+}
+
 // adds an appropriate authorization header to given HTTP request
 func (db Database) addAuthHeader(request *http.Request) {
-	if db.Secret != "" {
-		if strings.ToLower(db.SecretType) == "bearer" {
+	if db.Auth.Token != "" {
+		if strings.ToLower(db.Auth.Type) == "bearer" {
 			// vvv SSO token syntax vvv
-			request.Header.Add("Authorization", fmt.Sprintf("Bearer %s", db.Secret))
-		} else if strings.ToLower(db.SecretType) == "shared_secret" {
+			request.Header.Add("Authorization", fmt.Sprintf("Bearer %s", db.Auth.Token))
+		} else if strings.ToLower(db.Auth.Type) == "shared_secret" {
 			// vvv shared sekret syntax used by JDP vvv
-			request.Header.Add("Authorization", fmt.Sprintf("Token %s_%s", db.Orcid, db.Secret))
+			request.Header.Add("Authorization", fmt.Sprintf("Token %s_%s", db.Orcid, db.Auth.Token))
 		}
 	}
 }
 
 // performs a GET request on the given resource, returning the resulting
 // response body and/or error
-func (db *Database) get(resource string, values url.Values) ([]byte, error) {
+func (db Database) get(resource string, values url.Values) ([]byte, error) {
 	res, err := url.Parse(baseApiURL)
 	if err != nil {
 		return nil, err
@@ -338,7 +382,7 @@ func (db *Database) get(resource string, values url.Values) ([]byte, error) {
 
 // performs a POST request on the given resource, returning the resulting
 // response body and/or error
-func (db *Database) post(resource string, body io.Reader) ([]byte, error) {
+func (db Database) post(resource string, body io.Reader) ([]byte, error) {
 	res, err := url.Parse(baseApiURL)
 	if err != nil {
 		return nil, err
@@ -389,7 +433,7 @@ type DataGeneration struct {
 	AssociatedStudies []string
 }
 
-func (db *Database) dataResourceFromDataObject(dataObject DataObject) (frictionless.DataResource, error) {
+func (db Database) dataResourceFromDataObject(dataObject DataObject) (frictionless.DataResource, error) {
 	resource := frictionless.DataResource{
 		Id:          dataObject.Id,
 		Name:        dataResourceName(dataObject.Name),
@@ -412,7 +456,7 @@ func (db *Database) dataResourceFromDataObject(dataObject DataObject) (frictionl
 	return resource, nil
 }
 
-func (db *Database) studyIdsForDataObjectIds(dataObjectIds []string) (map[string]string, error) {
+func (db Database) studyIdsForDataObjectIds(dataObjectIds []string) (map[string]string, error) {
 	// We create an aggregation query on the data_generation_set collection.
 	// The data_generation_set collection associates studies with data objects:
 	// * the associated_studies field points to a study_set collection
@@ -513,7 +557,7 @@ func (db *Database) studyIdsForDataObjectIds(dataObjectIds []string) (map[string
 
 // fetches metadata for data objects (no credit metadata, alas) based on the
 // given URL search parameters
-func (db *Database) dataObjects(params url.Values) (databases.SearchResults, error) {
+func (db Database) dataObjects(params url.Values) (databases.SearchResults, error) {
 	var results databases.SearchResults
 
 	// extract any requested "extra" metadata fields (and scrub them from params)
@@ -575,7 +619,7 @@ func (db *Database) dataObjects(params url.Values) (databases.SearchResults, err
 }
 
 // fetches credit metadata for the study with the given ID
-func (db *Database) creditMetadataForStudy(studyId string) (credit.CreditMetadata, error) {
+func (db Database) creditMetadataForStudy(studyId string) (credit.CreditMetadata, error) {
 	// vvv credit-related NMDC schema types vvv
 
 	// https://microbiomedata.github.io/nmdc-schema/PersonValue/
@@ -694,7 +738,7 @@ func (db *Database) creditMetadataForStudy(studyId string) (credit.CreditMetadat
 }
 
 // fetches file metadata for data objects associated with the given study
-func (db *Database) dataObjectsForStudy(studyId string) (databases.SearchResults, error) {
+func (db Database) dataObjectsForStudy(studyId string) (databases.SearchResults, error) {
 	var results databases.SearchResults
 
 	body, err := db.get(fmt.Sprintf("data_objects/study/%s", studyId), url.Values{})

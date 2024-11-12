@@ -146,7 +146,10 @@ func (db Database) SpecificSearchParameters() map[string]interface{} {
 func (db *Database) Search(params databases.SearchParameters) (databases.SearchResults, error) {
 	p := url.Values{}
 
-	db.renewAccessTokenIfExpired()
+	err := db.renewAccessTokenIfExpired()
+	if err != nil {
+		return databases.SearchResults{}, err
+	}
 
 	// fetch pagination parameters
 	pageNumber, pageSize := pageNumberAndSize(params.Pagination.Offset, params.Pagination.MaxNum)
@@ -177,7 +180,10 @@ func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, er
 	// we use the /data_objects/{data_object_id} GET endpoint to retrieve metadata
 	// for individual files
 
-	db.renewAccessTokenIfExpired()
+	err := db.renewAccessTokenIfExpired()
+	if err != nil {
+		return nil, err
+	}
 
 	// gather relevant study IDs and use them to build credit metadata
 	studyIdForDataObjectId, err := db.studyIdsForDataObjectIds(fileIds)

@@ -53,8 +53,8 @@ type Database struct {
 	Orcid string
 	// HTTP client that caches queries
 	Client http.Client
-	// authorization access token
-	AccessToken string
+	// authorization info
+	Auth authorization
 	// mapping of host URLs to endpoints
 	EndpointForHost map[string]string
 }
@@ -67,11 +67,18 @@ func NewDatabase(orcid string) (databases.Database, error) {
 		}
 	}
 
-	accessToken, haveAccessToken := os.LookupEnv("DTS_NMDC_ACCESS_TOKEN")
-	if !haveAccessToken {
+	nmdcUser, haveNmdcUser := os.LookupEnv("DTS_NMDC_USER")
+	if !haveNmdcUser {
 		return nil, databases.UnauthorizedError{
 			Database: "nmdc",
-			Message:  "No NMDC access token was found for authentication",
+			Message:  "No NMDC user (DTS_NMDC_USER) was provided for authentication",
+		}
+	}
+	nmdcPassword, haveNmdcPassword := os.LookupEnv("DTS_NMDC_PASSWORD")
+	if !haveNmdcPassword {
+		return nil, databases.UnauthorizedError{
+			Database: "nmdc",
+			Message:  "No NMDC password (DTS_NMDC_PASSWORD) was provided for authentication",
 		}
 	}
 
@@ -97,10 +104,16 @@ func NewDatabase(orcid string) (databases.Database, error) {
 	nerscEndpoint := config.Databases["nmdc"].Endpoints["nersc"]
 	emslEndpoint := config.Databases["nmdc"].Endpoints["emsl"]
 
+	// get an API access token
+	auth, err := getAccessToken(credential{User: nmdcUser, Password: nmdcPassword})
+	if err != nil {
+		return nil, err
+	}
+
 	return &Database{
-		Id:          "nmdc",
-		Orcid:       orcid,
-		AccessToken: accessToken,
+		Id:    "nmdc",
+		Orcid: orcid,
+		Auth:  auth,
 		EndpointForHost: map[string]string{
 			"https://data.microbiomedata.org/data/": nerscEndpoint,
 			"https://nmdcdemo.emsl.pnnl.gov/":       emslEndpoint,
@@ -123,7 +136,9 @@ func (db Database) SpecificSearchParameters() map[string]interface{} {
 	}
 }
 
-func (db Database) Search(params databases.SearchParameters) (databases.SearchResults, error) {
+func (db *Database) Search(params databases.SearchParameters) (databases.SearchResults, error) {
+	db.renewAccessTokenIfExpired()
+
 	p := url.Values{}
 
 	// fetch pagination parameters
@@ -152,6 +167,8 @@ func (db Database) Search(params databases.SearchParameters) (databases.SearchRe
 }
 
 func (db Database) Resources(fileIds []string) ([]frictionless.DataResource, error) {
+	db.renewAccessTokenIfExpired()
+
 	// we use the /data_objects/{data_object_id} GET endpoint to retrieve metadata
 	// for individual files
 
@@ -226,8 +243,11 @@ const (
 	baseDataURL = "https://data-dev.microbiomedata.org/data/" // postgres (use in future)
 )
 
-// auth information
-type Authorization struct {
+// Authorization / authentication
+
+type authorization struct {
+	// API user credential
+	Credential credential
 	// client token and type (indicating how it's used in an auth header)
 	Token, Type string
 	// indicates whether the token expires
@@ -236,9 +256,90 @@ type Authorization struct {
 	ExpirationTime time.Time
 }
 
+type credential struct {
+	User, Password string
+}
+
+// fetches an access token / type from NMDC using a credential
+func getAccessToken(credential credential) (authorization, error) {
+	var auth authorization
+	resource := baseApiURL + "token"
+
+	type accessTokenRequest struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	data, err := json.Marshal(accessTokenRequest{
+		Username: credential.User,
+		Password: credential.Password,
+	})
+	request, err := http.NewRequest(http.MethodPost, resource, bytes.NewReader(data))
+	request.Header.Set("Content-Type", "application/json")
+
+	var client http.Client
+	response, err := client.Do(request)
+	if err != nil {
+		return auth, err
+	}
+
+	type accessTokenResponse struct {
+		Token   string `json:"access_token"`
+		Type    string `json:"token_type"`
+		Expires struct {
+			Days    int `json:"days"`
+			Hours   int `json:"hours"`
+			Minutes int `json:"minutes"`
+		} `json:"expires"`
+	}
+
+	switch response.StatusCode {
+	case 200, 201, 204:
+		defer response.Body.Close()
+		var data []byte
+		data, err = io.ReadAll(response.Body)
+		if err != nil {
+			return auth, err
+		}
+		var tokenResponse accessTokenResponse
+		err = json.Unmarshal(data, &tokenResponse)
+		if err != nil {
+			return auth, err
+		}
+		// calculating the time of expiry, subtracting 1 minute for "slop"
+		duration := time.Duration(24*tokenResponse.Expires.Days+tokenResponse.Expires.Hours)*time.Hour +
+			time.Duration(tokenResponse.Expires.Minutes-1)*time.Minute
+		return authorization{
+			Credential:     credential,
+			Token:          tokenResponse.Token,
+			Type:           tokenResponse.Type,
+			Expires:        true,
+			ExpirationTime: time.Now().Add(duration),
+		}, err
+	case 503:
+		return auth, &databases.UnavailableError{
+			Database: "nmdc",
+		}
+	default:
+		return auth, &databases.UnauthorizedError{
+			Database: "nmdc",
+			Message: fmt.Sprintf("An error occurred obtaining an access token for the NMDC database (%d)",
+				response.StatusCode),
+		}
+	}
+}
+
+// checks our access token for expiration and renews if necessary
+func (db *Database) renewAccessTokenIfExpired() error {
+	var err error
+	if time.Now().After(db.Auth.ExpirationTime) { // token has expired
+		db.Auth, err = getAccessToken(db.Auth.Credential)
+	}
+	return err
+}
+
 // adds an appropriate authorization header to given HTTP request
 func (db Database) addAuthHeader(request *http.Request) {
-	request.Header.Add("Authorization", fmt.Sprintf("Bearer %s", db.AccessToken))
+	request.Header.Add("Authorization", fmt.Sprintf("Bearer %s", db.Auth.Token))
 }
 
 // performs a GET request on the given resource, returning the resulting

@@ -57,6 +57,22 @@ endpoints:
     auth:
       client_id: ${GLOBUS_CLIENT_ID}
       client_secret: ${GLOBUS_CLIENT_SECRET}
+  globus-nmdc-nersc:
+    name: NMDC (NERSC)
+    id: ${NMDC_NERSC_ENDPOINT_ID}
+    provider: globus
+    root: /global/cfs/cdirs/m3408/results
+    auth:
+      client_id: ${GLOBUS_CLIENT_ID}
+      client_secret: ${GLOBUS_CLIENT_SECRET}
+  globus-nmdc-emsl:
+    name: NMDC (EMSL)
+    id: ${NMDC_EMSL_ENDPOINT_ID}
+    provider: globus
+    root: / # FIXME: not likely!
+    auth:
+      client_id: ${GLOBUS_CLIENT_ID}
+      client_secret: ${GLOBUS_CLIENT_SECRET}
 
 databases: # databases between which files can be transferred
   jdp:
@@ -67,3 +83,9 @@ databases: # databases between which files can be transferred
     name: KBase Workspace Service (KSS)
     organization: KBase
     endpoint: globus-kbase
+  nmdc:
+    name: National Microbiome Data Collaborative
+    organization: LBNL, PNNL, ORNL
+    endpoints:
+      nersc: globus-nmdc-nersc
+      emsl: globus-nmdc-emsl

@@ -67,6 +67,92 @@ const (
 	TransferStatusSucceeded  = endpoints.TransferStatusSucceeded
 )
 
+// starts processing tasks according to the given configuration, returning an
+// informative error if anything prevents this
+func Start() error {
+	if running {
+		return AlreadyRunningError{}
+	}
+
+	// if this is the first call to Start(), register our built-in endpoint
+	// and database providers
+	if firstCall {
+		endpoints.RegisterEndpointProvider("globus", globus.NewEndpoint)
+		endpoints.RegisterEndpointProvider("local", local.NewEndpoint)
+		if _, found := config.Databases["jdp"]; found {
+			databases.RegisterDatabase("jdp", jdp.NewDatabase)
+		}
+		if _, found := config.Databases["kbase"]; found {
+			databases.RegisterDatabase("kbase", kbase.NewDatabase)
+		}
+		if _, found := config.Databases["nmdc"]; found {
+			databases.RegisterDatabase("nmdc", nmdc.NewDatabase)
+		}
+		firstCall = false
+	}
+
+	// do the necessary directories exist, and are they writable/readable?
+	err := validateDirectory("data", config.Service.DataDirectory)
+	if err != nil {
+		return err
+	}
+	err = validateDirectory("manifest", config.Service.ManifestDirectory)
+	if err != nil {
+		return err
+	}
+
+	// can we access the local endpoint?
+	_, err = endpoints.NewEndpoint(config.Service.Endpoint)
+	if err != nil {
+		return err
+	}
+
+	// allocate channels
+	taskChannels = channelsType{
+		CreateTask:       make(chan TransferTask, 32),
+		CancelTask:       make(chan uuid.UUID, 32),
+		GetTaskStatus:    make(chan uuid.UUID, 32),
+		ReturnTaskId:     make(chan uuid.UUID, 32),
+		ReturnTaskStatus: make(chan TransferStatus, 32),
+		Error:            make(chan error, 32),
+		Poll:             make(chan struct{}),
+		Stop:             make(chan struct{}),
+	}
+
+	// start processing tasks
+	go processTasks()
+
+	// start the polling heartbeat
+	slog.Info(fmt.Sprintf("Task statuses are updated every %d ms",
+		config.Service.PollInterval))
+	pollInterval := time.Duration(config.Service.PollInterval) * time.Millisecond
+	go heartbeat(pollInterval, taskChannels.Poll)
+
+	// okay, we're running now
+	running = true
+
+	return nil
+}
+
+// Stops processing tasks. Adding new tasks and requesting task statuses are
+// disallowed in a stopped state.
+func Stop() error {
+	var err error
+	if running {
+		taskChannels.Stop <- struct{}{}
+		err = <-taskChannels.Error
+		running = false
+	} else {
+		err = NotRunningError{}
+	}
+	return err
+}
+
+// Returns true if tasks are currently being processed, false if not.
+func Running() bool {
+	return running
+}
+
 // this type holds a specification used to create a valid transfer task
 type Specification struct {
 	// a Markdown description of the transfer task
@@ -85,6 +171,75 @@ type Specification struct {
 	// information about the user requesting the task
 	UserInfo auth.UserInfo
 }
+
+// Creates a new transfer task associated with the user with the specified Orcid
+// ID to the manager's set, returning a UUID for the task. The task is defined
+// by specifying the names of the source and destination databases and a set of
+// file IDs associated with the source.
+func Create(spec Specification) (uuid.UUID, error) {
+	var taskId uuid.UUID
+
+	// verify that we can fetch the task's source and destination databases
+	// without incident
+	_, err := databases.NewDatabase(spec.UserInfo.Orcid, spec.Source)
+	if err != nil {
+		return taskId, err
+	}
+	_, err = databases.NewDatabase(spec.UserInfo.Orcid, spec.Destination)
+	if err != nil {
+		return taskId, err
+	}
+
+	// create a new task and send it along for processing
+	taskChannels.CreateTask <- TransferTask{
+		UserInfo:     spec.UserInfo,
+		Source:       spec.Source,
+		Destination:  spec.Destination,
+		FileIds:      spec.FileIds,
+		Description:  spec.Description,
+		Instructions: spec.Instructions,
+	}
+	select {
+	case taskId = <-taskChannels.ReturnTaskId:
+	case err = <-taskChannels.Error:
+	}
+	return taskId, err
+}
+
+// Given a task UUID, returns its transfer status (or a non-nil error
+// indicating any issues encountered).
+func Status(taskId uuid.UUID) (TransferStatus, error) {
+	var status TransferStatus
+	var err error
+	taskChannels.GetTaskStatus <- taskId
+	select {
+	case status = <-taskChannels.ReturnTaskStatus:
+	case err = <-taskChannels.Error:
+	}
+	return status, err
+}
+
+// Requests that the task with the given UUID be canceled. Clients should check
+// the status of the task separately.
+func Cancel(taskId uuid.UUID) error {
+	var err error
+	taskChannels.CancelTask <- taskId
+	select { // default block provides non-blocking error check
+	case err = <-taskChannels.Error:
+	default:
+	}
+	return err
+}
+
+//-----------
+// Internals
+//-----------
+
+// global variables for managing tasks
+var firstCall = true            // indicates first call to Start()
+var running bool                // true if tasks are processing, false if not
+var taskChannels channelsType   // channels used for processing tasks
+var stopHeartbeat chan struct{} // send a pulse to this channel to halt polling
 
 // loads a map of task IDs to tasks from a previously saved file if available,
 // or creates an empty map if no such file is available or valid
@@ -304,155 +459,4 @@ func validateDirectory(dirType, dir string) error {
 		}
 	}
 	return nil
-}
-
-// global variables for managing tasks
-var firstCall = true            // indicates first call to Start()
-var running bool                // true if tasks are processing, false if not
-var taskChannels channelsType   // channels used for processing tasks
-var stopHeartbeat chan struct{} // send a pulse to this channel to halt polling
-
-// starts processing tasks according to the given configuration, returning an
-// informative error if anything prevents this
-func Start() error {
-	if running {
-		return AlreadyRunningError{}
-	}
-
-	// if this is the first call to Start(), register our built-in endpoint
-	// and database providers
-	if firstCall {
-		endpoints.RegisterEndpointProvider("globus", globus.NewEndpoint)
-		endpoints.RegisterEndpointProvider("local", local.NewEndpoint)
-		if _, found := config.Databases["jdp"]; found {
-			databases.RegisterDatabase("jdp", jdp.NewDatabase)
-		}
-		if _, found := config.Databases["kbase"]; found {
-			databases.RegisterDatabase("kbase", kbase.NewDatabase)
-		}
-		if _, found := config.Databases["nmdc"]; found {
-			databases.RegisterDatabase("nmdc", nmdc.NewDatabase)
-		}
-		firstCall = false
-	}
-
-	// do the necessary directories exist, and are they writable/readable?
-	err := validateDirectory("data", config.Service.DataDirectory)
-	if err != nil {
-		return err
-	}
-	err = validateDirectory("manifest", config.Service.ManifestDirectory)
-	if err != nil {
-		return err
-	}
-
-	// can we access the local endpoint?
-	_, err = endpoints.NewEndpoint(config.Service.Endpoint)
-	if err != nil {
-		return err
-	}
-
-	// allocate channels
-	taskChannels = channelsType{
-		CreateTask:       make(chan TransferTask, 32),
-		CancelTask:       make(chan uuid.UUID, 32),
-		GetTaskStatus:    make(chan uuid.UUID, 32),
-		ReturnTaskId:     make(chan uuid.UUID, 32),
-		ReturnTaskStatus: make(chan TransferStatus, 32),
-		Error:            make(chan error, 32),
-		Poll:             make(chan struct{}),
-		Stop:             make(chan struct{}),
-	}
-
-	// start processing tasks
-	go processTasks()
-
-	// start the polling heartbeat
-	slog.Info(fmt.Sprintf("Task statuses are updated every %d ms",
-		config.Service.PollInterval))
-	pollInterval := time.Duration(config.Service.PollInterval) * time.Millisecond
-	go heartbeat(pollInterval, taskChannels.Poll)
-
-	// okay, we're running now
-	running = true
-
-	return nil
-}
-
-// Stops processing tasks. Adding new tasks and requesting task statuses are
-// disallowed in a stopped state.
-func Stop() error {
-	var err error
-	if running {
-		taskChannels.Stop <- struct{}{}
-		err = <-taskChannels.Error
-		running = false
-	} else {
-		err = NotRunningError{}
-	}
-	return err
-}
-
-// Returns true if tasks are currently being processed, false if not.
-func Running() bool {
-	return running
-}
-
-// Creates a new transfer task associated with the user with the specified Orcid
-// ID to the manager's set, returning a UUID for the task. The task is defined
-// by specifying the names of the source and destination databases and a set of
-// file IDs associated with the source.
-func Create(spec Specification) (uuid.UUID, error) {
-	var taskId uuid.UUID
-
-	// verify that we can fetch the task's source and destination databases
-	// without incident
-	_, err := databases.NewDatabase(spec.UserInfo.Orcid, spec.Source)
-	if err != nil {
-		return taskId, err
-	}
-	_, err = databases.NewDatabase(spec.UserInfo.Orcid, spec.Destination)
-	if err != nil {
-		return taskId, err
-	}
-
-	// create a new task and send it along for processing
-	taskChannels.CreateTask <- TransferTask{
-		UserInfo:     spec.UserInfo,
-		Source:       spec.Source,
-		Destination:  spec.Destination,
-		FileIds:      spec.FileIds,
-		Description:  spec.Description,
-		Instructions: spec.Instructions,
-	}
-	select {
-	case taskId = <-taskChannels.ReturnTaskId:
-	case err = <-taskChannels.Error:
-	}
-	return taskId, err
-}
-
-// Given a task UUID, returns its transfer status (or a non-nil error
-// indicating any issues encountered).
-func Status(taskId uuid.UUID) (TransferStatus, error) {
-	var status TransferStatus
-	var err error
-	taskChannels.GetTaskStatus <- taskId
-	select {
-	case status = <-taskChannels.ReturnTaskStatus:
-	case err = <-taskChannels.Error:
-	}
-	return status, err
-}
-
-// Requests that the task with the given UUID be canceled. Clients should check
-// the status of the task separately.
-func Cancel(taskId uuid.UUID) error {
-	var err error
-	taskChannels.CancelTask <- taskId
-	select { // default block provides non-blocking error check
-	case err = <-taskChannels.Error:
-	default:
-	}
-	return err
 }

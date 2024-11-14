@@ -39,83 +39,22 @@ import (
 	"github.com/kbase/dts/dtstest"
 )
 
-// temporary testing directory
-var TESTING_DIR string
-
-// a directory in which the task manager can read/write files
-var dataDirectory string
-
-// endpoint testing options
-var endpointOptions = dtstest.EndpointOptions{
-	StagingDuration:  time.Duration(150) * time.Millisecond,
-	TransferDuration: time.Duration(500) * time.Millisecond,
+// runs all tests serially
+func TestRunner(t *testing.T) {
+	tester := SerialTests{Test: t}
+	tester.TestStartAndStop()
+	tester.TestCreateTask()
+	tester.TestCancelTask()
+	tester.TestStopAndRestart()
 }
 
-// a pause to give the task manager a bit of time
-var pause time.Duration = time.Duration(25) * time.Millisecond
-
-// configuration
-const tasksConfig string = `
-service:
-  port: 8080
-  max_connections: 100
-  poll_interval: 50  # milliseconds
-  data_dir: TESTING_DIR/data
-  manifest_dir: TESTING_DIR/manifests
-  delete_after: 2    # seconds
-  endpoint: local-endpoint
-databases:
-  test-source:
-    name: Source Test Database
-    organization: The Source Company
-    endpoint: source-endpoint
-  test-destination:
-    name: Destination Test Database
-    organization: Fabulous Destinations, Inc.
-    endpoint: destination-endpoint
-endpoints:
-  local-endpoint:
-    name: Local endpoint
-    id: 8816ec2d-4a48-4ded-b68a-5ab46a4417b6
-    provider: test
-  source-endpoint:
-    name: Endpoint 1
-    id: 26d61236-39f6-4742-a374-8ec709347f2f
-    provider: test
-    root: SOURCE_ROOT
-  destination-endpoint:
-    name: Endpoint 2
-    id: f1865b86-2c64-4b8b-99f3-5aaa945ec3d9
-    provider: test
-    root: DESTINATION_ROOT
-`
-
-// file test metadata
-var testResources map[string]DataResource = map[string]DataResource{
-	"file1": DataResource{
-		Id:     "file1",
-		Name:   "file1.dat",
-		Path:   "dir1/file1.dat",
-		Format: "text",
-		Bytes:  1024,
-		Hash:   "d91f97974d06563cab48d4d43a17e08a",
-	},
-	"file2": DataResource{
-		Id:     "file2",
-		Name:   "file2.dat",
-		Path:   "dir2/file2.dat",
-		Format: "text",
-		Bytes:  2048,
-		Hash:   "d91f9e974d0e563cab48d4d43a17e08a",
-	},
-	"file3": DataResource{
-		Id:     "file3",
-		Name:   "file3.dat",
-		Path:   "dir3/file3.dat",
-		Format: "text",
-		Bytes:  4096,
-		Hash:   "e91f9e974d0e563cab48d4d43a17e08e",
-	},
+// This runs setup, runs all tests, and does breakdown.
+func TestMain(m *testing.M) {
+	var status int
+	setup()
+	status = m.Run()
+	breakdown()
+	os.Exit(status)
 }
 
 // this function gets called at the begіnning of a test session
@@ -315,20 +254,81 @@ func (t *SerialTests) TestStopAndRestart() {
 	assert.Nil(err)
 }
 
-// runs all the serial tests... serially!
-func TestRunner(t *testing.T) {
-	tester := SerialTests{Test: t}
-	tester.TestStartAndStop()
-	tester.TestCreateTask()
-	tester.TestCancelTask()
-	tester.TestStopAndRestart()
+// temporary testing directory
+var TESTING_DIR string
+
+// a directory in which the task manager can read/write files
+var dataDirectory string
+
+// endpoint testing options
+var endpointOptions = dtstest.EndpointOptions{
+	StagingDuration:  time.Duration(150) * time.Millisecond,
+	TransferDuration: time.Duration(500) * time.Millisecond,
 }
 
-// This runs setup, runs all tests, and does breakdown.
-func TestMain(m *testing.M) {
-	var status int
-	setup()
-	status = m.Run()
-	breakdown()
-	os.Exit(status)
+// a pause to give the task manager a bit of time
+var pause time.Duration = time.Duration(25) * time.Millisecond
+
+// configuration
+const tasksConfig string = `
+service:
+  port: 8080
+  max_connections: 100
+  poll_interval: 50  # milliseconds
+  data_dir: TESTING_DIR/data
+  manifest_dir: TESTING_DIR/manifests
+  delete_after: 2    # seconds
+  endpoint: local-endpoint
+databases:
+  test-source:
+    name: Source Test Database
+    organization: The Source Company
+    endpoint: source-endpoint
+  test-destination:
+    name: Destination Test Database
+    organization: Fabulous Destinations, Inc.
+    endpoint: destination-endpoint
+endpoints:
+  local-endpoint:
+    name: Local endpoint
+    id: 8816ec2d-4a48-4ded-b68a-5ab46a4417b6
+    provider: test
+  source-endpoint:
+    name: Endpoint 1
+    id: 26d61236-39f6-4742-a374-8ec709347f2f
+    provider: test
+    root: SOURCE_ROOT
+  destination-endpoint:
+    name: Endpoint 2
+    id: f1865b86-2c64-4b8b-99f3-5aaa945ec3d9
+    provider: test
+    root: DESTINATION_ROOT
+`
+
+// file test metadata
+var testResources map[string]DataResource = map[string]DataResource{
+	"file1": {
+		Id:     "file1",
+		Name:   "file1.dat",
+		Path:   "dir1/file1.dat",
+		Format: "text",
+		Bytes:  1024,
+		Hash:   "d91f97974d06563cab48d4d43a17e08a",
+	},
+	"file2": {
+		Id:     "file2",
+		Name:   "file2.dat",
+		Path:   "dir2/file2.dat",
+		Format: "text",
+		Bytes:  2048,
+		Hash:   "d91f9e974d0e563cab48d4d43a17e08a",
+	},
+	"file3": {
+		Id:     "file3",
+		Name:   "file3.dat",
+		Path:   "dir3/file3.dat",
+		Format: "text",
+		Bytes:  4096,
+		Hash:   "e91f9e974d0e563cab48d4d43a17e08e",
+	},
 }

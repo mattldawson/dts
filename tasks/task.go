@@ -160,6 +160,9 @@ func (task *TransferTask) start() error {
 			err = subErr
 		}
 	}
+
+	// provisionally, we set the tasks's status to "staging"
+	task.Status.Code = TransferStatusStaging
 	return err
 }
 
@@ -214,6 +217,7 @@ func (task *TransferTask) Update() error {
 			task.Cancel()
 		} else {
 			// accumulate statistics
+			task.Status.Code = TransferStatusActive
 			task.Status.NumFiles = 0
 			task.Status.NumFilesTransferred = 0
 			task.Status.NumFilesSkipped = 0
@@ -229,9 +233,7 @@ func (task *TransferTask) Update() error {
 		}
 
 		if subtaskStaging && task.Status.NumFiles == 0 {
-			task.Status = TransferStatus{
-				Code: TransferStatusStaging,
-			}
+			task.Status.Code = TransferStatusStaging
 		} else if allTransfersSucceeded { // write a manifest
 			localEndpoint, err := endpoints.NewEndpoint(config.Service.Endpoint)
 			if err != nil {
@@ -282,9 +284,7 @@ func (task *TransferTask) Update() error {
 				return fmt.Errorf("transferring manifest file: %s", err.Error())
 			}
 
-			task.Status = TransferStatus{
-				Code: TransferStatusFinalizing,
-			}
+			task.Status.Code = TransferStatusFinalizing
 			task.Manifest.Valid = true
 		}
 	}

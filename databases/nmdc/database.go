@@ -201,7 +201,10 @@ func (db Database) Resources(fileIds []string) ([]frictionless.DataResource, err
 			return nil, err
 		}
 		var dataObject DataObject
-		json.Unmarshal(body, &dataObject)
+		err = json.Unmarshal(body, &dataObject)
+		if err != nil {
+			return nil, err
+		}
 		resources[i], err = db.dataResourceFromDataObject(dataObject)
 		if err != nil {
 			return nil, err
@@ -328,7 +331,10 @@ func getAccessToken(credential credential) (authorization, error) {
 			Detail string `json:"detail"`
 		}
 		var errResponse errorResponse
-		json.Unmarshal(data, &errResponse)
+		err = json.Unmarshal(data, &errResponse)
+		if err != nil {
+			return auth, err
+		}
 		return auth, &databases.UnauthorizedError{
 			Database: "nmdc",
 			User:     credential.User,
@@ -495,8 +501,9 @@ func (db Database) studyIdsForDataObjectIds(dataObjectIds []string) (map[string]
 	}
 	type PipelineOperation struct {
 		// this is a bit cheesy but is simple and works
-		Match  MatchOperation  `json:"$match,omitempty"`
-		Lookup LookupOperation `json:"$lookup,omitempty"`
+		// we use struct pointers here so omitempty works properly
+		Match  *MatchOperation  `json:"$match,omitempty"`
+		Lookup *LookupOperation `json:"$lookup,omitempty"`
 	}
 	type CursorProperty struct {
 		BatchSize int `json:"batchsize,omitempty"`
@@ -511,13 +518,13 @@ func (db Database) studyIdsForDataObjectIds(dataObjectIds []string) (map[string]
 		Pipeline: []PipelineOperation{
 			// match against our set of data object IDs
 			{
-				Match: MatchOperation{
+				Match: &MatchOperation{
 					In: dataObjectIds,
 				},
 			},
 			// look up the data object's workflow execution set
 			{
-				Lookup: LookupOperation{
+				Lookup: &LookupOperation{
 					From:         "data_generation_set",
 					LocalField:   "was_generated_by",
 					ForeignField: "id",
@@ -526,7 +533,7 @@ func (db Database) studyIdsForDataObjectIds(dataObjectIds []string) (map[string]
 			},
 			// look up the study for the data generation set
 			{
-				Lookup: LookupOperation{
+				Lookup: &LookupOperation{
 					From:         "study_set",
 					LocalField:   "associated_studies",
 					ForeignField: "id",
@@ -548,15 +555,23 @@ func (db Database) studyIdsForDataObjectIds(dataObjectIds []string) (map[string]
 		DataObjectId string `json:"id"`
 		StudyId      string `json:"study_id"`
 	}
-	var pairs []DataObjectStudyPair
-	err = json.Unmarshal(body, &pairs)
+	type QueryResults struct {
+		Ok     int `json:"ok"`
+		Cursor struct {
+			FirstBatch []DataObjectStudyPair `json:"firstBatch"`
+			Id         int                   `json:"id"`
+			NS         string                `json:"ns"`
+		}
+	}
+	var results QueryResults
+	err = json.Unmarshal(body, &results)
 	if err != nil {
 		return nil, err
 	}
 
 	// map each data object ID to the corresponding study ID
 	studyIdForDataObjectId := make(map[string]string)
-	for _, pair := range pairs {
+	for _, pair := range results.Cursor.FirstBatch {
 		studyIdForDataObjectId[pair.DataObjectId] = pair.StudyId
 	}
 	return studyIdForDataObjectId, err

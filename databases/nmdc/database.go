@@ -413,8 +413,10 @@ func (db Database) post(resource string, body io.Reader) ([]byte, error) {
 			Database: "nmdc",
 		}
 	default:
-		return nil, fmt.Errorf("An error occurred with the NMDC database (%d)",
-			resp.StatusCode)
+		defer resp.Body.Close()
+		data, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("An error occurred mapping NMDC data objects to studies: %s",
+			string(data))
 	}
 }
 
@@ -502,7 +504,7 @@ func (db Database) studyIdsForDataObjectIds(dataObjectIds []string) (map[string]
 	type AggregateRequest struct {
 		Aggregate string              `json:"aggregate"`
 		Pipeline  []PipelineOperation `json:"pipeline"`
-		Cursor    CursorProperty      `json:"cursor"`
+		Cursor    CursorProperty      `json:"cursor,omitempty"`
 	}
 	data, err := json.Marshal(AggregateRequest{
 		Aggregate: "data_object_set",

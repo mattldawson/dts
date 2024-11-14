@@ -267,8 +267,7 @@ type credential struct {
 // fetches an access token / type from NMDC using a credential
 func getAccessToken(credential credential) (authorization, error) {
 	var auth authorization
-	//resource := baseApiURL + "token/"
-	resource := "https://api.microbiomedata.org/token"
+	resource := baseApiURL + "token/"
 
 	// the token request must be URL-encoded
 	data := url.Values{}

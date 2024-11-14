@@ -59,7 +59,7 @@ databases:
     name: JGI Data Portal
     organization: Joint Genome Institute
     url: files.jgi.doe.gov
-    endpoint: globus-jdp # local file transfer endpoint
+    endpoint: my-globus-endpoint
 `
 
 // tests whether config.Init reports an error for an invalid max number of

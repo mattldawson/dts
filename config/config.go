@@ -176,7 +176,7 @@ func validateDatabases(databases map[string]databaseConfig) error {
 			// does the endpoint exist in our configuration?
 			if endpointName, found := Endpoints[db.Endpoint]; !found {
 				return InvalidDatabaseConfigError{
-					Database: "nmdc",
+					Database: name,
 					Message:  fmt.Sprintf("Invalid endpoint for database %s: %s", name, endpointName),
 				}
 			}
@@ -185,7 +185,7 @@ func validateDatabases(databases map[string]databaseConfig) error {
 			for functionalName, endpointName := range db.Endpoints {
 				if _, found := Endpoints[endpointName]; !found {
 					return InvalidDatabaseConfigError{
-						Database: "nmdc",
+						Database: name,
 						Message:  fmt.Sprintf("Invalid %s endpoint for database %s: %s", functionalName, name, endpointName),
 					}
 				}

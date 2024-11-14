@@ -46,11 +46,15 @@ func (e AlreadyRegisteredError) Error() string {
 
 // indicates that a user could not be authorized to access a database with their ORCID
 type UnauthorizedError struct {
-	Database, Message string
+	Database, Message, User string
 }
 
 func (e UnauthorizedError) Error() string {
-	return fmt.Sprintf("Unable to authorize user for database '%s': %s", e.Database, e.Message)
+	if e.User != "" {
+		return fmt.Sprintf("Unable to authorize user '%s' for database '%s': %s", e.User, e.Database, e.Message)
+	} else {
+		return fmt.Sprintf("Unable to authorize user for database '%s': %s", e.Database, e.Message)
+	}
 }
 
 // indicates that a database exists but is currently unavailable

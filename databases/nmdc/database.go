@@ -137,7 +137,9 @@ func (db Database) SpecificSearchParameters() map[string]interface{} {
 }
 
 func (db *Database) Search(params databases.SearchParameters) (databases.SearchResults, error) {
-	db.renewAccessTokenIfExpired()
+	if err := db.renewAccessTokenIfExpired(); err != nil {
+		return databases.SearchResults{}, err
+	}
 
 	p := url.Values{}
 
@@ -167,7 +169,9 @@ func (db *Database) Search(params databases.SearchParameters) (databases.SearchR
 }
 
 func (db Database) Resources(fileIds []string) ([]frictionless.DataResource, error) {
-	db.renewAccessTokenIfExpired()
+	if err := db.renewAccessTokenIfExpired(); err != nil {
+		return nil, err
+	}
 
 	// we use the /data_objects/{data_object_id} GET endpoint to retrieve metadata
 	// for individual files
@@ -263,33 +267,22 @@ type credential struct {
 // fetches an access token / type from NMDC using a credential
 func getAccessToken(credential credential) (authorization, error) {
 	var auth authorization
-	resource := baseApiURL + "token"
+	//resource := baseApiURL + "token/"
+	resource := "https://api.microbiomedata.org/token"
 
-	type accessTokenRequest struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
-	}
-	data, err := json.Marshal(accessTokenRequest{
-		Username: credential.User,
-		Password: credential.Password,
-	})
-	request, err := http.NewRequest(http.MethodPost, resource, bytes.NewReader(data))
-	request.Header.Set("Content-Type", "application/json")
+	// the token request must be URL-encoded
+	data := url.Values{}
+	data.Set("grant_type", "password")
+	data.Set("username", credential.User)
+	data.Set("password", credential.Password)
+	request, err := http.NewRequest(http.MethodPost, resource, strings.NewReader(data.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.Header.Set("Accept", "application/json")
 
 	var client http.Client
 	response, err := client.Do(request)
 	if err != nil {
 		return auth, err
-	}
-
-	type accessTokenResponse struct {
-		Token   string `json:"access_token"`
-		Type    string `json:"token_type"`
-		Expires struct {
-			Days    int `json:"days"`
-			Hours   int `json:"hours"`
-			Minutes int `json:"minutes"`
-		} `json:"expires"`
 	}
 
 	switch response.StatusCode {
@@ -299,6 +292,15 @@ func getAccessToken(credential credential) (authorization, error) {
 		data, err = io.ReadAll(response.Body)
 		if err != nil {
 			return auth, err
+		}
+		type accessTokenResponse struct {
+			Token   string `json:"access_token"`
+			Type    string `json:"token_type"`
+			Expires struct {
+				Days    int `json:"days"`
+				Hours   int `json:"hours"`
+				Minutes int `json:"minutes"`
+			} `json:"expires"`
 		}
 		var tokenResponse accessTokenResponse
 		err = json.Unmarshal(data, &tokenResponse)
@@ -320,10 +322,18 @@ func getAccessToken(credential credential) (authorization, error) {
 			Database: "nmdc",
 		}
 	default:
+		defer response.Body.Close()
+		var data []byte
+		data, _ = io.ReadAll(response.Body)
+		type errorResponse struct {
+			Detail string `json:"detail"`
+		}
+		var errResponse errorResponse
+		json.Unmarshal(data, &errResponse)
 		return auth, &databases.UnauthorizedError{
 			Database: "nmdc",
-			Message: fmt.Sprintf("An error occurred obtaining an access token for the NMDC database (%d)",
-				response.StatusCode),
+			User:     credential.User,
+			Message:  errResponse.Detail,
 		}
 	}
 }

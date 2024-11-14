@@ -68,7 +68,7 @@ Did you call config.Init()?`)
 	}
 
 	// register database fixtures
-	for databaseName, _ := range config.Databases {
+	for databaseName := range config.Databases {
 		if strings.Contains(databaseName, "test") {
 			RegisterDatabase(databaseName, resources)
 		}
@@ -147,7 +147,7 @@ func (ep *Endpoint) FilesStaged(files []frictionless.DataResource) (bool, error)
 
 func (ep *Endpoint) Transfers() ([]uuid.UUID, error) {
 	xfers := make([]uuid.UUID, 0)
-	for xferId, _ := range ep.Xfers {
+	for xferId := range ep.Xfers {
 		xfers = append(xfers, xferId)
 	}
 	return xfers, nil

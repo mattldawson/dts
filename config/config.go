@@ -174,10 +174,10 @@ func validateDatabases(databases map[string]databaseConfig) error {
 			}
 		} else if db.Endpoint != "" {
 			// does the endpoint exist in our configuration?
-			if endpointName, found := Endpoints[db.Endpoint]; !found {
+			if _, found := Endpoints[db.Endpoint]; !found {
 				return InvalidDatabaseConfigError{
 					Database: name,
-					Message:  fmt.Sprintf("Invalid endpoint for database %s: %s", name, endpointName),
+					Message:  fmt.Sprintf("Invalid endpoint for database %s: %s", name, db.Endpoint),
 				}
 			}
 		} else {

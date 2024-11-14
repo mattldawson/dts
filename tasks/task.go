@@ -79,13 +79,26 @@ func (task *TransferTask) start() error {
 		return err
 	}
 
-	// check that each resource is associated with an endpoint
-	for _, resource := range resources {
-		if resource.Endpoint == "" {
-			return databases.ResourceEndpointNotFoundError{
-				Database:   task.Source,
-				ResourceId: resource.Id,
+	// if the database stores its files in more than one location, check that each
+	// resource is associated with a valid endpoint
+	if len(config.Databases[task.Source].Endpoints) > 1 {
+		for _, resource := range resources {
+			if resource.Endpoint == "" {
+				return databases.ResourceEndpointNotFoundError{
+					Database:   task.Source,
+					ResourceId: resource.Id,
+				}
+			} else if _, found := config.Endpoints[resource.Endpoint]; !found {
+				return databases.InvalidResourceEndpointError{
+					Database:   task.Source,
+					ResourceId: resource.Id,
+					Endpoint:   resource.Endpoint,
+				}
 			}
+		}
+	} else { // otherwise, just assign the database's endpoint to the resources
+		for i := range resources {
+			resources[i].Endpoint = config.Databases[task.Source].Endpoint
 		}
 	}
 

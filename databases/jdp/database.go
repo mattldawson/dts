@@ -648,10 +648,6 @@ func (db *Database) Search(params databases.SearchParameters) (databases.SearchR
 }
 
 func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, error) {
-	// the JDP only uses a single Globus endpoint, so we can associate all
-	// resources with this endpoint
-	resourceEndpoint := config.Databases["jdp"].Endpoint
-
 	// strip the "JDP:" prefix from our files and create a mapping from IDs to
 	// their original order so we can hand back metadata accordingly
 	strippedFileIds := make([]string, len(fileIds))
@@ -739,9 +735,6 @@ func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, er
 		// NOTE: solution
 		resources[index].Format = formatFromFileName(resources[index].Path)
 		resources[index].MediaType = mimeTypeFromFormatAndTypes(resources[index].Format, []string{})
-
-		// set the endpoint for the resource
-		resources[index].Endpoint = resourceEndpoint
 	}
 	return resources, err
 }

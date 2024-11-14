@@ -31,7 +31,7 @@ type NotFoundError struct {
 }
 
 func (e NotFoundError) Error() string {
-	return fmt.Sprintf("The database %s was not found.", e.Database)
+	return fmt.Sprintf("The database '%s' was not found", e.Database)
 }
 
 // indicates that a database is already registered and an attempt has been made
@@ -41,7 +41,7 @@ type AlreadyRegisteredError struct {
 }
 
 func (e AlreadyRegisteredError) Error() string {
-	return fmt.Sprintf("Cannot register database %s (already registered).", e.Database)
+	return fmt.Sprintf("Cannot register database '%s': already registered", e.Database)
 }
 
 // indicates that a user could not be authorized to access a database with their ORCID
@@ -50,7 +50,7 @@ type UnauthorizedError struct {
 }
 
 func (e UnauthorizedError) Error() string {
-	return fmt.Sprintf("Unable to authorize user for database %s: %s", e.Database, e.Message)
+	return fmt.Sprintf("Unable to authorize user for database '%s': %s", e.Database, e.Message)
 }
 
 // indicates that a database exists but is currently unavailable
@@ -59,7 +59,7 @@ type UnavailableError struct {
 }
 
 func (e UnavailableError) Error() string {
-	return fmt.Sprintf("Cannot reach database %s (unavailable).", e.Database)
+	return fmt.Sprintf("Cannot reach database '%s': unavailable", e.Database)
 }
 
 // This error type is returned when an invalid database-specific search
@@ -69,7 +69,7 @@ type InvalidSearchParameter struct {
 }
 
 func (e InvalidSearchParameter) Error() string {
-	return fmt.Sprintf("Invalid search parameter for database %s: %s", e.Database, e.Message)
+	return fmt.Sprintf("Invalid search parameter for database '%s': %s", e.Database, e.Message)
 }
 
 // this error type is returned when a database's endpoint configuration is invalid
@@ -78,7 +78,18 @@ type InvalidEndpointsError struct {
 }
 
 func (e InvalidEndpointsError) Error() string {
-	return fmt.Sprintf("Invalid endpoint configuration for database %s: %s", e.Database, e.Message)
+	return fmt.Sprintf("Invalid endpoint configuration for database '%s': %s", e.Database, e.Message)
+}
+
+// this error type is returned when an endpoint associated with a resource is
+// invalid
+type InvalidResourceEndpointError struct {
+	Database, ResourceId, Endpoint string
+}
+
+func (e InvalidResourceEndpointError) Error() string {
+	return fmt.Sprintf("Invalid endpoint specified for resource '%s' in database '%s': %s",
+		e.ResourceId, e.Database, e.Endpoint)
 }
 
 // this error type is returned when a resource is requested for which the requester
@@ -88,7 +99,7 @@ type PermissionDeniedError struct {
 }
 
 func (e PermissionDeniedError) Error() string {
-	return fmt.Sprintf("Can't access resource %s in database %s: permission denied",
+	return fmt.Sprintf("Can't access resource '%s' in database '%s': permission denied",
 		e.ResourceId, e.Database)
 }
 
@@ -98,7 +109,7 @@ type ResourceNotFoundError struct {
 }
 
 func (e ResourceNotFoundError) Error() string {
-	return fmt.Sprintf("Can't access file %s in database %s: not found", e.ResourceId, e.Database)
+	return fmt.Sprintf("Can't access file '%s' in database '%s': not found", e.ResourceId, e.Database)
 }
 
 // this error type is returned when an endpoint cannot be found for a file ID
@@ -107,5 +118,5 @@ type ResourceEndpointNotFoundError struct {
 }
 
 func (e ResourceEndpointNotFoundError) Error() string {
-	return fmt.Sprintf("Can't determine endpoint for resource %s in database %s", e.ResourceId, e.Database)
+	return fmt.Sprintf("Can't determine endpoint for resource '%s' in database '%s'", e.ResourceId, e.Database)
 }

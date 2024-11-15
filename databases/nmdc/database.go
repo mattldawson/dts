@@ -82,13 +82,13 @@ func NewDatabase(orcid string) (databases.Database, error) {
 		}
 	}
 
-	// check for "nersc" and "emsl" Globus endpoints
 	if config.Databases["nmdc"].Endpoint != "" {
 		return nil, databases.InvalidEndpointsError{
 			Database: "nmdc",
 			Message:  "NMDC requires 'nersc' and 'emsl' endpoints to be specified",
 		}
 	}
+	// check for "nersc" and "emsl" Globus endpoints
 	for _, functionalName := range []string{"nersc", "emsl"} {
 		// was this functional name assigned to an endpoint?
 		if _, found := config.Databases["nmdc"].Endpoints[functionalName]; !found {

@@ -207,10 +207,10 @@ func (subtask *TransferSubtask) checkCancellation() error {
 		}
 		subtask.TransferStatus, err = endpoint.Status(subtask.Transfer.UUID)
 		return err
-	} else {
-		// at any other point in the lifecycle, terminate the task
-		subtask.TransferStatus.Code = TransferStatusFailed
-		subtask.TransferStatus.Message = "Task canceled at user request"
 	}
+
+	// at any other point in the lifecycle, terminate the task
+	subtask.TransferStatus.Code = TransferStatusFailed
+	subtask.TransferStatus.Message = "Task canceled at user request"
 	return nil
 }

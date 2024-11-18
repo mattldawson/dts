@@ -156,16 +156,15 @@ func (db *Database) Search(params databases.SearchParameters) (databases.SearchR
 		}
 	}
 
-	// dispatch the search to the proper endpoint, depending on whether we're
-	// looking for a study or individual data objects
+	// if we are given a study ID, fetch data objects associated with it
 	if p.Has("study_id") {
 		return db.dataObjectsForStudy(p.Get("study_id"))
-	} else {
-		// simply call the data_objects/ endpoint with the given query string
-		//p.Add("search", params.Query) // FIXME: not yet supported by NMDC!
-		p.Add("filter", params.Query)
-		return db.dataObjects(p)
 	}
+
+	// otherwise, simply call the data_objects/ endpoint with the given query string
+	//p.Add("search", params.Query) // FIXME: not yet supported by NMDC!
+	p.Add("filter", params.Query)
+	return db.dataObjects(p)
 }
 
 func (db Database) Resources(fileIds []string) ([]frictionless.DataResource, error) {

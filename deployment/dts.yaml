@@ -66,7 +66,7 @@ endpoints:
       client_id: ${GLOBUS_CLIENT_ID}
       client_secret: ${GLOBUS_CLIENT_SECRET}
   globus-nmdc-emsl:
-    name: NMDC (EMSL)
+    name: NMDC Bulk Data Cache
     id: ${NMDC_EMSL_ENDPOINT_ID}
     provider: globus
     root: /

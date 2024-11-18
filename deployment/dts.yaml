@@ -61,7 +61,7 @@ endpoints:
     name: NMDC (NERSC)
     id: ${NMDC_NERSC_ENDPOINT_ID}
     provider: globus
-    root: /global/cfs/cdirs/m3408/results
+    root: /
     auth:
       client_id: ${GLOBUS_CLIENT_ID}
       client_secret: ${GLOBUS_CLIENT_SECRET}
@@ -69,7 +69,7 @@ endpoints:
     name: NMDC (EMSL)
     id: ${NMDC_EMSL_ENDPOINT_ID}
     provider: globus
-    root: / # FIXME: not likely!
+    root: /
     auth:
       client_id: ${GLOBUS_CLIENT_ID}
       client_secret: ${GLOBUS_CLIENT_SECRET}

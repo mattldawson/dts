@@ -305,9 +305,8 @@ func databaseError(err error) error {
 		default:
 			return huma.Error500InternalServerError(err.Error(), err)
 		}
-	} else {
-		return nil
 	}
+	return nil
 }
 
 // implements database search for both GET and POST requests

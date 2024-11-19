@@ -88,7 +88,8 @@ func (task *TransferTask) start() error {
 					Database:   task.Source,
 					ResourceId: resource.Id,
 				}
-			} else if _, found := config.Endpoints[resource.Endpoint]; !found {
+			}
+			if _, found := config.Endpoints[resource.Endpoint]; !found {
 				return databases.InvalidResourceEndpointError{
 					Database:   task.Source,
 					ResourceId: resource.Id,
@@ -197,11 +198,11 @@ func (task *TransferTask) Update() error {
 			if task.Subtasks[i].StagingStatus == databases.StagingStatusFailed {
 				subtaskFailed = true
 				failedSubtaskStatus.Code = TransferStatusUnknown
-				failedSubtaskStatus.Message = "task cancelled because of staging failure"
+				failedSubtaskStatus.Message = "task canceled because of staging failure"
 			} else if task.Subtasks[i].TransferStatus.Code == TransferStatusFailed {
 				subtaskFailed = true
 				failedSubtaskStatus.Code = TransferStatusFailed
-				failedSubtaskStatus.Message = "task cancelled because of transfer failure"
+				failedSubtaskStatus.Message = "task canceled because of transfer failure"
 			}
 			if task.Subtasks[i].TransferStatus.Code != TransferStatusSucceeded {
 				allTransfersSucceeded = false

@@ -212,6 +212,8 @@ func (db Database) Resources(fileIds []string) ([]frictionless.DataResource, err
 		// add credit metadata
 		studyId := studyIdForDataObjectId[resources[i].Id]
 		resources[i].Credit = creditForStudyId[studyId]
+		resources[i].Credit.ResourceType = "dataset"
+		resources[i].Credit.Identifier = resources[i].Id
 	}
 	return resources, nil
 }
@@ -486,11 +488,12 @@ func (db Database) studyIdsForDataObjectIds(dataObjectIds []string) (map[string]
 	// NOTE:
 	// NOTE: If we need to, we can break up our aggregate queries into smaller
 	// NOTE: chunks, since these queries are independent.
+	type MatchIdInSlice struct {
+		In []string `json:"$in,omitempty"`
+	}
 	type MatchOperation struct {
-		// matches a single record by ID
-		Id string `json:"id,omitempty"`
-		// matches a record whose ID is in the given list
-		In []string `json:"in,omitempty"`
+		// matches an ID with one of those in the given list
+		Id MatchIdInSlice `json:"id"`
 	}
 	type LookupOperation struct {
 		From         string `json:"from"`
@@ -518,25 +521,20 @@ func (db Database) studyIdsForDataObjectIds(dataObjectIds []string) (map[string]
 			// match against our set of data object IDs
 			{
 				Match: &MatchOperation{
-					In: dataObjectIds,
+					Id: MatchIdInSlice{
+						In: dataObjectIds,
+					},
 				},
 			},
 			// look up the data object's workflow execution set
+			// (the study IDs for the data generation set are in
+			//  the associated_studies field)
 			{
 				Lookup: &LookupOperation{
 					From:         "data_generation_set",
 					LocalField:   "was_generated_by",
 					ForeignField: "id",
-					As:           "data_generation_id",
-				},
-			},
-			// look up the study for the data generation set
-			{
-				Lookup: &LookupOperation{
-					From:         "study_set",
-					LocalField:   "associated_studies",
-					ForeignField: "id",
-					As:           "study_id",
+					As:           "data_generation_sets",
 				},
 			},
 		},
@@ -550,16 +548,20 @@ func (db Database) studyIdsForDataObjectIds(dataObjectIds []string) (map[string]
 	if err != nil {
 		return nil, err
 	}
-	type DataObjectStudyPair struct {
-		DataObjectId string `json:"id"`
-		StudyId      string `json:"study_id"`
+	type DataGenerationSet struct {
+		Id                string   `json:"id"`
+		AssociatedStudies []string `json:"associated_studies"`
+	}
+	type DataObjectAndDataGenerationSet struct {
+		DataObjectId       string              `json:"id"`
+		DataGenerationSets []DataGenerationSet `json:"data_generation_sets"`
 	}
 	type QueryResults struct {
 		Ok     int `json:"ok"`
 		Cursor struct {
-			FirstBatch []DataObjectStudyPair `json:"firstBatch"`
-			Id         int                   `json:"id"`
-			NS         string                `json:"ns"`
+			FirstBatch []DataObjectAndDataGenerationSet `json:"firstBatch"`
+			Id         int                              `json:"id"`
+			NS         string                           `json:"ns"`
 		}
 	}
 	var results QueryResults
@@ -570,8 +572,17 @@ func (db Database) studyIdsForDataObjectIds(dataObjectIds []string) (map[string]
 
 	// map each data object ID to the corresponding study ID
 	studyIdForDataObjectId := make(map[string]string)
-	for _, pair := range results.Cursor.FirstBatch {
-		studyIdForDataObjectId[pair.DataObjectId] = pair.StudyId
+	for _, record := range results.Cursor.FirstBatch {
+		// FIXME: for now, take the first study in the first data generation set
+		if len(record.DataGenerationSets) > 0 {
+			if len(record.DataGenerationSets[0].AssociatedStudies) > 0 {
+				studyIdForDataObjectId[record.DataObjectId] = record.DataGenerationSets[0].AssociatedStudies[0]
+			} else {
+				slog.Debug(fmt.Sprintf("No study is associated with the data object %s", record.DataObjectId))
+			}
+		} else {
+			slog.Debug(fmt.Sprintf("No data generation info was found for the data object %s", record.DataObjectId))
+		}
 	}
 	return studyIdForDataObjectId, err
 }

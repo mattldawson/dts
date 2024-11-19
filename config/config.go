@@ -150,7 +150,8 @@ func validateEndpoints(endpoints map[string]endpointConfig) error {
 				Endpoint: name,
 				Message:  "Invalid UUID",
 			}
-		} else if endpoint.Provider == "" { // no provider given
+		}
+		if endpoint.Provider == "" { // no provider given
 			return InvalidEndpointConfigError{
 				Endpoint: name,
 				Message:  "No provider specified",

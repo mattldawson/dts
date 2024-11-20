@@ -21,16 +21,33 @@
 
 package config
 
-// A database provides files for a file transfer (at its source or destination).
-type databaseConfig struct {
-	// the full name of the database
-	Name string `yaml:"name"`
-	// the name of the organization hosting the database
-	Organization string `yaml:"organization"`
-	// if set, the name of the single endpoint available to this database
-	// (only one of Endpoint and Endpoints may be set)
-	Endpoint string `yaml:"endpoint,omitempty"`
-	// if set, a set of endpoints assigned functional names, available to thi
-	// database (only one of Endpoint and Endpoints may be set)
-	Endpoints map[string]string `yaml:"endpoints,omitempty"`
+import (
+	"fmt"
+)
+
+// indicates that the service itself is not configured properly
+type InvalidServiceConfigError struct {
+	Message string
+}
+
+func (e InvalidServiceConfigError) Error() string {
+	return fmt.Sprintf("Invalid service configuration: %s", e.Message)
+}
+
+// indicates that an endpoint is not configured properly
+type InvalidEndpointConfigError struct {
+	Endpoint, Message string
+}
+
+func (e InvalidEndpointConfigError) Error() string {
+	return fmt.Sprintf("Endpoint %s is not properly configured: %s", e.Endpoint, e.Message)
+}
+
+// indicates that a database is not configured properly
+type InvalidDatabaseConfigError struct {
+	Database, Message string
+}
+
+func (e InvalidDatabaseConfigError) Error() string {
+	return fmt.Sprintf("Database %s is not properly configured: %s", e.Database, e.Message)
 }

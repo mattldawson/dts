@@ -19,18 +19,45 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package config
+package tasks
 
-// A database provides files for a file transfer (at its source or destination).
-type databaseConfig struct {
-	// the full name of the database
-	Name string `yaml:"name"`
-	// the name of the organization hosting the database
-	Organization string `yaml:"organization"`
-	// if set, the name of the single endpoint available to this database
-	// (only one of Endpoint and Endpoints may be set)
-	Endpoint string `yaml:"endpoint,omitempty"`
-	// if set, a set of endpoints assigned functional names, available to thi
-	// database (only one of Endpoint and Endpoints may be set)
-	Endpoints map[string]string `yaml:"endpoints,omitempty"`
+import (
+	"fmt"
+
+	"github.com/google/uuid"
+
+	"github.com/kbase/dts/config"
+)
+
+// indicates that a task is sought but not found
+type NotFoundError struct {
+	Id uuid.UUID
+}
+
+func (t NotFoundError) Error() string {
+	return fmt.Sprintf("The task %s was not found.", t.Id.String())
+}
+
+// indicates that Start() has been called when tasks are being processed
+type AlreadyRunningError struct{}
+
+func (t AlreadyRunningError) Error() string {
+	return fmt.Sprintf("Tasks are already running and cannot be started again.")
+}
+
+// indicates that Stop() has been called when tasks are not being processed
+type NotRunningError struct{}
+
+func (t NotRunningError) Error() string {
+	return fmt.Sprintf("Tasks are not currently being processed.")
+}
+
+// indicates that a payload has been requested that is too large
+type PayloadTooLargeError struct {
+	size float64 // size of the requested payload in gigabytes
+}
+
+func (e PayloadTooLargeError) Error() string {
+	return fmt.Sprintf("Requested payload is too large: %g GB (limit is %g GB).",
+		e.size, config.Service.MaxPayloadSize)
 }

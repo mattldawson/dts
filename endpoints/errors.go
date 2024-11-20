@@ -19,18 +19,27 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package config
+package endpoints
 
-// A database provides files for a file transfer (at its source or destination).
-type databaseConfig struct {
-	// the full name of the database
-	Name string `yaml:"name"`
-	// the name of the organization hosting the database
-	Organization string `yaml:"organization"`
-	// if set, the name of the single endpoint available to this database
-	// (only one of Endpoint and Endpoints may be set)
-	Endpoint string `yaml:"endpoint,omitempty"`
-	// if set, a set of endpoints assigned functional names, available to thi
-	// database (only one of Endpoint and Endpoints may be set)
-	Endpoints map[string]string `yaml:"endpoints,omitempty"`
+import (
+	"fmt"
+)
+
+// indicates that an endpoint is sought but not found
+type NotFoundError struct {
+	Name string
+}
+
+func (e NotFoundError) Error() string {
+	return fmt.Sprintf("The endpoint '%s' was not found.", e.Name)
+}
+
+// indicates that an endpoint has an invalid provider
+type InvalidProviderError struct {
+	Name, Provider string
+}
+
+func (e InvalidProviderError) Error() string {
+	return fmt.Sprintf("The endpoint '%s' has an invalid provider: '%s'.",
+		e.Name, e.Provider)
 }

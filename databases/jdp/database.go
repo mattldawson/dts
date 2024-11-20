@@ -41,7 +41,6 @@ import (
 	"github.com/kbase/dts/config"
 	"github.com/kbase/dts/credit"
 	"github.com/kbase/dts/databases"
-	"github.com/kbase/dts/endpoints"
 	"github.com/kbase/dts/frictionless"
 )
 
@@ -359,6 +358,14 @@ func NewDatabase(orcid string) (databases.Database, error) {
 		}
 	}
 
+	// make sure we are using only a single endpoint
+	if config.Databases["jdp"].Endpoint == "" {
+		return nil, databases.InvalidEndpointsError{
+			Database: "jdp",
+			Message:  "The JGI data portal should only have a single endpoint configured.",
+		}
+	}
+
 	return &Database{
 		Id:         "jdp",
 		Orcid:      orcid,
@@ -422,7 +429,7 @@ func (db *Database) filesFromSearch(params url.Values) (databases.SearchResults,
 
 	idEncountered := make(map[string]bool) // keep track of duplicates
 
-	// extra any requested "extra" metadata fields (and scrub them from params)
+	// extract any requested "extra" metadata fields (and scrub them from params)
 	var extraFields []string
 	if params.Has("extra") {
 		extraFields = strings.Split(params.Get("extra"), ",")
@@ -671,6 +678,7 @@ func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, er
 	if err != nil {
 		return nil, err
 	}
+
 	type MetadataResponse struct {
 		Hits struct {
 			Hits []struct {
@@ -822,10 +830,6 @@ func (db *Database) StagingStatus(id uuid.UUID) (databases.StagingStatus, error)
 	} else {
 		return databases.StagingStatusUnknown, nil
 	}
-}
-
-func (db *Database) Endpoint() (endpoints.Endpoint, error) {
-	return endpoints.NewEndpoint(config.Databases[db.Id].Endpoint)
 }
 
 func (db *Database) LocalUser(orcid string) (string, error) {

@@ -85,25 +85,6 @@ type Endpoint interface {
 	Cancel(id uuid.UUID) error
 }
 
-// This error type is returned when an endpoint is sought but not found.
-type NotFoundError struct {
-	epName string
-}
-
-func (e NotFoundError) Error() string {
-	return fmt.Sprintf("The endpoint '%s' was not found.", e.epName)
-}
-
-// This error type is returned when an endpoint has an invalid provider.
-type InvalidProviderError struct {
-	epName, epProvider string
-}
-
-func (e InvalidProviderError) Error() string {
-	return fmt.Sprintf("The endpoint '%s' has an invalid provider: '%s'.",
-		e.epName, e.epProvider)
-}
-
 // we maintain a table of endpoint instances, identified by their names
 var allEndpoints map[string]Endpoint = make(map[string]Endpoint)
 
@@ -135,12 +116,12 @@ func NewEndpoint(endpointName string) (Endpoint, error) {
 				endpoint, err = createEp(endpointName)
 			} else { // invalid provider!
 				err = InvalidProviderError{
-					epName:     endpointName,
-					epProvider: epConfig.Provider,
+					Name:     endpointName,
+					Provider: epConfig.Provider,
 				}
 			}
 		} else { // endpoint not found in config!
-			err = NotFoundError{epName: endpointName}
+			err = NotFoundError{Name: endpointName}
 		}
 
 		// stash it

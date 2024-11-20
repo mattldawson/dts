@@ -74,7 +74,7 @@ databases:
   jdp: # for database-specific search parameters test
     name: JGI Data Portal
     organization: Joint Genome Institute
-    endpoint: globus-jdp
+    endpoint: source-endpoint
 endpoints:
   local-endpoint:
     name: Local endpoint

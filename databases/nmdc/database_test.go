@@ -1,6 +1,7 @@
-package jdp
+package nmdc
 
 import (
+	"encoding/json"
 	"os"
 	"testing"
 
@@ -13,17 +14,31 @@ import (
 	"github.com/kbase/dts/endpoints/globus"
 )
 
-const jdpConfig string = `
+const nmdcConfig string = `
 databases:
-  jdp:
-    name: JGI Data Portal
-    organization: Joint Genome Institue
-    url: https://files.jgi.doe.gov
-    endpoint: globus-jdp
-    auth:
-      client_id: ${JGI_CLIENT_ID}
-      client_secret: ${JGI_CLIENT_SECRET}
+  nmdc:
+    name: National Microbiome Data Collaborative
+    organization: DOE
+    endpoints:
+      nersc: globus-nmdc-nersc
+      emsl: globus-nmdc-emsl
 endpoints:
+  globus-nmdc-nersc:
+    name: NMDC (NERSC)
+    id: ${DTS_GLOBUS_TEST_ENDPOINT}
+    provider: globus
+    root: /
+    auth:
+      client_id: ${DTS_GLOBUS_CLIENT_ID}
+      client_secret: ${DTS_GLOBUS_CLIENT_SECRET}
+  globus-nmdc-emsl:
+    name: NMDC Bulk Data Cache
+    id: ${DTS_GLOBUS_TEST_ENDPOINT}
+    provider: globus
+    root: /
+    auth:
+      client_id: ${DTS_GLOBUS_CLIENT_ID}
+      client_secret: ${DTS_GLOBUS_CLIENT_SECRET}
   globus-jdp:
     name: Globus NERSC DTN
     id: ${DTS_GLOBUS_TEST_ENDPOINT}
@@ -33,12 +48,21 @@ endpoints:
       client_secret: ${DTS_GLOBUS_CLIENT_SECRET}
 `
 
+// since NMDC doesn't support search queries at this time, we search for
+// data objects related to a study
+var nmdcSearchParams map[string]json.RawMessage
+
 // this function gets called at the begіnning of a test session
 func setup() {
 	dtstest.EnableDebugLogging()
-	config.Init([]byte(jdpConfig))
-	databases.RegisterDatabase("jdp", NewDatabase)
+	config.Init([]byte(nmdcConfig))
+	databases.RegisterDatabase("nmdc", NewDatabase)
 	endpoints.RegisterEndpointProvider("globus", globus.NewEndpoint)
+
+	// construct NMDC-specific search parameters for a study
+	nmdcSearchParams = make(map[string]json.RawMessage)
+	studyId, _ := json.Marshal("nmdc:sty-11-5tgfr349")
+	nmdcSearchParams["study_id"] = studyId
 }
 
 // this function gets called after all tests have been run
@@ -48,45 +72,30 @@ func breakdown() {
 func TestNewDatabase(t *testing.T) {
 	assert := assert.New(t)
 	orcid := os.Getenv("DTS_KBASE_TEST_ORCID")
-	jdpDb, err := NewDatabase(orcid)
-	assert.NotNil(jdpDb, "JDP database not created")
-	assert.Nil(err, "JDP database creation encountered an error")
+	db, err := NewDatabase(orcid)
+	assert.NotNil(db, "NMDC database not created")
+	assert.Nil(err, "NMDC database creation encountered an error")
 }
 
 func TestNewDatabaseWithoutOrcid(t *testing.T) {
 	assert := assert.New(t)
-	jdpDb, err := NewDatabase("")
-	assert.Nil(jdpDb, "Invalid JDP database somehow created")
-	assert.NotNil(err, "JDP database creation without ORCID encountered no error")
-}
-
-func TestNewDatabaseWithoutJDPSharedSecret(t *testing.T) {
-	assert := assert.New(t)
-	orcid := os.Getenv("DTS_KBASE_TEST_ORCID")
-	jdpSecret := os.Getenv("DTS_JDP_SECRET")
-	os.Unsetenv("DTS_JDP_SECRET")
-	jdpDb, err := NewDatabase(orcid)
-	os.Setenv("DTS_JDP_SECRET", jdpSecret)
-	assert.Nil(jdpDb, "JDP database somehow created without shared secret available")
-	assert.NotNil(err, "JDP database creation without shared secret encountered no error")
+	db, err := NewDatabase("")
+	assert.Nil(db, "Invalid NMDC database somehow created")
+	assert.NotNil(err, "NMDC database creation without ORCID encountered no error")
 }
 
 func TestSearch(t *testing.T) {
 	assert := assert.New(t)
 	orcid := os.Getenv("DTS_KBASE_TEST_ORCID")
 	db, _ := NewDatabase(orcid)
+
 	params := databases.SearchParameters{
-		Query: "prochlorococcus",
-		Pagination: struct {
-			Offset, MaxNum int
-		}{
-			Offset: 1,
-			MaxNum: 50,
-		},
+		Query:    "",
+		Specific: nmdcSearchParams,
 	}
 	results, err := db.Search(params)
-	assert.True(len(results.Resources) > 0, "JDP search query returned no results")
-	assert.Nil(err, "JDP search query encountered an error")
+	assert.True(len(results.Resources) > 0, "NMDC search query returned no results")
+	assert.Nil(err, "NMDC search query encountered an error")
 }
 
 func TestResources(t *testing.T) {
@@ -94,7 +103,8 @@ func TestResources(t *testing.T) {
 	orcid := os.Getenv("DTS_KBASE_TEST_ORCID")
 	db, _ := NewDatabase(orcid)
 	params := databases.SearchParameters{
-		Query: "prochlorococcus",
+		Query:    "",
+		Specific: nmdcSearchParams,
 	}
 	results, _ := db.Search(params)
 	fileIds := make([]string, len(results.Resources))
@@ -102,12 +112,11 @@ func TestResources(t *testing.T) {
 		fileIds[i] = res.Id
 	}
 	resources, err := db.Resources(fileIds[:10])
-	assert.Nil(err, "JDP resource query encountered an error")
+	assert.Nil(err, "NMDC resource query encountered an error")
 	assert.Equal(10, len(resources),
-		"JDP resource query didn't return requested number of results")
-	for i, _ := range resources {
+		"NMDC resource query didn't return requested number of results")
+	for i, resource := range resources {
 		jdpSearchResult := results.Resources[i]
-		resource := resources[i]
 		assert.Equal(jdpSearchResult.Id, resource.Id, "Resource ID mismatch")
 		assert.Equal(jdpSearchResult.Name, resource.Name, "Resource name mismatch")
 		assert.Equal(jdpSearchResult.Path, resource.Path, "Resource path mismatch")

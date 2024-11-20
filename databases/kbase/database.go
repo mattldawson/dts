@@ -27,9 +27,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/kbase/dts/auth"
-	"github.com/kbase/dts/config"
 	"github.com/kbase/dts/databases"
-	"github.com/kbase/dts/endpoints"
 	"github.com/kbase/dts/frictionless"
 )
 
@@ -72,10 +70,6 @@ func (db *Database) StageFiles(fileIds []string) (uuid.UUID, error) {
 func (db *Database) StagingStatus(id uuid.UUID) (databases.StagingStatus, error) {
 	err := fmt.Errorf("StagingStatus not implemented for kbase database!")
 	return databases.StagingStatusUnknown, err
-}
-
-func (db *Database) Endpoint() (endpoints.Endpoint, error) {
-	return endpoints.NewEndpoint(config.Databases[db.Id].Endpoint)
 }
 
 func (db *Database) LocalUser(orcid string) (string, error) {

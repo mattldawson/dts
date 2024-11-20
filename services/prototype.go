@@ -289,8 +289,28 @@ type SearchDatabaseInput struct {
 	SearchDatabaseInputWithoutHeader
 }
 
+// routes database-related errors through Huma
+func databaseError(err error) error {
+	if err != nil {
+		slog.Error(err.Error())
+		switch err.(type) {
+		case *databases.InvalidSearchParameter:
+			return huma.Error400BadRequest(err.Error(), err)
+		case *databases.UnavailableError:
+			return huma.Error503ServiceUnavailable(err.Error(), err)
+		case *databases.PermissionDeniedError, *databases.UnauthorizedError:
+			return huma.Error401Unauthorized(err.Error(), err)
+		case *databases.NotFoundError, *databases.ResourceNotFoundError, *databases.ResourceEndpointNotFoundError:
+			return huma.Error404NotFound(err.Error(), err)
+		default:
+			return huma.Error500InternalServerError(err.Error(), err)
+		}
+	}
+	return nil
+}
+
 // implements database search for both GET and POST requests
-func searchDatabase(ctx context.Context,
+func searchDatabase(_ context.Context,
 	input *SearchDatabaseInput,
 	specific map[string]json.RawMessage) (*SearchResultsOutput, error) {
 
@@ -302,7 +322,7 @@ func searchDatabase(ctx context.Context,
 	// is the database valid?
 	_, ok := config.Databases[input.Database]
 	if !ok {
-		return nil, fmt.Errorf("Database %s not found", input.Database)
+		return nil, databaseError(databases.NotFoundError{Database: input.Database})
 	}
 
 	// check the requested file status
@@ -321,7 +341,7 @@ func searchDatabase(ctx context.Context,
 	slog.Info(fmt.Sprintf("Searching database %s for files...", input.Database))
 	db, err := databases.NewDatabase(userInfo.Orcid, input.Database)
 	if err != nil {
-		return nil, err
+		return nil, databaseError(err)
 	}
 
 	results, err := db.Search(databases.SearchParameters{
@@ -334,12 +354,7 @@ func searchDatabase(ctx context.Context,
 		Specific: specific,
 	})
 	if err != nil {
-		if e, ok := err.(*databases.InvalidSearchParameter); ok {
-			return nil, huma.Error400BadRequest(e.Error())
-		} else {
-			slog.Error(err.Error())
-		}
-		return nil, err
+		return nil, databaseError(err)
 	}
 	return &SearchResultsOutput{
 		Body: SearchResultsResponse{

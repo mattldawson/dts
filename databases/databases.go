@@ -27,7 +27,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/kbase/dts/endpoints"
 	"github.com/kbase/dts/frictionless"
 )
 
@@ -96,39 +95,8 @@ type Database interface {
 	StageFiles(fileIds []string) (uuid.UUID, error)
 	// returns the status of a given staging operation
 	StagingStatus(id uuid.UUID) (StagingStatus, error)
-	// returns the endpoint associated with this database
-	Endpoint() (endpoints.Endpoint, error)
 	// returns the local username associated with the given Orcid ID
 	LocalUser(orcid string) (string, error)
-}
-
-// This error type is returned when a database is sought but not found.
-type NotFoundError struct {
-	dbName string
-}
-
-func (e NotFoundError) Error() string {
-	return fmt.Sprintf("The database %s was not found.", e.dbName)
-}
-
-// This error type is returned when a database is already registered and
-// an attempt is made to register it again.
-type AlreadyRegisteredError struct {
-	dbName string
-}
-
-func (e AlreadyRegisteredError) Error() string {
-	return fmt.Sprintf("Cannot register database %s (already registered).", e.dbName)
-}
-
-// This error type is returned when an invalid database-specific search
-// parameter is specified
-type InvalidSearchParameter struct {
-	Database, Message string
-}
-
-func (e InvalidSearchParameter) Error() string {
-	return fmt.Sprintf("Invalid search parameter for database %s: %s", e.Database, e.Message)
 }
 
 // we maintain a table of database instances, identified by their names
@@ -141,7 +109,9 @@ var createDatabaseFuncs = make(map[string]func(name string) (Database, error))
 // to allow for e.g. test database implementations
 func RegisterDatabase(dbName string, createDb func(orcid string) (Database, error)) error {
 	if _, found := createDatabaseFuncs[dbName]; found {
-		return AlreadyRegisteredError{dbName: dbName}
+		return AlreadyRegisteredError{
+			Database: dbName,
+		}
 	} else {
 		createDatabaseFuncs[dbName] = createDb
 		return nil

@@ -37,9 +37,9 @@ import (
 )
 
 // This type tracks the lifecycle of a file transfer task that copies files from
-// a source database to a destination database. A TransferTask can have one or
+// a source database to a destination database. A transferTask can have one or
 // more subtasks, depending on how many transfer endpoints are involved.
-type TransferTask struct {
+type transferTask struct {
 	Canceled          bool              // set if a cancellation request has been made
 	CompletionTime    time.Time         // time at which the transfer completed
 	Description       string            // Markdown description of the task
@@ -53,7 +53,7 @@ type TransferTask struct {
 	PayloadSize       float64           // Size of payload (gigabytes)
 	Source            string            // name of source database (in config)
 	Status            TransferStatus    // status of file transfer operation
-	Subtasks          []TransferSubtask // list of constituent file transfer subtasks
+	Subtasks          []transferSubtask // list of constituent file transfer subtasks
 	UserInfo          auth.UserInfo     // info about user requesting transfer
 }
 
@@ -67,7 +67,7 @@ func payloadSize(resources []DataResource) float64 {
 }
 
 // starts a task going, initiating staging if needed
-func (task *TransferTask) start() error {
+func (task *transferTask) start() error {
 	source, err := databases.NewDatabase(task.UserInfo.Orcid, task.Source)
 	if err != nil {
 		return err
@@ -131,7 +131,7 @@ func (task *TransferTask) start() error {
 			distinctEndpoints[resource.Endpoint] = struct{}{}
 		}
 	}
-	task.Subtasks = make([]TransferSubtask, 0)
+	task.Subtasks = make([]transferSubtask, 0)
 	for sourceEndpoint := range distinctEndpoints {
 		// pick out the files corresponding to the source endpoint
 		// NOTE: this is slow, but preserves file ID ordering
@@ -143,7 +143,7 @@ func (task *TransferTask) start() error {
 		}
 
 		// set up a subtask for the endpoint
-		task.Subtasks = append(task.Subtasks, TransferSubtask{
+		task.Subtasks = append(task.Subtasks, transferSubtask{
 			Destination:         task.Destination,
 			DestinationEndpoint: destinationEndpoint,
 			DestinationFolder:   task.DestinationFolder,
@@ -168,7 +168,7 @@ func (task *TransferTask) start() error {
 }
 
 // updates the state of a task, setting its status as necessary
-func (task *TransferTask) Update() error {
+func (task *transferTask) Update() error {
 	var err error
 	if len(task.Subtasks) == 0 { // new task!
 		err = task.start()
@@ -293,7 +293,7 @@ func (task *TransferTask) Update() error {
 }
 
 // requests that the task be canceled
-func (task *TransferTask) Cancel() error {
+func (task *transferTask) Cancel() error {
 	task.Canceled = true           // mark as canceled
 	for i := range task.Subtasks { // cancel subtasks
 		task.Subtasks[i].cancel()
@@ -303,7 +303,7 @@ func (task *TransferTask) Cancel() error {
 
 // returns the duration since the task completed (successfully or otherwise),
 // or 0 if the task has not completed
-func (task TransferTask) Age() time.Duration {
+func (task transferTask) Age() time.Duration {
 	if task.Status.Code == TransferStatusSucceeded ||
 		task.Status.Code == TransferStatusFailed {
 		return time.Since(task.CompletionTime)
@@ -313,7 +313,7 @@ func (task TransferTask) Age() time.Duration {
 }
 
 // returns true if the task has completed (successfully or not), false otherwise
-func (task TransferTask) Completed() bool {
+func (task transferTask) Completed() bool {
 	if task.Status.Code == TransferStatusSucceeded ||
 		task.Status.Code == TransferStatusFailed {
 		return true
@@ -323,7 +323,7 @@ func (task TransferTask) Completed() bool {
 }
 
 // creates a DataPackage that serves as the transfer manifest
-func (task *TransferTask) createManifest() DataPackage {
+func (task *transferTask) createManifest() DataPackage {
 	numResources := 0
 	for _, subtask := range task.Subtasks {
 		numResources += len(subtask.Resources)
@@ -360,7 +360,7 @@ func (task *TransferTask) createManifest() DataPackage {
 
 // checks whether the file manifest for a task has been generated and, if so,
 // marks the task as completed
-func (task *TransferTask) checkManifest() error {
+func (task *transferTask) checkManifest() error {
 	// has the manifest transfer completed?
 	localEndpoint, err := endpoints.NewEndpoint(config.Service.Endpoint)
 	if err != nil {

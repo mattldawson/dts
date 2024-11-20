@@ -37,7 +37,7 @@ import (
 // multiple endpoints attached to a single source/destination database pair).
 // It holds multiple (possibly null) UUIDs corresponding to different
 // states in the file transfer lifecycle
-type TransferSubtask struct {
+type transferSubtask struct {
 	Destination         string                  // name of destination database (in config)
 	DestinationEndpoint string                  // name of destination database (in config)
 	DestinationFolder   string                  // folder path to which files are transferred
@@ -51,7 +51,7 @@ type TransferSubtask struct {
 	UserInfo            auth.UserInfo           // info about user requesting transfer
 }
 
-func (subtask *TransferSubtask) start() error {
+func (subtask *transferSubtask) start() error {
 	// are the files already staged? (only works for public data)
 	sourceEndpoint, err := endpoints.NewEndpoint(subtask.SourceEndpoint)
 	if err != nil {
@@ -89,7 +89,7 @@ func (subtask *TransferSubtask) start() error {
 }
 
 // updates the state of a subtask, setting its status as necessary
-func (subtask *TransferSubtask) update() error {
+func (subtask *transferSubtask) update() error {
 	var err error
 	if subtask.Staging.Valid { // we're staging
 		err = subtask.checkStaging()
@@ -100,7 +100,7 @@ func (subtask *TransferSubtask) update() error {
 }
 
 // initiates a file transfer on a set of staged files
-func (subtask *TransferSubtask) beginTransfer() error {
+func (subtask *transferSubtask) beginTransfer() error {
 	slog.Debug(fmt.Sprintf("Transferring %d file(s) from %s to %s",
 		len(subtask.Resources), subtask.SourceEndpoint, subtask.DestinationEndpoint))
 	// assemble a list of file transfers
@@ -139,7 +139,7 @@ func (subtask *TransferSubtask) beginTransfer() error {
 
 // checks whether files for a subtask are finished staging and, if so,
 // initiates the transfer process
-func (subtask *TransferSubtask) checkStaging() error {
+func (subtask *transferSubtask) checkStaging() error {
 	source, err := databases.NewDatabase(subtask.UserInfo.Orcid, subtask.Source)
 	if err != nil {
 		return err
@@ -165,7 +165,7 @@ func (subtask *TransferSubtask) checkStaging() error {
 
 // checks whether files for a task are finished transferring and, if so,
 // initiates the generation of the file manifest
-func (subtask *TransferSubtask) checkTransfer() error {
+func (subtask *transferSubtask) checkTransfer() error {
 	// has the data transfer completed?
 	sourceEndpoint, err := endpoints.NewEndpoint(subtask.SourceEndpoint)
 	if err != nil {
@@ -183,7 +183,7 @@ func (subtask *TransferSubtask) checkTransfer() error {
 }
 
 // issues a cancellation request to the endpoint associated with the subtask
-func (subtask *TransferSubtask) cancel() error {
+func (subtask *transferSubtask) cancel() error {
 	if subtask.Transfer.Valid { // we're transferring
 		// fetch the source endpoint
 		endpoint, err := endpoints.NewEndpoint(subtask.SourceEndpoint)
@@ -199,7 +199,7 @@ func (subtask *TransferSubtask) cancel() error {
 
 // updates the status of a canceled subtask depending on where it is in its
 // lifecycle
-func (subtask *TransferSubtask) checkCancellation() error {
+func (subtask *transferSubtask) checkCancellation() error {
 	if subtask.Transfer.Valid {
 		endpoint, err := endpoints.NewEndpoint(subtask.SourceEndpoint)
 		if err != nil {

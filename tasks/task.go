@@ -223,17 +223,17 @@ func (task *transferTask) Update() error {
 			task.Status.NumFilesTransferred = 0
 			task.Status.NumFilesSkipped = 0
 			for _, subtask := range task.Subtasks {
+				task.Status.NumFiles += subtask.TransferStatus.NumFiles
 				if subtask.Staging.Valid {
 					subtaskStaging = true
 				} else if subtask.Transfer.Valid {
-					task.Status.NumFiles += subtask.TransferStatus.NumFiles
 					task.Status.NumFilesTransferred += subtask.TransferStatus.NumFilesTransferred
 					task.Status.NumFilesSkipped += subtask.TransferStatus.NumFilesSkipped
 				}
 			}
 		}
 
-		if subtaskStaging && task.Status.NumFiles == 0 {
+		if subtaskStaging && task.Status.NumFilesTransferred == 0 {
 			task.Status.Code = TransferStatusStaging
 		} else if allTransfersSucceeded { // write a manifest
 			localEndpoint, err := endpoints.NewEndpoint(config.Service.Endpoint)

@@ -309,17 +309,15 @@ func (ep *Endpoint) Status(id uuid.UUID) (endpoints.TransferStatus, error) {
 			}
 		} else {
 			// it's probably real
-			if err == nil {
-				// find the first error event
-				for _, event := range eventList.Data {
-					if event.IsError {
-						// sometimes Globus throws an AUTH error here during a network burp, so we
-						// ignore it and report a failed status check (after all, we can't get here
-						// without AUTHing successfully!)
-						return endpoints.TransferStatus{},
-							fmt.Errorf("%s (%s):\n%s", event.Description, event.Code,
-								event.Details)
-					}
+			// find the first error event
+			for _, event := range eventList.Data {
+				if event.IsError {
+					// sometimes Globus throws an AUTH error here during a network burp, so we
+					// ignore it and report a failed status check (after all, we can't get here
+					// without AUTHing successfully!)
+					return endpoints.TransferStatus{},
+						fmt.Errorf("%s (%s):\n%s", event.Description, event.Code,
+							event.Details)
 				}
 			}
 			// fall back to the "nice status"

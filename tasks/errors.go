@@ -56,7 +56,7 @@ func (t NotRunningError) Error() string {
 type NoFilesRequestedError struct{}
 
 func (t NoFilesRequestedError) Error() string {
-	return fmt.Sprintf("Requested transfer task with no files!")
+	return fmt.Sprintf("Requested transfer task includes no file IDs!")
 }
 
 // indicates that a payload has been requested that is too large

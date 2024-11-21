@@ -75,10 +75,13 @@ func (subtask *transferSubtask) start() error {
 		for i, resource := range subtask.Resources {
 			fileIds[i] = resource.Id
 		}
-		subtask.Staging.UUID, err = source.StageFiles(fileIds)
-		subtask.Staging.Valid = true
+		taskId, err := source.StageFiles(fileIds)
 		if err != nil {
 			return err
+		}
+		subtask.Staging = uuid.NullUUID{
+			UUID:  taskId,
+			Valid: true,
 		}
 		subtask.TransferStatus = TransferStatus{
 			Code:     TransferStatusStaging,
@@ -97,44 +100,6 @@ func (subtask *transferSubtask) update() error {
 		err = subtask.checkTransfer()
 	}
 	return err
-}
-
-// initiates a file transfer on a set of staged files
-func (subtask *transferSubtask) beginTransfer() error {
-	slog.Debug(fmt.Sprintf("Transferring %d file(s) from %s to %s",
-		len(subtask.Resources), subtask.SourceEndpoint, subtask.DestinationEndpoint))
-	// assemble a list of file transfers
-	fileXfers := make([]FileTransfer, len(subtask.Resources))
-	for i, resource := range subtask.Resources {
-		destinationPath := filepath.Join(subtask.DestinationFolder, resource.Path)
-		fileXfers[i] = FileTransfer{
-			SourcePath:      resource.Path,
-			DestinationPath: destinationPath,
-			Hash:            resource.Hash,
-		}
-	}
-
-	// initiate the transfer
-	sourceEndpoint, err := endpoints.NewEndpoint(subtask.SourceEndpoint)
-	if err != nil {
-		return err
-	}
-	destinationEndpoint, err := endpoints.NewEndpoint(subtask.DestinationEndpoint)
-	if err != nil {
-		return err
-	}
-	subtask.Transfer.UUID, err = sourceEndpoint.Transfer(destinationEndpoint, fileXfers)
-	if err != nil {
-		return err
-	}
-
-	subtask.TransferStatus = TransferStatus{
-		Code:     TransferStatusActive,
-		NumFiles: len(subtask.Resources),
-	}
-	subtask.Staging = uuid.NullUUID{}
-	subtask.Transfer.Valid = true
-	return nil
 }
 
 // checks whether files for a subtask are finished staging and, if so,
@@ -212,5 +177,45 @@ func (subtask *transferSubtask) checkCancellation() error {
 	// at any other point in the lifecycle, terminate the task
 	subtask.TransferStatus.Code = TransferStatusFailed
 	subtask.TransferStatus.Message = "Task canceled at user request"
+	return nil
+}
+
+// initiates a file transfer on a set of staged files
+func (subtask *transferSubtask) beginTransfer() error {
+	slog.Debug(fmt.Sprintf("Transferring %d file(s) from %s to %s",
+		len(subtask.Resources), subtask.SourceEndpoint, subtask.DestinationEndpoint))
+	// assemble a list of file transfers
+	fileXfers := make([]FileTransfer, len(subtask.Resources))
+	for i, resource := range subtask.Resources {
+		destinationPath := filepath.Join(subtask.DestinationFolder, resource.Path)
+		fileXfers[i] = FileTransfer{
+			SourcePath:      resource.Path,
+			DestinationPath: destinationPath,
+			Hash:            resource.Hash,
+		}
+	}
+
+	// initiate the transfer
+	sourceEndpoint, err := endpoints.NewEndpoint(subtask.SourceEndpoint)
+	if err != nil {
+		return err
+	}
+	destinationEndpoint, err := endpoints.NewEndpoint(subtask.DestinationEndpoint)
+	if err != nil {
+		return err
+	}
+	transferId, err := sourceEndpoint.Transfer(destinationEndpoint, fileXfers)
+	if err != nil {
+		return err
+	}
+	subtask.Transfer = uuid.NullUUID{
+		UUID:  transferId,
+		Valid: true,
+	}
+	subtask.TransferStatus = TransferStatus{
+		Code:     TransferStatusActive,
+		NumFiles: len(subtask.Resources),
+	}
+	subtask.Staging = uuid.NullUUID{}
 	return nil
 }

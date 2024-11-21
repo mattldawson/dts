@@ -179,6 +179,11 @@ type Specification struct {
 func Create(spec Specification) (uuid.UUID, error) {
 	var taskId uuid.UUID
 
+	// have we requested files to be transferred?
+	if len(spec.FileIds) == 0 {
+		return taskId, NoFilesRequestedError{}
+	}
+
 	// verify that we can fetch the task's source and destination databases
 	// without incident
 	_, err := databases.NewDatabase(spec.UserInfo.Orcid, spec.Source)

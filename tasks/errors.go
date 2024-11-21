@@ -52,6 +52,13 @@ func (t NotRunningError) Error() string {
 	return fmt.Sprintf("Tasks are not currently being processed.")
 }
 
+// indicates that a transfer has been requested with no files(!)
+type NoFilesRequestedError struct{}
+
+func (t NoFilesRequestedError) Error() string {
+	return fmt.Sprintf("Requested transfer task with no files!")
+}
+
 // indicates that a payload has been requested that is too large
 type PayloadTooLargeError struct {
 	size float64 // size of the requested payload in gigabytes

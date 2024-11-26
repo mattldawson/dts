@@ -364,6 +364,7 @@ func processTasks() {
 		case <-pollChan: // time to move things along
 			for taskId, task := range tasks {
 				if !task.Completed() {
+					slog.Debug(fmt.Sprintf("Task %s is incomplete, proceeding...", taskId.String()))
 					oldStatus := task.Status
 					err := task.Update()
 					if err != nil {
@@ -392,6 +393,8 @@ func processTasks() {
 							slog.Info(fmt.Sprintf("Task %s: failed", task.Id.String()))
 						}
 					}
+				} else {
+					slog.Debug(fmt.Sprintf("Task %s is complete.", taskId.String()))
 				}
 
 				// if the task completed a long enough time go, delete its entry

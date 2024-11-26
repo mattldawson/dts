@@ -252,30 +252,41 @@ func (db *Database) StageFiles(fileIds []string) (uuid.UUID, error) {
 
 	// NOTE: The slash in the resource is all-important for POST requests to
 	// NOTE: the JDP!!
-	resp, err := db.post("request_archived_files/", bytes.NewReader(data))
+	response, err := db.post("request_archived_files/", bytes.NewReader(data))
 	if err != nil {
 		return xferId, err
-	}
-	defer resp.Body.Close()
-	var body []byte
-	body, err = io.ReadAll(resp.Body)
-	if err != nil {
-		return xferId, err
-	}
-	type RestoreResponse struct {
-		RequestId int `json:"request_id"`
 	}
 
-	var jdpResp RestoreResponse
-	err = json.Unmarshal(body, &jdpResp)
-	if err != nil {
+	switch response.StatusCode {
+	case 200, 201, 204:
+		defer response.Body.Close()
+		var body []byte
+		body, err = io.ReadAll(response.Body)
+		if err != nil {
+			return xferId, err
+		}
+		type RestoreResponse struct {
+			RequestId int `json:"request_id"`
+		}
+
+		var jdpResp RestoreResponse
+		err = json.Unmarshal(body, &jdpResp)
+		if err != nil {
+			return xferId, err
+		}
+		slog.Debug(fmt.Sprintf("Requested %d archived files from JDP (request ID: %d)",
+			len(fileIds), jdpResp.RequestId))
+		xferId = uuid.New()
+		db.StagingIds[xferId] = jdpResp.RequestId
+		return xferId, err
+	case 404:
+		return xferId, databases.ResourceNotFoundError{
+			Database:   "JDP",
+			ResourceId: strings.Join(fileIds, ","),
+		}
+	default:
 		return xferId, err
 	}
-	slog.Debug(fmt.Sprintf("Requested %d archived files from JDP (request ID: %d)",
-		len(fileIds), jdpResp.RequestId))
-	xferId = uuid.New()
-	db.StagingIds[xferId] = jdpResp.RequestId
-	return xferId, err
 }
 
 func (db *Database) StagingStatus(id uuid.UUID) (databases.StagingStatus, error) {

@@ -117,8 +117,14 @@ func (subtask *transferSubtask) checkStaging() error {
 
 	if subtask.StagingStatus == databases.StagingStatusSucceeded { // staged!
 		// the database thinks the files are staged. Does its endpoint agree?
-		endpoint, _ := endpoints.NewEndpoint(subtask.SourceEndpoint)
-		staged, _ := endpoint.FilesStaged(subtask.Resources)
+		endpoint, err := endpoints.NewEndpoint(subtask.SourceEndpoint)
+		if err != nil {
+			return err
+		}
+		staged, err := endpoint.FilesStaged(subtask.Resources)
+		if err != nil {
+			return err
+		}
 		if !staged {
 			return fmt.Errorf("Database %s reports staged files, but endpoint %s cannot see them. Is the endpoint's root set properly?",
 				subtask.Source, subtask.SourceEndpoint)

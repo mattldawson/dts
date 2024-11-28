@@ -58,6 +58,7 @@ type Database struct {
 	// SSO token used for interim JDP access
 	SsoToken string
 	// mapping from staging UUIDs to JDP restoration request ID
+	// FIXME: not persistent between service restarts!!
 	StagingIds map[uuid.UUID]int
 }
 
@@ -290,6 +291,7 @@ func (db *Database) StageFiles(fileIds []string) (uuid.UUID, error) {
 }
 
 func (db *Database) StagingStatus(id uuid.UUID) (databases.StagingStatus, error) {
+	// FIXME: db.StagingIds is not persistent between service restarts!!
 	if restoreId, found := db.StagingIds[id]; found {
 		resource := fmt.Sprintf("request_archived_files/requests/%d", restoreId)
 		resp, err := db.get(resource, url.Values{})

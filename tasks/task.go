@@ -57,7 +57,7 @@ type transferTask struct {
 	UserInfo          auth.UserInfo     // info about user requesting transfer
 }
 
-// computes the size of a payload for a transfer task (in gigabytes)
+// computes the size of a payload for a transfer task (in Gigabytes)
 func payloadSize(resources []DataResource) float64 {
 	var size uint64
 	for _, resource := range resources {
@@ -106,7 +106,7 @@ func (task *transferTask) start() error {
 	// make sure the size of the payload doesn't exceed our specified limit
 	task.PayloadSize = payloadSize(resources) // (in GB)
 	if task.PayloadSize > config.Service.MaxPayloadSize {
-		return &PayloadTooLargeError{size: task.PayloadSize}
+		return &PayloadTooLargeError{Size: task.PayloadSize}
 	}
 
 	// determine the destination endpoint

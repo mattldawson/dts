@@ -61,10 +61,10 @@ func (t NoFilesRequestedError) Error() string {
 
 // indicates that a payload has been requested that is too large
 type PayloadTooLargeError struct {
-	size float64 // size of the requested payload in gigabytes
+	Size float64 // size of the requested payload in gigabytes
 }
 
 func (e PayloadTooLargeError) Error() string {
 	return fmt.Sprintf("Requested payload is too large: %g GB (limit is %g GB).",
-		e.size, config.Service.MaxPayloadSize)
+		e.Size, config.Service.MaxPayloadSize)
 }

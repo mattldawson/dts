@@ -30,51 +30,6 @@ import (
 	"github.com/kbase/dts/frictionless"
 )
 
-type SearchPaginationParameters struct {
-	// number of search results to skip
-	Offset int
-	// maximum number of search results to include (0 indicates no max)
-	MaxNum int
-}
-
-// allows searching for files that are staged, not yet staged, etc
-type SearchFileStatus int
-
-const (
-	SearchFileStatusAny SearchFileStatus = iota
-	SearchFileStatusStaged
-	SearchFileStatusUnstaged
-)
-
-// parameters that define a search for files
-type SearchParameters struct {
-	// ElasticSearch query string
-	Query string
-	// file status, if requested
-	Status SearchFileStatus
-	// pagination support
-	Pagination SearchPaginationParameters
-	// database-specific search parameters with names matched to provided values
-	// (validated by database)
-	Specific map[string]json.RawMessage
-}
-
-// results from a file query
-type SearchResults struct {
-	Resources []frictionless.DataResource `json:"resources"`
-}
-
-// This "enum" type identifies the status of a staging operation that moves
-// files into place on a Database's endpoint.
-type StagingStatus int
-
-const (
-	StagingStatusUnknown   StagingStatus = iota // unknown staging operation or status not available
-	StagingStatusActive                         // staging in progress
-	StagingStatusSucceeded                      // staging completed successfully
-	StagingStatusFailed                         // staging failed
-)
-
 // Database defines the interface for a database that is used to search for
 // files and initiate file transfers
 type Database interface {
@@ -99,21 +54,60 @@ type Database interface {
 	LocalUser(orcid string) (string, error)
 }
 
-// we maintain a table of database instances, identified by their names
-var allDatabases = make(map[string]Database)
+// parameters that define a search for files
+type SearchParameters struct {
+	// ElasticSearch query string
+	Query string
+	// file status, if requested
+	Status SearchFileStatus
+	// pagination support
+	Pagination SearchPaginationParameters
+	// database-specific search parameters with names matched to provided values
+	// (validated by database)
+	Specific map[string]json.RawMessage
+}
 
-// here's a table of database creation functions
-var createDatabaseFuncs = make(map[string]func(name string) (Database, error))
+// results from a file search
+type SearchResults struct {
+	Resources []frictionless.DataResource `json:"resources"`
+}
+
+type SearchPaginationParameters struct {
+	// number of search results to skip
+	Offset int
+	// maximum number of search results to include (0 indicates no max)
+	MaxNum int
+}
+
+// allows searching for files that are staged, not yet staged, etc
+type SearchFileStatus int
+
+const (
+	SearchFileStatusAny SearchFileStatus = iota
+	SearchFileStatusStaged
+	SearchFileStatusUnstaged
+)
+
+// This enum identifies the status of a staging operation that moves
+// files into place on a Database's endpoint.
+type StagingStatus int
+
+const (
+	StagingStatusUnknown   StagingStatus = iota // unknown staging operation or status not available
+	StagingStatusActive                         // staging in progress
+	StagingStatusSucceeded                      // staging completed successfully
+	StagingStatusFailed                         // staging failed
+)
 
 // registers a database creation function under the given database name
 // to allow for e.g. test database implementations
 func RegisterDatabase(dbName string, createDb func(orcid string) (Database, error)) error {
-	if _, found := createDatabaseFuncs[dbName]; found {
+	if _, found := createDatabaseFuncs_[dbName]; found {
 		return AlreadyRegisteredError{
 			Database: dbName,
 		}
 	} else {
-		createDatabaseFuncs[dbName] = createDb
+		createDatabaseFuncs_[dbName] = createDb
 		return nil
 	}
 }
@@ -125,17 +119,27 @@ func NewDatabase(orcid, dbName string) (Database, error) {
 
 	// do we have one of these already?
 	key := fmt.Sprintf("orcid: %s db: %s", orcid, dbName)
-	db, found := allDatabases[key]
+	db, found := allDatabases_[key]
 	if !found {
 		// create the requested database
-		if createDb, valid := createDatabaseFuncs[dbName]; valid {
+		if createDb, valid := createDatabaseFuncs_[dbName]; valid {
 			db, err = createDb(orcid)
 		} else {
 			err = NotFoundError{dbName}
 		}
 		if err == nil {
-			allDatabases[key] = db // stash it
+			allDatabases_[key] = db // stash it
 		}
 	}
 	return db, err
 }
+
+//-----------
+// Internals
+//-----------
+
+// we maintain a table of database instances, identified by their names
+var allDatabases_ = make(map[string]Database)
+
+// a table of database creation functions
+var createDatabaseFuncs_ = make(map[string]func(name string) (Database, error))

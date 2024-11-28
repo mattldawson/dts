@@ -77,3 +77,15 @@ func (db *Database) LocalUser(orcid string) (string, error) {
 	// auth server proxy
 	return auth.KBaseLocalUsernameForOrcid(orcid)
 }
+
+func (db Database) Save() (databases.DatabaseSaveState, error) {
+	// so far, this database has no internal state
+	return databases.DatabaseSaveState{
+		Name: "kbase",
+	}, nil
+}
+
+func (db *Database) Load(state databases.DatabaseSaveState) error {
+	// no internal state -> nothing to do
+	return nil
+}

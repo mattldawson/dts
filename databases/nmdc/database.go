@@ -240,7 +240,7 @@ func (db Database) LocalUser(orcid string) (string, error) {
 func (db Database) Save() (databases.DatabaseSaveState, error) {
 	// so far, this database has no internal state
 	return databases.DatabaseSaveState{
-		Name: "NMDC",
+		Name: "nmdc",
 	}, nil
 }
 

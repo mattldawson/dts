@@ -59,12 +59,18 @@ type Database interface {
 	Load(state DatabaseSaveState) error
 }
 
-// data representing a saved database state -- useful for service restarts
+// represents a saved database state (for service restarts)
 type DatabaseSaveState struct {
 	// database name
 	Name string
 	// serialized database in bytes
 	Data []byte
+}
+
+// represents a collection of saved database states
+type DatabaseSaveStates struct {
+	// mapping of orcid/database keys to database save states
+	Data map[string]DatabaseSaveState
 }
 
 // parameters that define a search for files
@@ -149,27 +155,30 @@ func NewDatabase(orcid, dbName string) (Database, error) {
 
 // saves the internal states of all resident databases, returning a map to
 // their save states
-func Save() (map[string]DatabaseSaveState, error) {
-	states := make(map[string]DatabaseSaveState)
+func Save() (DatabaseSaveStates, error) {
+	states := DatabaseSaveStates{
+		Data: make(map[string]DatabaseSaveState),
+	}
 	for key, db := range allDatabases_ {
 		saveState, err := db.Save()
 		if err != nil {
-			return nil, err
+			return states, err
 		}
-		states[key] = saveState
+		states.Data[key] = saveState
 	}
 	return states, nil
 }
 
 // loads a previously saved map of save states for all databases, restoring
 // their previous states
-func Load(states map[string]DatabaseSaveState) error {
-	for key, state := range states {
-		orcidIndex := strings.LastIndex(key, "db: ") + 3
-		if orcidIndex == 2 {
+func Load(states DatabaseSaveStates) error {
+	for key, state := range states.Data {
+		start := strings.Index(key, "orcid: ") + 8
+		end := strings.Index(key, "db: ") - 1
+		if start == 7 || end == -2 {
 			return fmt.Errorf("Couldn't load saved state for database '%s'", state.Name)
 		}
-		orcid := key[orcidIndex:]
+		orcid := key[start:end]
 		db, err := NewDatabase(orcid, state.Name)
 		if err != nil {
 			return err

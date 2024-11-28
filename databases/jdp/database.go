@@ -35,6 +35,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/google/uuid"
@@ -59,8 +60,14 @@ type Database struct {
 	// SSO token used for interim JDP access
 	SsoToken string
 	// mapping from staging UUIDs to JDP restoration request ID
-	// FIXME: not persistent between service restarts!!
-	StagingIds map[uuid.UUID]int
+	StagingRequests map[uuid.UUID]StagingRequest
+}
+
+type StagingRequest struct {
+	// JDP staging request ID
+	Id int
+	// time of staging request (for purging)
+	Time time.Time
 }
 
 func NewDatabase(orcid string) (databases.Database, error) {
@@ -86,11 +93,11 @@ func NewDatabase(orcid string) (databases.Database, error) {
 	}
 
 	return &Database{
-		Id:         "jdp",
-		Orcid:      orcid,
-		Secret:     secret,
-		SsoToken:   os.Getenv("DTS_JDP_SSO_TOKEN"),
-		StagingIds: make(map[uuid.UUID]int),
+		Id:              "jdp",
+		Orcid:           orcid,
+		Secret:          secret,
+		SsoToken:        os.Getenv("DTS_JDP_SSO_TOKEN"),
+		StagingRequests: make(map[uuid.UUID]StagingRequest),
 	}, nil
 }
 
@@ -279,7 +286,10 @@ func (db *Database) StageFiles(fileIds []string) (uuid.UUID, error) {
 		slog.Debug(fmt.Sprintf("Requested %d archived files from JDP (request ID: %d)",
 			len(fileIds), jdpResp.RequestId))
 		xferId = uuid.New()
-		db.StagingIds[xferId] = jdpResp.RequestId
+		db.StagingRequests[xferId] = StagingRequest{
+			Id:   jdpResp.RequestId,
+			Time: time.Now(),
+		}
 		return xferId, err
 	case 404:
 		return xferId, databases.ResourceNotFoundError{
@@ -292,9 +302,9 @@ func (db *Database) StageFiles(fileIds []string) (uuid.UUID, error) {
 }
 
 func (db *Database) StagingStatus(id uuid.UUID) (databases.StagingStatus, error) {
-	// FIXME: db.StagingIds is not persistent between service restarts!!
-	if restoreId, found := db.StagingIds[id]; found {
-		resource := fmt.Sprintf("request_archived_files/requests/%d", restoreId)
+	db.pruneStagingRequests()
+	if request, found := db.StagingRequests[id]; found {
+		resource := fmt.Sprintf("request_archived_files/requests/%d", request.Id)
 		resp, err := db.get(resource, url.Values{})
 		if err != nil {
 			return databases.StagingStatusUnknown, err
@@ -336,19 +346,19 @@ func (db *Database) LocalUser(orcid string) (string, error) {
 func (db Database) Save() (databases.DatabaseSaveState, error) {
 	var buffer bytes.Buffer
 	enc := gob.NewEncoder(&buffer)
-	err := enc.Encode(db.StagingIds)
+	err := enc.Encode(db.StagingRequests)
 	if err != nil {
 		return databases.DatabaseSaveState{}, err
 	}
 	return databases.DatabaseSaveState{
-		Name: "NMDC",
+		Name: "jdp",
 		Data: buffer.Bytes(),
 	}, nil
 }
 
 func (db *Database) Load(state databases.DatabaseSaveState) error {
 	enc := gob.NewDecoder(bytes.NewReader(state.Data))
-	return enc.Decode(&db.StagingIds)
+	return enc.Decode(&db.StagingRequests)
 }
 
 //--------------------
@@ -852,4 +862,14 @@ func (db Database) addSpecificSearchParameters(params map[string]json.RawMessage
 		}
 	}
 	return nil
+}
+
+func (db *Database) pruneStagingRequests() {
+	deleteAfter := time.Duration(config.Service.DeleteAfter) * time.Second
+	for uuid, request := range db.StagingRequests {
+		requestAge := time.Since(request.Time)
+		if requestAge > deleteAfter {
+			delete(db.StagingRequests, uuid)
+		}
+	}
 }

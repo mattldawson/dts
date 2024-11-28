@@ -257,17 +257,16 @@ func createOrLoadTasks(dataFile string) map[uuid.UUID]transferTask {
 	defer file.Close()
 	enc := gob.NewDecoder(file)
 	var tasks map[uuid.UUID]transferTask
-	err = enc.Decode(&tasks)
-	if err == nil {
-		var databaseStates map[string]DatabaseSaveState
+	var databaseStates databases.DatabaseSaveStates
+	if err = enc.Decode(&tasks); err == nil {
 		err = enc.Decode(&databaseStates)
-		if err == nil {
-			err = databases.Load(databaseStates)
-		}
 	}
 	if err != nil { // file not readable
 		slog.Error(fmt.Sprintf("Reading task file %s: %s", dataFile, err.Error()))
 		return make(map[uuid.UUID]transferTask)
+	}
+	if err = databases.Load(databaseStates); err != nil {
+		slog.Error(fmt.Sprintf("Restoring database states: %s", err.Error()))
 	}
 	slog.Debug(fmt.Sprintf("Restored %d tasks from %s", len(tasks), dataFile))
 	return tasks
@@ -282,10 +281,11 @@ func saveTasks(tasks map[uuid.UUID]transferTask, dataFile string) error {
 			return fmt.Errorf("Opening task file %s: %s", dataFile, err.Error())
 		}
 		enc := gob.NewEncoder(file)
-		err = enc.Encode(tasks)
-		if err == nil {
-			databaseStates := databases.Save()
-			err = enc.Encode(databaseStates)
+		if err = enc.Encode(tasks); err == nil {
+			var databaseStates databases.DatabaseSaveStates
+			if databaseStates, err = databases.Save(); err == nil {
+				err = enc.Encode(databaseStates)
+			}
 		}
 		if err != nil {
 			file.Close()
@@ -375,7 +375,6 @@ func processTasks() {
 		case <-pollChan: // time to move things along
 			for taskId, task := range tasks {
 				if !task.Completed() {
-					slog.Debug(fmt.Sprintf("Task %s is incomplete, proceeding...", taskId.String()))
 					oldStatus := task.Status
 					err := task.Update()
 					if err != nil {
@@ -404,8 +403,6 @@ func processTasks() {
 							slog.Info(fmt.Sprintf("Task %s: failed", task.Id.String()))
 						}
 					}
-				} else {
-					slog.Debug(fmt.Sprintf("Task %s is complete.", taskId.String()))
 				}
 
 				// if the task completed a long enough time go, delete its entry

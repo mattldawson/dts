@@ -23,6 +23,7 @@ package jdp
 
 import (
 	"bytes"
+	"encoding/gob"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -330,6 +331,24 @@ func (db *Database) StagingStatus(id uuid.UUID) (databases.StagingStatus, error)
 func (db *Database) LocalUser(orcid string) (string, error) {
 	// no current mechanism for this
 	return "localuser", nil
+}
+
+func (db Database) Save() (databases.DatabaseSaveState, error) {
+	var buffer bytes.Buffer
+	enc := gob.NewEncoder(&buffer)
+	err := enc.Encode(db.StagingIds)
+	if err != nil {
+		return databases.DatabaseSaveState{}, err
+	}
+	return databases.DatabaseSaveState{
+		Name: "NMDC",
+		Data: buffer.Bytes(),
+	}, nil
+}
+
+func (db *Database) Load(state databases.DatabaseSaveState) error {
+	enc := gob.NewDecoder(bytes.NewReader(state.Data))
+	return enc.Decode(&db.StagingIds)
 }
 
 //--------------------

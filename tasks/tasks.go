@@ -258,6 +258,13 @@ func createOrLoadTasks(dataFile string) map[uuid.UUID]transferTask {
 	enc := gob.NewDecoder(file)
 	var tasks map[uuid.UUID]transferTask
 	err = enc.Decode(&tasks)
+	if err == nil {
+		var databaseStates map[string]DatabaseSaveState
+		err = enc.Decode(&databaseStates)
+		if err == nil {
+			err = databases.Load(databaseStates)
+		}
+	}
 	if err != nil { // file not readable
 		slog.Error(fmt.Sprintf("Reading task file %s: %s", dataFile, err.Error()))
 		return make(map[uuid.UUID]transferTask)
@@ -276,6 +283,10 @@ func saveTasks(tasks map[uuid.UUID]transferTask, dataFile string) error {
 		}
 		enc := gob.NewEncoder(file)
 		err = enc.Encode(tasks)
+		if err == nil {
+			databaseStates := databases.Save()
+			err = enc.Encode(databaseStates)
+		}
 		if err != nil {
 			file.Close()
 			os.Remove(dataFile)

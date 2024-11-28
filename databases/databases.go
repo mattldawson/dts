@@ -24,6 +24,7 @@ package databases
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -52,6 +53,18 @@ type Database interface {
 	StagingStatus(id uuid.UUID) (StagingStatus, error)
 	// returns the local username associated with the given Orcid ID
 	LocalUser(orcid string) (string, error)
+	// returns the saved state of the Database, loadable via Load
+	Save() (DatabaseSaveState, error)
+	// loads a previously saved state into the Database
+	Load(state DatabaseSaveState) error
+}
+
+// data representing a saved database state -- useful for service restarts
+type DatabaseSaveState struct {
+	// database name
+	Name string
+	// serialized database in bytes
+	Data []byte
 }
 
 // parameters that define a search for files
@@ -132,6 +145,41 @@ func NewDatabase(orcid, dbName string) (Database, error) {
 		}
 	}
 	return db, err
+}
+
+// saves the internal states of all resident databases, returning a map to
+// their save states
+func Save() (map[string]DatabaseSaveState, error) {
+	states := make(map[string]DatabaseSaveState)
+	for key, db := range allDatabases_ {
+		saveState, err := db.Save()
+		if err != nil {
+			return nil, err
+		}
+		states[key] = saveState
+	}
+	return states, nil
+}
+
+// loads a previously saved map of save states for all databases, restoring
+// their previous states
+func Load(states map[string]DatabaseSaveState) error {
+	for key, state := range states {
+		orcidIndex := strings.LastIndex(key, "db: ") + 3
+		if orcidIndex == 2 {
+			return fmt.Errorf("Couldn't load saved state for database '%s'", state.Name)
+		}
+		orcid := key[orcidIndex:]
+		db, err := NewDatabase(orcid, state.Name)
+		if err != nil {
+			return err
+		}
+		err = db.Load(state)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 //-----------

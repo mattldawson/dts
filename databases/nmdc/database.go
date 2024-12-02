@@ -237,6 +237,18 @@ func (db Database) LocalUser(orcid string) (string, error) {
 	return "localuser", nil
 }
 
+func (db Database) Save() (databases.DatabaseSaveState, error) {
+	// so far, this database has no internal state
+	return databases.DatabaseSaveState{
+		Name: "nmdc",
+	}, nil
+}
+
+func (db *Database) Load(state databases.DatabaseSaveState) error {
+	// no internal state -> nothing to do
+	return nil
+}
+
 //--------------------
 // Internal machinery
 //--------------------

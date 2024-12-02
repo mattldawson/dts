@@ -27,14 +27,6 @@ import (
 	"github.com/kbase/dts/tasks"
 )
 
-// Version numbers
-var majorVersion = 0
-var minorVersion = 1
-var patchVersion = 0
-
-// Version string
-var version = fmt.Sprintf("%d.%d.%d", majorVersion, minorVersion, patchVersion)
-
 // This type implements the TransferService interface, allowing file transfers
 // from JGI (via the JGI Data Portal) to KBase via Globus.
 type prototype struct {
@@ -53,6 +45,107 @@ type prototype struct {
 	// HTTP server.
 	Server *http.Server
 }
+
+// constructs a prototype file transfer service given our configuration
+func NewDTSPrototype() (TransferService, error) {
+
+	// validate our configuration
+	if config.Service.Endpoint == "" {
+		return nil, fmt.Errorf("No service endpoint was specified.")
+	}
+	if len(config.Databases) == 0 {
+		return nil, fmt.Errorf("No databases were specified.")
+	}
+	if len(config.Endpoints) == 0 {
+		return nil, fmt.Errorf("No endpoints were specified.")
+	}
+
+	service := new(prototype)
+	service.Name = "DTS prototype"
+	service.Version = version
+	service.Port = -1
+
+	// set up routing
+	service.Router = mux.NewRouter()
+	api := humamux.New(service.Router, huma.DefaultConfig(service.Name, service.Version))
+	huma.Get(api, "/", service.getRoot)
+
+	// API v1
+	huma.Get(api, "/api/v1/databases", service.getDatabases)
+	huma.Get(api, "/api/v1/databases/{db}", service.getDatabase)
+	huma.Get(api, "/api/v1/databases/{db}/search-parameters", service.getDatabaseSearchParameters)
+	huma.Get(api, "/api/v1/files", service.searchDatabase)
+	huma.Post(api, "/api/v1/files", service.searchDatabaseWithSpecificParams)
+	huma.Get(api, "/api/v1/files/by-id", service.fetchFileMetadata)
+	huma.Post(api, "/api/v1/transfers", service.createTransfer)
+	huma.Get(api, "/api/v1/transfers/{id}", service.getTransferStatus)
+	huma.Delete(api, "/api/v1/transfers/{id}", service.deleteTransfer)
+
+	return service, nil
+}
+
+// starts the prototype data transfer service
+func (service *prototype) Start(port int) error {
+	slog.Info(fmt.Sprintf("Starting %s v%s on port %d...", service.Name, version, port))
+	slog.Info(fmt.Sprintf("(Accepting up to %d connections)", config.Service.MaxConnections))
+
+	service.StartTime = time.Now()
+
+	// create a listener that limits the number of incoming connections
+	service.Port = port
+	listener, err := net.Listen("tcp", ":"+strconv.Itoa(port))
+	if err != nil {
+		return err
+	}
+	defer listener.Close()
+	listener = netutil.LimitListener(listener, config.Service.MaxConnections)
+
+	// start tasks processing
+	err = tasks.Start()
+	if err != nil {
+		return err
+	}
+
+	// start the server
+	service.Server = &http.Server{
+		Handler: service.Router}
+	err = service.Server.Serve(listener)
+
+	// we don't report the server closing as an error
+	if err != http.ErrServerClosed {
+		return err
+	}
+	return nil
+}
+
+// gracefully shuts down the service without interrupting active connections
+func (service *prototype) Shutdown(ctx context.Context) error {
+	tasks.Stop()
+	if service.Server != nil {
+		return service.Server.Shutdown(ctx)
+	}
+	return nil
+}
+
+// closes down the service abruptly, freeing all resources
+func (service *prototype) Close() {
+	tasks.Stop()
+	if service.Server != nil {
+		service.Server.Close()
+	}
+}
+
+//-----------
+// Internals
+//-----------
+
+// Version numbers
+var majorVersion = 0
+var minorVersion = 2
+var patchVersion = 0
+
+// Version string
+var version = fmt.Sprintf("%d.%d.%d", majorVersion, minorVersion, patchVersion)
 
 // authorize clients for the DTS, returning information about the user
 // corresponding to the token in the header (or an error describing any issue
@@ -479,7 +572,15 @@ func (service *prototype) createTransfer(ctx context.Context,
 		Instructions: input.Body.Instructions,
 	})
 	if err != nil {
-		return nil, err
+		slog.Error(err.Error())
+		switch err.(type) {
+		case *tasks.NoFilesRequestedError:
+			return nil, huma.Error400BadRequest(err.Error())
+		case *databases.NotFoundError:
+			return nil, huma.Error404NotFound(err.Error())
+		default:
+			return nil, huma.Error500InternalServerError(err.Error())
+		}
 	}
 	return &TransferOutput{
 		Body: TransferResponse{
@@ -564,93 +665,4 @@ func (service *prototype) deleteTransfer(ctx context.Context,
 // returns the uptime for the service in seconds
 func (service *prototype) uptime() float64 {
 	return time.Since(service.StartTime).Seconds()
-}
-
-// constructs a prototype file transfer service given our configuration
-func NewDTSPrototype() (TransferService, error) {
-
-	// validate our configuration
-	if config.Service.Endpoint == "" {
-		return nil, fmt.Errorf("No service endpoint was specified.")
-	}
-	if len(config.Databases) == 0 {
-		return nil, fmt.Errorf("No databases were specified.")
-	}
-	if len(config.Endpoints) == 0 {
-		return nil, fmt.Errorf("No endpoints were specified.")
-	}
-
-	service := new(prototype)
-	service.Name = "DTS prototype"
-	service.Version = version
-	service.Port = -1
-
-	// set up routing
-	service.Router = mux.NewRouter()
-	api := humamux.New(service.Router, huma.DefaultConfig(service.Name, service.Version))
-	huma.Get(api, "/", service.getRoot)
-
-	// API v1
-	huma.Get(api, "/api/v1/databases", service.getDatabases)
-	huma.Get(api, "/api/v1/databases/{db}", service.getDatabase)
-	huma.Get(api, "/api/v1/databases/{db}/search-parameters", service.getDatabaseSearchParameters)
-	huma.Get(api, "/api/v1/files", service.searchDatabase)
-	huma.Post(api, "/api/v1/files", service.searchDatabaseWithSpecificParams)
-	huma.Get(api, "/api/v1/files/by-id", service.fetchFileMetadata)
-	huma.Post(api, "/api/v1/transfers", service.createTransfer)
-	huma.Get(api, "/api/v1/transfers/{id}", service.getTransferStatus)
-	huma.Delete(api, "/api/v1/transfers/{id}", service.deleteTransfer)
-
-	return service, nil
-}
-
-// starts the prototype data transfer service
-func (service *prototype) Start(port int) error {
-	slog.Info(fmt.Sprintf("Starting %s service on port %d...", service.Name, port))
-	slog.Info(fmt.Sprintf("(Accepting up to %d connections)", config.Service.MaxConnections))
-
-	service.StartTime = time.Now()
-
-	// create a listener that limits the number of incoming connections
-	service.Port = port
-	listener, err := net.Listen("tcp", ":"+strconv.Itoa(port))
-	if err != nil {
-		return err
-	}
-	defer listener.Close()
-	listener = netutil.LimitListener(listener, config.Service.MaxConnections)
-
-	// start tasks processing
-	err = tasks.Start()
-	if err != nil {
-		return err
-	}
-
-	// start the server
-	service.Server = &http.Server{
-		Handler: service.Router}
-	err = service.Server.Serve(listener)
-
-	// we don't report the server closing as an error
-	if err != http.ErrServerClosed {
-		return err
-	}
-	return nil
-}
-
-// gracefully shuts down the service without interrupting active connections
-func (service *prototype) Shutdown(ctx context.Context) error {
-	tasks.Stop()
-	if service.Server != nil {
-		return service.Server.Shutdown(ctx)
-	}
-	return nil
-}
-
-// closes down the service abruptly, freeing all resources
-func (service *prototype) Close() {
-	tasks.Stop()
-	if service.Server != nil {
-		service.Server.Close()
-	}
 }

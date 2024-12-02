@@ -109,7 +109,7 @@ func Start() error {
 
 	// allocate channels
 	taskChannels = channelsType{
-		CreateTask:       make(chan TransferTask, 32),
+		CreateTask:       make(chan transferTask, 32),
 		CancelTask:       make(chan uuid.UUID, 32),
 		GetTaskStatus:    make(chan uuid.UUID, 32),
 		ReturnTaskId:     make(chan uuid.UUID, 32),
@@ -179,6 +179,11 @@ type Specification struct {
 func Create(spec Specification) (uuid.UUID, error) {
 	var taskId uuid.UUID
 
+	// have we requested files to be transferred?
+	if len(spec.FileIds) == 0 {
+		return taskId, NoFilesRequestedError{}
+	}
+
 	// verify that we can fetch the task's source and destination databases
 	// without incident
 	_, err := databases.NewDatabase(spec.UserInfo.Orcid, spec.Source)
@@ -191,7 +196,7 @@ func Create(spec Specification) (uuid.UUID, error) {
 	}
 
 	// create a new task and send it along for processing
-	taskChannels.CreateTask <- TransferTask{
+	taskChannels.CreateTask <- transferTask{
 		UserInfo:     spec.UserInfo,
 		Source:       spec.Source,
 		Destination:  spec.Destination,
@@ -243,26 +248,32 @@ var stopHeartbeat chan struct{} // send a pulse to this channel to halt polling
 
 // loads a map of task IDs to tasks from a previously saved file if available,
 // or creates an empty map if no such file is available or valid
-func createOrLoadTasks(dataFile string) map[uuid.UUID]TransferTask {
+func createOrLoadTasks(dataFile string) map[uuid.UUID]transferTask {
 	file, err := os.Open(dataFile)
 	if err != nil {
-		return make(map[uuid.UUID]TransferTask)
+		return make(map[uuid.UUID]transferTask)
 	}
 	slog.Debug(fmt.Sprintf("Found previous tasks in %s.", dataFile))
 	defer file.Close()
 	enc := gob.NewDecoder(file)
-	var tasks map[uuid.UUID]TransferTask
-	err = enc.Decode(&tasks)
+	var tasks map[uuid.UUID]transferTask
+	var databaseStates databases.DatabaseSaveStates
+	if err = enc.Decode(&tasks); err == nil {
+		err = enc.Decode(&databaseStates)
+	}
 	if err != nil { // file not readable
 		slog.Error(fmt.Sprintf("Reading task file %s: %s", dataFile, err.Error()))
-		return make(map[uuid.UUID]TransferTask)
+		return make(map[uuid.UUID]transferTask)
+	}
+	if err = databases.Load(databaseStates); err != nil {
+		slog.Error(fmt.Sprintf("Restoring database states: %s", err.Error()))
 	}
 	slog.Debug(fmt.Sprintf("Restored %d tasks from %s", len(tasks), dataFile))
 	return tasks
 }
 
 // saves a map of task IDs to tasks to the given file
-func saveTasks(tasks map[uuid.UUID]TransferTask, dataFile string) error {
+func saveTasks(tasks map[uuid.UUID]transferTask, dataFile string) error {
 	if len(tasks) > 0 {
 		slog.Debug(fmt.Sprintf("Saving %d tasks to %s", len(tasks), dataFile))
 		file, err := os.OpenFile(dataFile, os.O_RDWR|os.O_CREATE, 0644)
@@ -270,7 +281,12 @@ func saveTasks(tasks map[uuid.UUID]TransferTask, dataFile string) error {
 			return fmt.Errorf("Opening task file %s: %s", dataFile, err.Error())
 		}
 		enc := gob.NewEncoder(file)
-		err = enc.Encode(tasks)
+		if err = enc.Encode(tasks); err == nil {
+			var databaseStates databases.DatabaseSaveStates
+			if databaseStates, err = databases.Save(); err == nil {
+				err = enc.Encode(databaseStates)
+			}
+		}
 		if err != nil {
 			file.Close()
 			os.Remove(dataFile)
@@ -294,7 +310,7 @@ func saveTasks(tasks map[uuid.UUID]TransferTask, dataFile string) error {
 // this type holds various channels used by the task manager to communicate
 // with its worker goroutine
 type channelsType struct {
-	CreateTask       chan TransferTask   // used by client to request task creation
+	CreateTask       chan transferTask   // used by client to request task creation
 	CancelTask       chan uuid.UUID      // used by client to request task cancellation
 	GetTaskStatus    chan uuid.UUID      // used by client to request task status
 	ReturnTaskId     chan uuid.UUID      // returns task ID to client
@@ -313,7 +329,7 @@ func processTasks() {
 	tasks := createOrLoadTasks(dataStore)
 
 	// parse the task channels into directional types as needed
-	var createTaskChan <-chan TransferTask = taskChannels.CreateTask
+	var createTaskChan <-chan transferTask = taskChannels.CreateTask
 	var cancelTaskChan <-chan uuid.UUID = taskChannels.CancelTask
 	var getTaskStatusChan <-chan uuid.UUID = taskChannels.GetTaskStatus
 	var returnTaskIdChan chan<- uuid.UUID = taskChannels.ReturnTaskId

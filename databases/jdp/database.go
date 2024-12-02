@@ -23,6 +23,7 @@ package jdp
 
 import (
 	"bytes"
+	"encoding/gob"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -34,6 +35,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/google/uuid"
@@ -44,29 +46,328 @@ import (
 	"github.com/kbase/dts/frictionless"
 )
 
+// file database appropriate for handling JDP searches and transfers
+// (implements the databases.Database interface)
+type Database struct {
+	// database identifier
+	Id string
+	// ORCID identifier for database proxy
+	Orcid string
+	// HTTP client that caches queries
+	Client http.Client
+	// shared secret used for authentication
+	Secret string
+	// SSO token used for interim JDP access
+	SsoToken string
+	// mapping from staging UUIDs to JDP restoration request ID
+	StagingRequests map[uuid.UUID]StagingRequest
+}
+
+type StagingRequest struct {
+	// JDP staging request ID
+	Id int
+	// time of staging request (for purging)
+	Time time.Time
+}
+
+func NewDatabase(orcid string) (databases.Database, error) {
+	if orcid == "" {
+		return nil, fmt.Errorf("No ORCID ID was given")
+	}
+
+	// make sure we have a shared secret or an SSO token
+	secret, haveSecret := os.LookupEnv("DTS_JDP_SECRET")
+	if !haveSecret { // check for SSO token
+		_, haveToken := os.LookupEnv("DTS_JDP_SSO_TOKEN")
+		if !haveToken {
+			return nil, fmt.Errorf("No shared secret or SSO token was found for JDP authentication")
+		}
+	}
+
+	// make sure we are using only a single endpoint
+	if config.Databases["jdp"].Endpoint == "" {
+		return nil, databases.InvalidEndpointsError{
+			Database: "jdp",
+			Message:  "The JGI data portal should only have a single endpoint configured.",
+		}
+	}
+
+	return &Database{
+		Id:              "jdp",
+		Orcid:           orcid,
+		Secret:          secret,
+		SsoToken:        os.Getenv("DTS_JDP_SSO_TOKEN"),
+		StagingRequests: make(map[uuid.UUID]StagingRequest),
+	}, nil
+}
+
+func (db Database) SpecificSearchParameters() map[string]interface{} {
+	return map[string]interface{}{
+		// see https://files.jgi.doe.gov/apidoc/#/GET/search_list
+		"d": []string{"asc", "desc"}, // sort direction (ascending/descending)
+		"f": []string{"ssr", "biosample", "project_id", "library", // search specific field
+			"img_taxon_oid"},
+		"include_private_data": []int{0, 1},                                             // flag to include private data
+		"s":                    []string{"name", "id", "title", "kingdom", "score.avg"}, // sort order
+		"extra":                []string{"img_taxon_oid", "project_id"},                 // list of requested extra fields
+	}
+}
+
+func (db *Database) Search(params databases.SearchParameters) (databases.SearchResults, error) {
+	// we assume the JDP interface for ElasticSearch queries
+	// (see https://files.jgi.doe.gov/apidoc/)
+	pageNumber, pageSize := pageNumberAndSize(params.Pagination.Offset, params.Pagination.MaxNum)
+
+	p := url.Values{}
+	p.Add("q", params.Query)
+	if params.Status == databases.SearchFileStatusStaged {
+		p.Add(`ff[file_status]`, "RESTORED")
+	} else if params.Status == databases.SearchFileStatusUnstaged {
+		p.Add(`ff[file_status]`, "PURGED")
+	}
+	p.Add("p", strconv.Itoa(pageNumber))
+	p.Add("x", strconv.Itoa(pageSize))
+
+	if params.Specific != nil {
+		err := db.addSpecificSearchParameters(params.Specific, &p)
+		if err != nil {
+			return databases.SearchResults{}, err
+		}
+	}
+
+	return db.filesFromSearch(p)
+}
+
+func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, error) {
+	// strip the "JDP:" prefix from our files and create a mapping from IDs to
+	// their original order so we can hand back metadata accordingly
+	strippedFileIds := make([]string, len(fileIds))
+	indexForId := make(map[string]int)
+	for i, fileId := range fileIds {
+		strippedFileIds[i] = strings.TrimPrefix(fileId, "JDP:")
+		indexForId[strippedFileIds[i]] = i
+	}
+
+	type MetadataRequest struct {
+		Ids                []string `json:"ids"`
+		Aggregations       bool     `json:"aggregations"`
+		IncludePrivateData bool     `json:"include_private_data"`
+	}
+	data, err := json.Marshal(MetadataRequest{
+		Ids:                strippedFileIds,
+		Aggregations:       false,
+		IncludePrivateData: true,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := db.post("search/by_file_ids/", bytes.NewReader(data))
+	defer resp.Body.Close()
+	var body []byte
+	body, err = io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	type MetadataResponse struct {
+		Hits struct {
+			Hits []struct {
+				Type   string `json:"_type"`
+				Id     string `json:"_id"`
+				Source struct {
+					Date         string `json:"file_date"`
+					AddedDate    string `json:"added_date"`
+					ModifiedDate string `json:"modified_date"`
+					FilePath     string `json:"file_path"`
+					FileName     string `json:"file_name"`
+					FileSize     int    `json:"file_size"`
+					MD5Sum       string `json:"md5sum"`
+					Metadata     Metadata
+				} `json:"_source"`
+			} `json:"hits"`
+		} `json:"hits"`
+	}
+	var jdpResp MetadataResponse
+	err = json.Unmarshal(body, &jdpResp)
+	if err != nil {
+		return nil, err
+	}
+
+	// translate the response
+	resources := make([]frictionless.DataResource, len(strippedFileIds))
+	for i, md := range jdpResp.Hits.Hits {
+		if md.Id == "" { // permissions problem
+			return nil, &PermissionDeniedError{fileIds[i]}
+		}
+		index, found := indexForId[md.Id]
+		if !found {
+			return nil, &FileIdNotFoundError{fileIds[i]}
+		}
+		file := File{
+			Id:           md.Id,
+			Name:         md.Source.FileName,
+			Path:         md.Source.FilePath,
+			Date:         md.Source.Date,
+			AddedDate:    md.Source.AddedDate,
+			ModifiedDate: md.Source.ModifiedDate,
+			Size:         md.Source.FileSize,
+			Metadata:     md.Source.Metadata,
+			MD5Sum:       md.Source.MD5Sum,
+		}
+		resources[index] = dataResourceFromFile(file)
+		if resources[index].Path == "" || resources[index].Path == "/" { // permissions problem
+			return nil, &PermissionDeniedError{fileIds[index]}
+		}
+
+		// fill in holes where we can and patch up discrepancies
+		// NOTE: we don't retrieve hits.hits._source.file_type because it can be
+		// NOTE: either a string or an array of strings, and I'm just trying for a
+		// NOTE: solution
+		resources[index].Format = formatFromFileName(resources[index].Path)
+		resources[index].MediaType = mimeTypeFromFormatAndTypes(resources[index].Format, []string{})
+	}
+	return resources, err
+}
+
+func (db *Database) StageFiles(fileIds []string) (uuid.UUID, error) {
+	var xferId uuid.UUID
+
+	// construct a POST request to restore archived files with the given IDs
+	type RestoreRequest struct {
+		Ids                []string `json:"ids"`
+		SendEmail          bool     `json:"send_email"`
+		ApiVersion         string   `json:"api_version"`
+		IncludePrivateData int      `json:"include_private_data"`
+	}
+
+	// strip "JDP:" off the file IDs (and remove those without this prefix)
+	fileIdsWithoutPrefix := make([]string, 0)
+	for _, fileId := range fileIds {
+		if strings.HasPrefix(fileId, "JDP:") {
+			fileIdsWithoutPrefix = append(fileIdsWithoutPrefix, fileId[4:])
+		}
+	}
+
+	data, err := json.Marshal(RestoreRequest{
+		Ids:                fileIdsWithoutPrefix,
+		SendEmail:          false,
+		ApiVersion:         "2",
+		IncludePrivateData: 1, // we need this just in case!
+	})
+	if err != nil {
+		return xferId, err
+	}
+
+	// NOTE: The slash in the resource is all-important for POST requests to
+	// NOTE: the JDP!!
+	response, err := db.post("request_archived_files/", bytes.NewReader(data))
+	if err != nil {
+		return xferId, err
+	}
+
+	switch response.StatusCode {
+	case 200, 201, 204:
+		defer response.Body.Close()
+		var body []byte
+		body, err = io.ReadAll(response.Body)
+		if err != nil {
+			return xferId, err
+		}
+		type RestoreResponse struct {
+			RequestId int `json:"request_id"`
+		}
+
+		var jdpResp RestoreResponse
+		err = json.Unmarshal(body, &jdpResp)
+		if err != nil {
+			return xferId, err
+		}
+		slog.Debug(fmt.Sprintf("Requested %d archived files from JDP (request ID: %d)",
+			len(fileIds), jdpResp.RequestId))
+		xferId = uuid.New()
+		db.StagingRequests[xferId] = StagingRequest{
+			Id:   jdpResp.RequestId,
+			Time: time.Now(),
+		}
+		return xferId, err
+	case 404:
+		return xferId, databases.ResourceNotFoundError{
+			Database:   "JDP",
+			ResourceId: strings.Join(fileIds, ","),
+		}
+	default:
+		return xferId, err
+	}
+}
+
+func (db *Database) StagingStatus(id uuid.UUID) (databases.StagingStatus, error) {
+	db.pruneStagingRequests()
+	if request, found := db.StagingRequests[id]; found {
+		resource := fmt.Sprintf("request_archived_files/requests/%d", request.Id)
+		resp, err := db.get(resource, url.Values{})
+		if err != nil {
+			return databases.StagingStatusUnknown, err
+		}
+		defer resp.Body.Close()
+		var body []byte
+		body, err = io.ReadAll(resp.Body)
+		if err != nil {
+			return databases.StagingStatusUnknown, err
+		}
+		type JDPResult struct {
+			Status string `json:"status"` // "new", "pending", or "ready"
+		}
+		var jdpResult JDPResult
+		err = json.Unmarshal(body, &jdpResult)
+		if err != nil {
+			return databases.StagingStatusUnknown, err
+		}
+		statusForString := map[string]databases.StagingStatus{
+			"new":     databases.StagingStatusActive,
+			"pending": databases.StagingStatusActive,
+			"ready":   databases.StagingStatusSucceeded,
+		}
+		if status, ok := statusForString[jdpResult.Status]; ok {
+			return status, nil
+		}
+		return databases.StagingStatusUnknown, fmt.Errorf("Unrecognized staging status string: %s", jdpResult.Status)
+	} else {
+		return databases.StagingStatusUnknown, nil
+	}
+}
+
+func (db *Database) LocalUser(orcid string) (string, error) {
+	// no current mechanism for this
+	return "localuser", nil
+}
+
+func (db Database) Save() (databases.DatabaseSaveState, error) {
+	var buffer bytes.Buffer
+	enc := gob.NewEncoder(&buffer)
+	err := enc.Encode(db.StagingRequests)
+	if err != nil {
+		return databases.DatabaseSaveState{}, err
+	}
+	return databases.DatabaseSaveState{
+		Name: "jdp",
+		Data: buffer.Bytes(),
+	}, nil
+}
+
+func (db *Database) Load(state databases.DatabaseSaveState) error {
+	enc := gob.NewDecoder(bytes.NewReader(state.Data))
+	return enc.Decode(&db.StagingRequests)
+}
+
+//--------------------
+// Internal machinery
+//--------------------
+
 const (
 	jdpBaseURL     = "https://files.jgi.doe.gov/"
 	filePathPrefix = "/global/dna/dm_archive/" // directory containing JDP files
 )
-
-// this error type is returned when a file is requested for which the requester
-// does not have permission
-type PermissionDeniedError struct {
-	fileId string
-}
-
-func (e PermissionDeniedError) Error() string {
-	return fmt.Sprintf("Can't access file %s: permission denied.", e.fileId)
-}
-
-// this error type is returned when a file is requested and is not found
-type FileIdNotFoundError struct {
-	fileId string
-}
-
-func (e FileIdNotFoundError) Error() string {
-	return fmt.Sprintf("Can't access file %s: not found.", e.fileId)
-}
 
 // a mapping from file suffixes to format labels
 var suffixToFormat = map[string]string{
@@ -169,7 +470,7 @@ func mimeTypeFromFormatAndTypes(format string, fileTypes []string) string {
 }
 
 // extracts file type information from the given File
-func fileTypesFromFile(file File) []string {
+func fileTypesFromFile(_ File) []string {
 	// TODO: See https://pkg.go.dev/encoding/json?utm_source=godoc#example-RawMessage-Unmarshal
 	// TODO: for an example of how to unmarshal a variant type.
 	return []string{}
@@ -327,54 +628,6 @@ func dataResourceFromFile(file File) frictionless.DataResource {
 	}
 }
 
-// file database appropriate for handling JDP searches and transfers
-// (implements the databases.Database interface)
-type Database struct {
-	// database identifier
-	Id string
-	// ORCID identifier for database proxy
-	Orcid string
-	// HTTP client that caches queries
-	Client http.Client
-	// shared secret used for authentication
-	Secret string
-	// SSO token used for interim JDP access
-	SsoToken string
-	// mapping from staging UUIDs to JDP restoration request ID
-	StagingIds map[uuid.UUID]int
-}
-
-func NewDatabase(orcid string) (databases.Database, error) {
-	if orcid == "" {
-		return nil, fmt.Errorf("No ORCID ID was given")
-	}
-
-	// make sure we have a shared secret or an SSO token
-	secret, haveSecret := os.LookupEnv("DTS_JDP_SECRET")
-	if !haveSecret { // check for SSO token
-		_, haveToken := os.LookupEnv("DTS_JDP_SSO_TOKEN")
-		if !haveToken {
-			return nil, fmt.Errorf("No shared secret or SSO token was found for JDP authentication")
-		}
-	}
-
-	// make sure we are using only a single endpoint
-	if config.Databases["jdp"].Endpoint == "" {
-		return nil, databases.InvalidEndpointsError{
-			Database: "jdp",
-			Message:  "The JGI data portal should only have a single endpoint configured.",
-		}
-	}
-
-	return &Database{
-		Id:         "jdp",
-		Orcid:      orcid,
-		Secret:     secret,
-		SsoToken:   os.Getenv("DTS_JDP_SSO_TOKEN"),
-		StagingIds: make(map[uuid.UUID]int),
-	}, nil
-}
-
 // adds an appropriate authorization header to given HTTP request
 func (db Database) addAuthHeader(request *http.Request) {
 	if len(db.Secret) > 0 { // use shared secret
@@ -513,18 +766,6 @@ func pageNumberAndSize(offset, maxNum int) (int, int) {
 	return pageNumber, pageSize
 }
 
-func (db Database) SpecificSearchParameters() map[string]interface{} {
-	return map[string]interface{}{
-		// see https://files.jgi.doe.gov/apidoc/#/GET/search_list
-		"d": []string{"asc", "desc"}, // sort direction (ascending/descending)
-		"f": []string{"ssr", "biosample", "project_id", "library", // search specific field
-			"img_taxon_oid"},
-		"include_private_data": []int{0, 1},                                             // flag to include private data
-		"s":                    []string{"name", "id", "title", "kingdom", "score.avg"}, // sort order
-		"extra":                []string{"img_taxon_oid", "project_id"},                 // list of requested extra fields
-	}
-}
-
 // checks JDP-specific search parameters and adds them to the given URL values
 func (db Database) addSpecificSearchParameters(params map[string]json.RawMessage, p *url.Values) error {
 	paramSpec := db.SpecificSearchParameters()
@@ -622,217 +863,12 @@ func (db Database) addSpecificSearchParameters(params map[string]json.RawMessage
 	return nil
 }
 
-func (db *Database) Search(params databases.SearchParameters) (databases.SearchResults, error) {
-	// we assume the JDP interface for ElasticSearch queries
-	// (see https://files.jgi.doe.gov/apidoc/)
-	pageNumber, pageSize := pageNumberAndSize(params.Pagination.Offset, params.Pagination.MaxNum)
-
-	p := url.Values{}
-	p.Add("q", params.Query)
-	if params.Status == databases.SearchFileStatusStaged {
-		p.Add(`ff[file_status]`, "RESTORED")
-	} else if params.Status == databases.SearchFileStatusUnstaged {
-		p.Add(`ff[file_status]`, "PURGED")
-	}
-	p.Add("p", strconv.Itoa(pageNumber))
-	p.Add("x", strconv.Itoa(pageSize))
-
-	if params.Specific != nil {
-		err := db.addSpecificSearchParameters(params.Specific, &p)
-		if err != nil {
-			return databases.SearchResults{}, err
+func (db *Database) pruneStagingRequests() {
+	deleteAfter := time.Duration(config.Service.DeleteAfter) * time.Second
+	for uuid, request := range db.StagingRequests {
+		requestAge := time.Since(request.Time)
+		if requestAge > deleteAfter {
+			delete(db.StagingRequests, uuid)
 		}
 	}
-
-	return db.filesFromSearch(p)
-}
-
-func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, error) {
-	// strip the "JDP:" prefix from our files and create a mapping from IDs to
-	// their original order so we can hand back metadata accordingly
-	strippedFileIds := make([]string, len(fileIds))
-	indexForId := make(map[string]int)
-	for i, fileId := range fileIds {
-		strippedFileIds[i] = strings.TrimPrefix(fileId, "JDP:")
-		indexForId[strippedFileIds[i]] = i
-	}
-
-	type MetadataRequest struct {
-		Ids                []string `json:"ids"`
-		Aggregations       bool     `json:"aggregations"`
-		IncludePrivateData bool     `json:"include_private_data"`
-	}
-	data, err := json.Marshal(MetadataRequest{
-		Ids:                strippedFileIds,
-		Aggregations:       false,
-		IncludePrivateData: true,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := db.post("search/by_file_ids/", bytes.NewReader(data))
-	defer resp.Body.Close()
-	var body []byte
-	body, err = io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	type MetadataResponse struct {
-		Hits struct {
-			Hits []struct {
-				Type   string `json:"_type"`
-				Id     string `json:"_id"`
-				Source struct {
-					Date         string `json:"file_date"`
-					AddedDate    string `json:"added_date"`
-					ModifiedDate string `json:"modified_date"`
-					FilePath     string `json:"file_path"`
-					FileName     string `json:"file_name"`
-					FileSize     int    `json:"file_size"`
-					MD5Sum       string `json:"md5sum"`
-					Metadata     Metadata
-				} `json:"_source"`
-			} `json:"hits"`
-		} `json:"hits"`
-	}
-	var jdpResp MetadataResponse
-	err = json.Unmarshal(body, &jdpResp)
-	if err != nil {
-		return nil, err
-	}
-
-	// translate the response
-	resources := make([]frictionless.DataResource, len(strippedFileIds))
-	for i, md := range jdpResp.Hits.Hits {
-		if md.Id == "" { // permissions problem
-			return nil, &PermissionDeniedError{fileIds[i]}
-		}
-		index, found := indexForId[md.Id]
-		if !found {
-			return nil, &FileIdNotFoundError{fileIds[i]}
-		}
-		file := File{
-			Id:           md.Id,
-			Name:         md.Source.FileName,
-			Path:         md.Source.FilePath,
-			Date:         md.Source.Date,
-			AddedDate:    md.Source.AddedDate,
-			ModifiedDate: md.Source.ModifiedDate,
-			Size:         md.Source.FileSize,
-			Metadata:     md.Source.Metadata,
-			MD5Sum:       md.Source.MD5Sum,
-		}
-		resources[index] = dataResourceFromFile(file)
-		if resources[index].Path == "" || resources[index].Path == "/" { // permissions probem
-			return nil, &PermissionDeniedError{fileIds[index]}
-		}
-
-		// fill in holes where we can and patch up discrepancies
-		// NOTE: we don't retrieve hits.hits._source.file_type because it can be
-		// NOTE: either a string or an array of strings, and I'm just trying for a
-		// NOTE: solution
-		resources[index].Format = formatFromFileName(resources[index].Path)
-		resources[index].MediaType = mimeTypeFromFormatAndTypes(resources[index].Format, []string{})
-	}
-	return resources, err
-}
-
-func (db *Database) StageFiles(fileIds []string) (uuid.UUID, error) {
-	var xferId uuid.UUID
-
-	// construct a POST request to restore archived files with the given IDs
-	type RestoreRequest struct {
-		Ids                []string `json:"ids"`
-		SendEmail          bool     `json:"send_email"`
-		ApiVersion         string   `json:"api_version"`
-		IncludePrivateData int      `json:"include_private_data"`
-	}
-
-	// strip "JDP:" off the file IDs (and remove those without this prefix)
-	fileIdsWithoutPrefix := make([]string, 0)
-	for _, fileId := range fileIds {
-		if strings.HasPrefix(fileId, "JDP:") {
-			fileIdsWithoutPrefix = append(fileIdsWithoutPrefix, fileId[4:])
-		}
-	}
-
-	data, err := json.Marshal(RestoreRequest{
-		Ids:                fileIdsWithoutPrefix,
-		SendEmail:          false,
-		ApiVersion:         "2",
-		IncludePrivateData: 1, // we need this just in case!
-	})
-	if err != nil {
-		return xferId, err
-	}
-
-	// NOTE: The slash in the resource is all-important for POST requests to
-	// NOTE: the JDP!!
-	resp, err := db.post("request_archived_files/", bytes.NewReader(data))
-	if err != nil {
-		return xferId, err
-	}
-	defer resp.Body.Close()
-	var body []byte
-	body, err = io.ReadAll(resp.Body)
-	if err != nil {
-		return xferId, err
-	}
-	type RestoreResponse struct {
-		RequestId int `json:"request_id"`
-	}
-
-	var jdpResp RestoreResponse
-	err = json.Unmarshal(body, &jdpResp)
-	if err != nil {
-		return xferId, err
-	}
-	slog.Debug(fmt.Sprintf("Requested %d archived files from JDP (request ID: %d)",
-		len(fileIds), jdpResp.RequestId))
-	xferId = uuid.New()
-	db.StagingIds[xferId] = jdpResp.RequestId
-	return xferId, err
-}
-
-func (db *Database) StagingStatus(id uuid.UUID) (databases.StagingStatus, error) {
-	if restoreId, found := db.StagingIds[id]; found {
-		resource := fmt.Sprintf("request_archived_files/requests/%d", restoreId)
-		resp, err := db.get(resource, url.Values{})
-		if err != nil {
-			return databases.StagingStatusUnknown, err
-		}
-		defer resp.Body.Close()
-		var body []byte
-		body, err = io.ReadAll(resp.Body)
-		if err != nil {
-			return databases.StagingStatusUnknown, err
-		}
-		type JDPResult struct {
-			Status string `json:"status"` // "new", "pending", or "ready"
-		}
-		var jdpResult JDPResult
-		err = json.Unmarshal(body, &jdpResult)
-		if err != nil {
-			return databases.StagingStatusUnknown, err
-		}
-		statusForString := map[string]databases.StagingStatus{
-			"new":     databases.StagingStatusActive,
-			"pending": databases.StagingStatusActive,
-			"ready":   databases.StagingStatusSucceeded,
-		}
-		if status, ok := statusForString[jdpResult.Status]; ok {
-			return status, nil
-		} else {
-			return status, fmt.Errorf("Unrecognized staging status string: %s", jdpResult.Status)
-		}
-	} else {
-		return databases.StagingStatusUnknown, nil
-	}
-}
-
-func (db *Database) LocalUser(orcid string) (string, error) {
-	// no current mechanism for this
-	return "localuser", nil
 }

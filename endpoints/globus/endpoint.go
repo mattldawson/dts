@@ -60,14 +60,6 @@ func (e GlobusError) Error() string {
 	return fmt.Sprintf("%s (%s)", e.Message, e.Code)
 }
 
-// returns true if a Globus response body matches an error
-func responseIsError(body []byte) bool {
-	bodyStr := string(body)
-	return strings.Contains(bodyStr, "\"code\"") &&
-		!strings.Contains(bodyStr, "\"code\": \"Accepted\"") &&
-		strings.Contains(string(body), "\"message\"")
-}
-
 // this type satisfies the endpoints.Endpoint interface for Globus endpoints
 type Endpoint struct {
 	// descriptive endpoint name (obtained from config)
@@ -150,7 +142,7 @@ func (ep *Endpoint) FilesStaged(files []frictionless.DataResource) (bool, error)
 	// (https://docs.globus.org/api/transfer/file_operations/#list_directory_contents)
 	for dir, files := range filesInDir {
 		values := url.Values{}
-		values.Add("path", "/"+dir)
+		values.Add("path", dir)
 		values.Add("orderby", "name ASC")
 		resource := fmt.Sprintf("operation/endpoint/%s/ls", ep.Id.String())
 		body, err := ep.get(resource, values)
@@ -159,10 +151,6 @@ func (ep *Endpoint) FilesStaged(files []frictionless.DataResource) (bool, error)
 			switch globusErr.Code {
 			case "ClientError.NotFound":
 				// it's okay if the directory doesn't exist -- it might need to be staged
-				return false, nil
-			case "ExternalError.DirListingFailed.LoginFailed":
-				// unfortunately, Globus throws this error when there's a network hiccup,
-				// so we can't take it seriously as an actual error condition
 				return false, nil
 			default:
 				// propagate the error
@@ -309,17 +297,15 @@ func (ep *Endpoint) Status(id uuid.UUID) (endpoints.TransferStatus, error) {
 			}
 		} else {
 			// it's probably real
-			if err == nil {
-				// find the first error event
-				for _, event := range eventList.Data {
-					if event.IsError {
-						// sometimes Globus throws an AUTH error here during a network burp, so we
-						// ignore it and report a failed status check (after all, we can't get here
-						// without AUTHing successfully!)
-						return endpoints.TransferStatus{},
-							fmt.Errorf("%s (%s):\n%s", event.Description, event.Code,
-								event.Details)
-					}
+			// find the first error event
+			for _, event := range eventList.Data {
+				if event.IsError {
+					// sometimes Globus throws an AUTH error here during a network burp, so we
+					// ignore it and report a failed status check (after all, we can't get here
+					// without AUTHing successfully!)
+					return endpoints.TransferStatus{},
+						fmt.Errorf("%s (%s):\n%s", event.Description, event.Code,
+							event.Details)
 				}
 			}
 			// fall back to the "nice status"
@@ -368,6 +354,18 @@ func (ep *Endpoint) Cancel(id uuid.UUID) error {
 		}
 	}
 	return err
+}
+
+//-----------
+// Internals
+//-----------
+
+// returns true if a Globus response body matches an error
+func responseIsError(body []byte) bool {
+	bodyStr := string(body)
+	return strings.Contains(bodyStr, "\"code\"") &&
+		!strings.Contains(bodyStr, "\"code\": \"Accepted\"") &&
+		strings.Contains(string(body), "\"message\"")
 }
 
 // (re)authenticates with Globus using its client ID and secret to obtain an

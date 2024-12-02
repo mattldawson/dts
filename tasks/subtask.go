@@ -37,7 +37,7 @@ import (
 // multiple endpoints attached to a single source/destination database pair).
 // It holds multiple (possibly null) UUIDs corresponding to different
 // states in the file transfer lifecycle
-type TransferSubtask struct {
+type transferSubtask struct {
 	Destination         string                  // name of destination database (in config)
 	DestinationEndpoint string                  // name of destination database (in config)
 	DestinationFolder   string                  // folder path to which files are transferred
@@ -51,7 +51,7 @@ type TransferSubtask struct {
 	UserInfo            auth.UserInfo           // info about user requesting transfer
 }
 
-func (subtask *TransferSubtask) start() error {
+func (subtask *transferSubtask) start() error {
 	// are the files already staged? (only works for public data)
 	sourceEndpoint, err := endpoints.NewEndpoint(subtask.SourceEndpoint)
 	if err != nil {
@@ -75,10 +75,13 @@ func (subtask *TransferSubtask) start() error {
 		for i, resource := range subtask.Resources {
 			fileIds[i] = resource.Id
 		}
-		subtask.Staging.UUID, err = source.StageFiles(fileIds)
-		subtask.Staging.Valid = true
+		taskId, err := source.StageFiles(fileIds)
 		if err != nil {
 			return err
+		}
+		subtask.Staging = uuid.NullUUID{
+			UUID:  taskId,
+			Valid: true,
 		}
 		subtask.TransferStatus = TransferStatus{
 			Code:     TransferStatusStaging,
@@ -89,7 +92,7 @@ func (subtask *TransferSubtask) start() error {
 }
 
 // updates the state of a subtask, setting its status as necessary
-func (subtask *TransferSubtask) update() error {
+func (subtask *transferSubtask) update() error {
 	var err error
 	if subtask.Staging.Valid { // we're staging
 		err = subtask.checkStaging()
@@ -99,8 +102,92 @@ func (subtask *TransferSubtask) update() error {
 	return err
 }
 
+// checks whether files for a subtask are finished staging and, if so,
+// initiates the transfer process
+func (subtask *transferSubtask) checkStaging() error {
+	source, err := databases.NewDatabase(subtask.UserInfo.Orcid, subtask.Source)
+	if err != nil {
+		return err
+	}
+	// check with the database first to see whether the files are staged
+	subtask.StagingStatus, err = source.StagingStatus(subtask.Staging.UUID)
+	if err != nil {
+		return err
+	}
+
+	if subtask.StagingStatus == databases.StagingStatusSucceeded { // staged!
+		// the database thinks the files are staged. Does its endpoint agree?
+		endpoint, err := endpoints.NewEndpoint(subtask.SourceEndpoint)
+		if err != nil {
+			return err
+		}
+		staged, err := endpoint.FilesStaged(subtask.Resources)
+		if err != nil {
+			return err
+		}
+		if !staged {
+			return fmt.Errorf("Database %s reports staged files, but endpoint %s cannot see them. Is the endpoint's root set properly?",
+				subtask.Source, subtask.SourceEndpoint)
+		}
+		return subtask.beginTransfer() // move along
+	}
+	return nil
+}
+
+// checks whether files for a task are finished transferring and, if so,
+// initiates the generation of the file manifest
+func (subtask *transferSubtask) checkTransfer() error {
+	// has the data transfer completed?
+	sourceEndpoint, err := endpoints.NewEndpoint(subtask.SourceEndpoint)
+	if err != nil {
+		return err
+	}
+	subtask.TransferStatus, err = sourceEndpoint.Status(subtask.Transfer.UUID)
+	if err != nil {
+		return err
+	}
+	if subtask.TransferStatus.Code == TransferStatusSucceeded ||
+		subtask.TransferStatus.Code == TransferStatusFailed { // transfer finished
+		subtask.Transfer = uuid.NullUUID{}
+	}
+	return nil
+}
+
+// issues a cancellation request to the endpoint associated with the subtask
+func (subtask *transferSubtask) cancel() error {
+	if subtask.Transfer.Valid { // we're transferring
+		// fetch the source endpoint
+		endpoint, err := endpoints.NewEndpoint(subtask.SourceEndpoint)
+		if err != nil {
+			return err
+		}
+
+		// request that the task be canceled using its UUID
+		return endpoint.Cancel(subtask.Transfer.UUID)
+	}
+	return nil
+}
+
+// updates the status of a canceled subtask depending on where it is in its
+// lifecycle
+func (subtask *transferSubtask) checkCancellation() error {
+	if subtask.Transfer.Valid {
+		endpoint, err := endpoints.NewEndpoint(subtask.SourceEndpoint)
+		if err != nil {
+			return err
+		}
+		subtask.TransferStatus, err = endpoint.Status(subtask.Transfer.UUID)
+		return err
+	}
+
+	// at any other point in the lifecycle, terminate the task
+	subtask.TransferStatus.Code = TransferStatusFailed
+	subtask.TransferStatus.Message = "Task canceled at user request"
+	return nil
+}
+
 // initiates a file transfer on a set of staged files
-func (subtask *TransferSubtask) beginTransfer() error {
+func (subtask *transferSubtask) beginTransfer() error {
 	slog.Debug(fmt.Sprintf("Transferring %d file(s) from %s to %s",
 		len(subtask.Resources), subtask.SourceEndpoint, subtask.DestinationEndpoint))
 	// assemble a list of file transfers
@@ -123,94 +210,18 @@ func (subtask *TransferSubtask) beginTransfer() error {
 	if err != nil {
 		return err
 	}
-	subtask.Transfer.UUID, err = sourceEndpoint.Transfer(destinationEndpoint, fileXfers)
+	transferId, err := sourceEndpoint.Transfer(destinationEndpoint, fileXfers)
 	if err != nil {
 		return err
 	}
-
+	subtask.Transfer = uuid.NullUUID{
+		UUID:  transferId,
+		Valid: true,
+	}
 	subtask.TransferStatus = TransferStatus{
 		Code:     TransferStatusActive,
 		NumFiles: len(subtask.Resources),
 	}
 	subtask.Staging = uuid.NullUUID{}
-	subtask.Transfer.Valid = true
-	return nil
-}
-
-// checks whether files for a subtask are finished staging and, if so,
-// initiates the transfer process
-func (subtask *TransferSubtask) checkStaging() error {
-	source, err := databases.NewDatabase(subtask.UserInfo.Orcid, subtask.Source)
-	if err != nil {
-		return err
-	}
-	// check with the database first to see whether the files are staged
-	subtask.StagingStatus, err = source.StagingStatus(subtask.Staging.UUID)
-	if err != nil {
-		return err
-	}
-
-	if subtask.StagingStatus == databases.StagingStatusSucceeded { // staged!
-		// the database thinks the files are staged. Does its endpoint agree?
-		endpoint, _ := endpoints.NewEndpoint(subtask.SourceEndpoint)
-		staged, _ := endpoint.FilesStaged(subtask.Resources)
-		if !staged {
-			return fmt.Errorf("Database %s reports staged files, but endpoint %s cannot see them. Is the endpoint's root set properly?",
-				subtask.Source, subtask.SourceEndpoint)
-		}
-		return subtask.beginTransfer() // move along
-	}
-	return nil
-}
-
-// checks whether files for a task are finished transferring and, if so,
-// initiates the generation of the file manifest
-func (subtask *TransferSubtask) checkTransfer() error {
-	// has the data transfer completed?
-	sourceEndpoint, err := endpoints.NewEndpoint(subtask.SourceEndpoint)
-	if err != nil {
-		return err
-	}
-	subtask.TransferStatus, err = sourceEndpoint.Status(subtask.Transfer.UUID)
-	if err != nil {
-		return err
-	}
-	if subtask.TransferStatus.Code == TransferStatusSucceeded ||
-		subtask.TransferStatus.Code == TransferStatusFailed { // transfer finished
-		subtask.Transfer = uuid.NullUUID{}
-	}
-	return nil
-}
-
-// issues a cancellation request to the endpoint associated with the subtask
-func (subtask *TransferSubtask) cancel() error {
-	if subtask.Transfer.Valid { // we're transferring
-		// fetch the source endpoint
-		endpoint, err := endpoints.NewEndpoint(subtask.SourceEndpoint)
-		if err != nil {
-			return err
-		}
-
-		// request that the task be canceled using its UUID
-		return endpoint.Cancel(subtask.Transfer.UUID)
-	}
-	return nil
-}
-
-// updates the status of a canceled subtask depending on where it is in its
-// lifecycle
-func (subtask *TransferSubtask) checkCancellation() error {
-	if subtask.Transfer.Valid {
-		endpoint, err := endpoints.NewEndpoint(subtask.SourceEndpoint)
-		if err != nil {
-			return err
-		}
-		subtask.TransferStatus, err = endpoint.Status(subtask.Transfer.UUID)
-		return err
-	}
-
-	// at any other point in the lifecycle, terminate the task
-	subtask.TransferStatus.Code = TransferStatusFailed
-	subtask.TransferStatus.Message = "Task canceled at user request"
 	return nil
 }

@@ -24,55 +24,11 @@ package databases
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 
 	"github.com/kbase/dts/frictionless"
-)
-
-type SearchPaginationParameters struct {
-	// number of search results to skip
-	Offset int
-	// maximum number of search results to include (0 indicates no max)
-	MaxNum int
-}
-
-// allows searching for files that are staged, not yet staged, etc
-type SearchFileStatus int
-
-const (
-	SearchFileStatusAny SearchFileStatus = iota
-	SearchFileStatusStaged
-	SearchFileStatusUnstaged
-)
-
-// parameters that define a search for files
-type SearchParameters struct {
-	// ElasticSearch query string
-	Query string
-	// file status, if requested
-	Status SearchFileStatus
-	// pagination support
-	Pagination SearchPaginationParameters
-	// database-specific search parameters with names matched to provided values
-	// (validated by database)
-	Specific map[string]json.RawMessage
-}
-
-// results from a file query
-type SearchResults struct {
-	Resources []frictionless.DataResource `json:"resources"`
-}
-
-// This "enum" type identifies the status of a staging operation that moves
-// files into place on a Database's endpoint.
-type StagingStatus int
-
-const (
-	StagingStatusUnknown   StagingStatus = iota // unknown staging operation or status not available
-	StagingStatusActive                         // staging in progress
-	StagingStatusSucceeded                      // staging completed successfully
-	StagingStatusFailed                         // staging failed
 )
 
 // Database defines the interface for a database that is used to search for
@@ -97,23 +53,80 @@ type Database interface {
 	StagingStatus(id uuid.UUID) (StagingStatus, error)
 	// returns the local username associated with the given Orcid ID
 	LocalUser(orcid string) (string, error)
+	// returns the saved state of the Database, loadable via Load
+	Save() (DatabaseSaveState, error)
+	// loads a previously saved state into the Database
+	Load(state DatabaseSaveState) error
 }
 
-// we maintain a table of database instances, identified by their names
-var allDatabases = make(map[string]Database)
+// represents a saved database state (for service restarts)
+type DatabaseSaveState struct {
+	// database name
+	Name string
+	// serialized database in bytes
+	Data []byte
+}
 
-// here's a table of database creation functions
-var createDatabaseFuncs = make(map[string]func(name string) (Database, error))
+// represents a collection of saved database states
+type DatabaseSaveStates struct {
+	// mapping of orcid/database keys to database save states
+	Data map[string]DatabaseSaveState
+}
+
+// parameters that define a search for files
+type SearchParameters struct {
+	// ElasticSearch query string
+	Query string
+	// file status, if requested
+	Status SearchFileStatus
+	// pagination support
+	Pagination SearchPaginationParameters
+	// database-specific search parameters with names matched to provided values
+	// (validated by database)
+	Specific map[string]json.RawMessage
+}
+
+// results from a file search
+type SearchResults struct {
+	Resources []frictionless.DataResource `json:"resources"`
+}
+
+type SearchPaginationParameters struct {
+	// number of search results to skip
+	Offset int
+	// maximum number of search results to include (0 indicates no max)
+	MaxNum int
+}
+
+// allows searching for files that are staged, not yet staged, etc
+type SearchFileStatus int
+
+const (
+	SearchFileStatusAny SearchFileStatus = iota
+	SearchFileStatusStaged
+	SearchFileStatusUnstaged
+)
+
+// This enum identifies the status of a staging operation that moves
+// files into place on a Database's endpoint.
+type StagingStatus int
+
+const (
+	StagingStatusUnknown   StagingStatus = iota // unknown staging operation or status not available
+	StagingStatusActive                         // staging in progress
+	StagingStatusSucceeded                      // staging completed successfully
+	StagingStatusFailed                         // staging failed
+)
 
 // registers a database creation function under the given database name
 // to allow for e.g. test database implementations
 func RegisterDatabase(dbName string, createDb func(orcid string) (Database, error)) error {
-	if _, found := createDatabaseFuncs[dbName]; found {
+	if _, found := createDatabaseFuncs_[dbName]; found {
 		return AlreadyRegisteredError{
 			Database: dbName,
 		}
 	} else {
-		createDatabaseFuncs[dbName] = createDb
+		createDatabaseFuncs_[dbName] = createDb
 		return nil
 	}
 }
@@ -125,17 +138,65 @@ func NewDatabase(orcid, dbName string) (Database, error) {
 
 	// do we have one of these already?
 	key := fmt.Sprintf("orcid: %s db: %s", orcid, dbName)
-	db, found := allDatabases[key]
+	db, found := allDatabases_[key]
 	if !found {
 		// create the requested database
-		if createDb, valid := createDatabaseFuncs[dbName]; valid {
+		if createDb, valid := createDatabaseFuncs_[dbName]; valid {
 			db, err = createDb(orcid)
 		} else {
 			err = NotFoundError{dbName}
 		}
 		if err == nil {
-			allDatabases[key] = db // stash it
+			allDatabases_[key] = db // stash it
 		}
 	}
 	return db, err
 }
+
+// saves the internal states of all resident databases, returning a map to
+// their save states
+func Save() (DatabaseSaveStates, error) {
+	states := DatabaseSaveStates{
+		Data: make(map[string]DatabaseSaveState),
+	}
+	for key, db := range allDatabases_ {
+		saveState, err := db.Save()
+		if err != nil {
+			return states, err
+		}
+		states.Data[key] = saveState
+	}
+	return states, nil
+}
+
+// loads a previously saved map of save states for all databases, restoring
+// their previous states
+func Load(states DatabaseSaveStates) error {
+	for key, state := range states.Data {
+		start := strings.Index(key, "orcid: ") + 8
+		end := strings.Index(key, "db: ") - 1
+		if start == 7 || end == -2 {
+			return fmt.Errorf("Couldn't load saved state for database '%s'", state.Name)
+		}
+		orcid := key[start:end]
+		db, err := NewDatabase(orcid, state.Name)
+		if err != nil {
+			return err
+		}
+		err = db.Load(state)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+//-----------
+// Internals
+//-----------
+
+// we maintain a table of database instances, identified by their names
+var allDatabases_ = make(map[string]Database)
+
+// a table of database creation functions
+var createDatabaseFuncs_ = make(map[string]func(name string) (Database, error))

@@ -216,7 +216,7 @@ func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, er
 			MD5Sum:       md.Source.MD5Sum,
 		}
 		resources[index] = dataResourceFromFile(file)
-		if resources[index].Path == "" || resources[index].Path == "/" { // permissions probem
+		if resources[index].Path == "" || resources[index].Path == "/" { // permissions problem
 			return nil, &PermissionDeniedError{fileIds[index]}
 		}
 
@@ -330,9 +330,8 @@ func (db *Database) StagingStatus(id uuid.UUID) (databases.StagingStatus, error)
 		}
 		if status, ok := statusForString[jdpResult.Status]; ok {
 			return status, nil
-		} else {
-			return status, fmt.Errorf("Unrecognized staging status string: %s", jdpResult.Status)
 		}
+		return databases.StagingStatusUnknown, fmt.Errorf("Unrecognized staging status string: %s", jdpResult.Status)
 	} else {
 		return databases.StagingStatusUnknown, nil
 	}

@@ -276,3 +276,11 @@ func (db *Database) Endpoint() (endpoints.Endpoint, error) {
 func (db *Database) LocalUser(orcid string) (string, error) {
 	return "testuser", nil
 }
+
+func (db *Database) Save() (databases.DatabaseSaveState, error) {
+	return databases.DatabaseSaveState{}, nil
+}
+
+func (db *Database) Load(state databases.DatabaseSaveState) error {
+	return nil
+}

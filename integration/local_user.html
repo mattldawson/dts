@@ -20,7 +20,7 @@
     
     
       
-        <title>Map ORCID IDs to Local User Accounts - DTS: A Data Transfer System</title>
+        <title>Map ORCIDs to Local User Accounts - DTS: A Data Transfer System</title>
       
     
     
@@ -72,7 +72,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#map-orcid-ids-to-local-user-accounts" class="md-skip">
+        <a href="#map-orcids-to-local-user-accounts" class="md-skip">
           Skip to content
         </a>
       
@@ -108,7 +108,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Map ORCID IDs to Local User Accounts
+              Map ORCIDs to Local User Accounts
             
           </span>
         </div>
@@ -604,7 +604,7 @@
           
   
   <span class="md-ellipsis">
-    Map ORCID IDs to Local User Accounts
+    Map ORCIDs to Local User Accounts
   </span>
   
 
@@ -615,7 +615,7 @@
         
   
   <span class="md-ellipsis">
-    Map ORCID IDs to Local User Accounts
+    Map ORCIDs to Local User Accounts
   </span>
   
 
@@ -1061,27 +1061,27 @@
                   
 
 
-<h1 id="map-orcid-ids-to-local-user-accounts">Map ORCID IDs to Local User Accounts</h1>
-<p>The Data Transfer System (DTS) uses <a href="https://info.orcid.org/what-is-orcid/">ORCID IDs</a>
+<h1 id="map-orcids-to-local-user-accounts">Map ORCIDs to Local User Accounts</h1>
+<p>The Data Transfer System (DTS) uses <a href="https://info.orcid.org/what-is-orcid/">ORCIDs</a>
 to identify individuals and organizations. In order to understand who is
 transferring what where when, your database must establish a connection between
-a user's ORCID ID and their local account on your system. This connection is a
+a user's ORCID and their local account on your system. This connection is a
 form of <a href="https://en.wikipedia.org/wiki/Federated_identity">federated identity management</a>,
 similar to Single Sign-On (SSO) authentication services offered by various
 platforms.</p>
 <h2 id="endpoint-recommendations">Endpoint Recommendations</h2>
-<p>Create a REST endpoint that accepts an HTTP <code>GET</code> request with a given ORCID ID
+<p>Create a REST endpoint that accepts an HTTP <code>GET</code> request with a given ORCID
 as a path parameter or request parameter. This endpoint responds with a body
 containing a JSON object with two fields:</p>
 <ul>
-<li><code>orcid</code>: the ORCID ID passed as the query parameter</li>
-<li><code>username</code>: the local username corresponding to the given ORCID ID</li>
+<li><code>orcid</code>: the ORCID passed as the query parameter</li>
+<li><code>username</code>: the local username corresponding to the given ORCID</li>
 </ul>
 <p>Error codes should be used in accordance with HTTP conventions:</p>
 <ul>
 <li>A successful query returns a <code>200 OK</code> status code</li>
-<li>An improperly-formed ORCID ID should result in a <code>400 Bad Request</code> status code</li>
-<li>An ORCID ID that does not correspond to a local user should produce <code>404 Not Found</code></li>
+<li>An improperly-formed ORCID should result in a <code>400 Bad Request</code> status code</li>
+<li>An ORCID that does not correspond to a local user should produce <code>404 Not Found</code></li>
 </ul>
 <h3 id="example">Example</h3>
 <p>For example, suppose we want to find the local username for <a href="https://orcid.org/0000-0002-1825-0097">Josiah Carberry</a>,
@@ -1100,7 +1100,7 @@ in the University's database by sending an HTTP <code>GET</code> request to</p>
 <h3 id="existing-implementations">Existing implementations</h3>
 <p>This particular feature is actually not yet supported by KBase, so the DTS
 prototype uses a locally-stored JSON file containing an object whose
-field names are ORCID IDs and whose values are usernames for the corresponding
+field names are ORCIDs and whose values are usernames for the corresponding
 KBase users.</p>
 <ul>
 <li>Example: current workaround (to be updated when JDP and KBase support this!)</li>

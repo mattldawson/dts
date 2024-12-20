@@ -653,7 +653,7 @@
         
   
   <span class="md-ellipsis">
-    Map ORCID IDs to Local User Accounts
+    Map ORCIDs to Local User Accounts
   </span>
   
 
@@ -1102,15 +1102,14 @@ The sections that follow describe each of these items in more detail.</p>
    Additionally, your database must provide a <strong>staging status endpoint</strong> that
    accepts an HTTP request with a staging request UUID and produces a
    response that indicates whether the staging process has completed.</li>
-<li><strong>Your database can map ORCID IDs to local users within your organization.</strong>
-   Every DTS user must authenticate with an ORCID ID to connect to the service.
-   To establish a connection between the ORCID ID and a specific user account
+<li><strong>Your database can map ORCIDs to local users within your organization.</strong>
+   Every DTS user must authenticate with an ORCID to connect to the service.
+   To establish a connection between the ORCID and a specific user account
    for your organization, your database must provide a <strong>user federation
-   endpoint</strong> that accepts an HTTP request with an ORCID ID and produces
-   a response containing the corresponding username for an account within your
-   system. This federation process allows DTS to associate a transfer operation
-   with user accounts in the organizations for the source and destination
-   databases.</li>
+   endpoint</strong> that accepts an HTTP request with an ORCID and produces a response
+   containing the corresponding username for an account within your system. This
+   federation process allows DTS to associate a transfer operation with user
+   accounts in the organizations for the source and destination databases.</li>
 </ol>
 <p>If your organization has existing services that provide similar capabilities but
 use different conventions, or if you have other technical considerations, please
@@ -1123,7 +1122,7 @@ best of what you have.</p>
 <li><a href="staging_area.html">Provide a Staging Area for Your Files</a></li>
 <li><a href="stage_files.html">Stage Your Files on Request</a></li>
 <li><a href="staging_status.html">Provide a Way to Monitor File Staging</a></li>
-<li><a href="local_user.html">Map ORCID IDs to Local User Accounts</a></li>
+<li><a href="local_user.html">Map ORCIDs to Local User Accounts</a></li>
 </ul>
 
 

@@ -668,7 +668,7 @@
         
   
   <span class="md-ellipsis">
-    Map ORCID IDs to Local User Accounts
+    Map ORCIDs to Local User Accounts
   </span>
   
 
@@ -1087,13 +1087,13 @@ needs to do:</p>
   authenticating and authorizing the DTS for its basic operations. You can create
   a token <a href="https://kbase.github.io/kb_sdk_docs/tutorial/3_initialize.html#set-up-your-developer-credentials">from your KBase developer account</a>.</li>
 <li><code>DTS_KBASE_TEST_ORCID</code>: an <a href="https://orcid.org/">ORCID</a> identifier that can be
-  used to run the DTS's unit test. This identifier must match a registered ORCID ID
+  used to run the DTS's unit test. This identifier must match a registered ORCID
   associated with a <a href="https://narrative.kbase.us/#signup">KBase user account</a>.</li>
 <li><code>DTS_KBASE_TEST_USER</code>: the KBase user associated with the ORCID specified
   by <code>DTS_KBASE_TEST_ORCID</code>. <strong>NOTE: at the time of writing, KBase does not have
-  a mechanism for mapping ORCID IDs to local users, so the DTS uses a file in
-  its data directory called <code>kbase_users.json</code> consisting of a single JSON
-  object whose keys are ORCID IDs and whose values are local usernames.</strong></li>
+  a mechanism for mapping ORCIDs to local users, so the DTS uses a file in its
+  data directory called <code>kbase_users.json</code> consisting of a single JSON object
+  whose keys are ORCIDs and whose values are local usernames.</strong></li>
 <li><code>DTS_GLOBUS_CLIENT_ID</code>: a client ID registered using the
   <a href="https://docs.globus.org/globus-connect-server/v5/use-client-credentials/#register-application">Globus Developers</a>
   web interface. This ID must be registered specifically for an instance of

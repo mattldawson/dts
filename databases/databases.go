@@ -131,7 +131,7 @@ func RegisterDatabase(dbName string, createDb func(orcid string) (Database, erro
 	}
 }
 
-// creates a database proxy associated with the given ORCID ID, based on the
+// creates a database proxy associated with the given ORCID, based on the
 // configured type, or returns an existing instance
 func NewDatabase(orcid, dbName string) (Database, error) {
 	var err error

@@ -43,9 +43,9 @@ We use the following terms in the DTS Integration Guide.
   level of the directory structure transferred to the destination database.
   a source database to a destination database by the DTS
 * **User federation endpoint**: An endpoint provided by your database that
-  accepts an HTTP `GET` request with an ORCID ID and produces a response
+  accepts an HTTP `GET` request with an ORCID and produces a response
   containing the corresponding username for an account within your system.
-  Read more about this endpoint in [Map ORCID IDs to Local User Accounts](local_user.md).
+  Read more about this endpoint in [Map ORCIDs to Local User Accounts](local_user.md).
 * **UUID**: A [universally unique identifier](https://en.wikipedia.org/wiki/Universally_unique_identifier)
   used by the DTS to represent staging tasks, transfers, and other transient-
   but-possibly-long-running operations

@@ -15,7 +15,7 @@ nav:
     - 'Provide a Staging Area for Your Files': 'integration/staging_area.md'
     - 'Stage Your Files on Request': 'integration/stage_files.md'
     - 'Provide a Way to Monitor File Staging': 'integration/staging_status.md'
-    - 'Map ORCID IDs to Local User Accounts': 'integration/local_user.md'
+    - 'Map ORCIDs to Local User Accounts': 'integration/local_user.md'
     - 'Glossary': 'integration/glossary.md'
   - 'Developer Guide':
     - 'Overview': 'developer/index.md'

@@ -63,7 +63,7 @@ func NewDatabase(orcid string) (databases.Database, error) {
 	if orcid == "" {
 		return nil, databases.UnauthorizedError{
 			Database: "nmdc",
-			Message:  "No ORCID ID was given",
+			Message:  "No ORCID was given",
 		}
 	}
 

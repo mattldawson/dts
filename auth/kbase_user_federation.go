@@ -34,7 +34,7 @@ import (
 // users who have made requests to the DTS. This prevents us from having to
 // rely on a secondary data source for this information.
 
-// associates the given KBase username with the given ORCID ID
+// associates the given KBase username with the given ORCID
 func SetKBaseLocalUsernameForOrcid(orcid, username string) error {
 	if !kbaseUserFederationStarted {
 		// fire it up!
@@ -49,7 +49,7 @@ func SetKBaseLocalUsernameForOrcid(orcid, username string) error {
 	return err
 }
 
-// returns the local KBase username associated with the given ORCID ID
+// returns the local KBase username associated with the given ORCID
 func KBaseLocalUsernameForOrcid(orcid string) (string, error) {
 	if !kbaseUserFederationStarted { // no one's logged in!
 		return "", fmt.Errorf("KBase federated user table not available!")
@@ -70,8 +70,8 @@ var kbaseOrcidUserChan chan [2]string // passes (ORCIDs, username) pairs in
 var kbaseUserChan chan string         // passes usernames out
 var kbaseErrorChan chan error         // passes errors out
 
-// This goroutine maintains a mapping or ORCID IDS to local KBase users,
-// fielding requests to update and retrieve usernames by ORCID ID.
+// This goroutine maintains a mapping or ORCIDs to local KBase users,
+// fielding requests to update and retrieve usernames by ORCID.
 func kbaseUserFederation(started chan struct{}) {
 	// channels
 	kbaseOrcidChan = make(chan string)
@@ -79,7 +79,7 @@ func kbaseUserFederation(started chan struct{}) {
 	kbaseUserChan = make(chan string)
 	kbaseErrorChan = make(chan error)
 
-	// mapping of ORCID IDs to local KBase users
+	// mapping of ORCIDs to local KBase users
 	kbaseUserTable := make(map[string]string)
 
 	// we're ready

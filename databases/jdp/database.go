@@ -72,7 +72,7 @@ type StagingRequest struct {
 
 func NewDatabase(orcid string) (databases.Database, error) {
 	if orcid == "" {
-		return nil, fmt.Errorf("No ORCID ID was given")
+		return nil, fmt.Errorf("No ORCID was given")
 	}
 
 	// make sure we have a shared secret or an SSO token

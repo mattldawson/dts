@@ -1,27 +1,27 @@
-# Map ORCID IDs to Local User Accounts
+# Map ORCIDs to Local User Accounts
 
-The Data Transfer System (DTS) uses [ORCID IDs](https://info.orcid.org/what-is-orcid/)
+The Data Transfer System (DTS) uses [ORCIDs](https://info.orcid.org/what-is-orcid/)
 to identify individuals and organizations. In order to understand who is
 transferring what where when, your database must establish a connection between
-a user's ORCID ID and their local account on your system. This connection is a
+a user's ORCID and their local account on your system. This connection is a
 form of [federated identity management](https://en.wikipedia.org/wiki/Federated_identity),
 similar to Single Sign-On (SSO) authentication services offered by various
 platforms.
 
 ## Endpoint Recommendations
 
-Create a REST endpoint that accepts an HTTP `GET` request with a given ORCID ID
+Create a REST endpoint that accepts an HTTP `GET` request with a given ORCID
 as a path parameter or request parameter. This endpoint responds with a body
 containing a JSON object with two fields:
 
-* `orcid`: the ORCID ID passed as the query parameter
-* `username`: the local username corresponding to the given ORCID ID
+* `orcid`: the ORCID passed as the query parameter
+* `username`: the local username corresponding to the given ORCID
 
 Error codes should be used in accordance with HTTP conventions:
 
 * A successful query returns a `200 OK` status code
-* An improperly-formed ORCID ID should result in a `400 Bad Request` status code
-* An ORCID ID that does not correspond to a local user should produce `404 Not Found`
+* An improperly-formed ORCID should result in a `400 Bad Request` status code
+* An ORCID that does not correspond to a local user should produce `404 Not Found`
 
 ### Example
 
@@ -48,7 +48,7 @@ This produces a responѕe with a `200 OK` status code with the body
 
 This particular feature is actually not yet supported by KBase, so the DTS
 prototype uses a locally-stored JSON file containing an object whose
-field names are ORCID IDs and whose values are usernames for the corresponding
+field names are ORCIDs and whose values are usernames for the corresponding
 KBase users.
 
 * Example: current workaround (to be updated when JDP and KBase support this!)

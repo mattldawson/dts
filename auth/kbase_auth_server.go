@@ -226,7 +226,7 @@ func (server KBaseAuthServer) kbaseUser() (kbaseUser, error) {
 		}
 	}
 	if !foundOrcid {
-		return user, fmt.Errorf("KBase Auth2: No ORCID IDs associated with this user!")
+		return user, fmt.Errorf("KBase Auth2: No ORCIDs associated with this user!")
 	}
 	return user, err
 }

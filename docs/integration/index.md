@@ -77,15 +77,14 @@ The sections that follow describe each of these items in more detail.
    Additionally, your database must provide a **staging status endpoint** that
    accepts an HTTP request with a staging request UUID and produces a
    response that indicates whether the staging process has completed.
-6. **Your database can map ORCID IDs to local users within your organization.**
-   Every DTS user must authenticate with an ORCID ID to connect to the service.
-   To establish a connection between the ORCID ID and a specific user account
+6. **Your database can map ORCIDs to local users within your organization.**
+   Every DTS user must authenticate with an ORCID to connect to the service.
+   To establish a connection between the ORCID and a specific user account
    for your organization, your database must provide a **user federation
-   endpoint** that accepts an HTTP request with an ORCID ID and produces
-   a response containing the corresponding username for an account within your
-   system. This federation process allows DTS to associate a transfer operation
-   with user accounts in the organizations for the source and destination
-   databases.
+   endpoint** that accepts an HTTP request with an ORCID and produces a response
+   containing the corresponding username for an account within your system. This
+   federation process allows DTS to associate a transfer operation with user
+   accounts in the organizations for the source and destination databases.
 
 If your organization has existing services that provide similar capabilities but
 use different conventions, or if you have other technical considerations, please
@@ -99,4 +98,4 @@ best of what you have.
 * [Provide a Staging Area for Your Files](staging_area.md)
 * [Stage Your Files on Request](stage_files.md)
 * [Provide a Way to Monitor File Staging](staging_status.md)
-* [Map ORCID IDs to Local User Accounts](local_user.md)
+* [Map ORCIDs to Local User Accounts](local_user.md)

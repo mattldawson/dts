@@ -1,13 +1,15 @@
 module github.com/kbase/dts
 
-go 1.21.0
+go 1.22
+
+toolchain go1.23.1
 
 require (
-	github.com/danielgtaylor/huma/v2 v2.18.0
+	github.com/danielgtaylor/huma/v2 v2.27.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.1
 	github.com/stretchr/testify v1.9.0
-	golang.org/x/net v0.23.0
+	golang.org/x/net v0.33.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 

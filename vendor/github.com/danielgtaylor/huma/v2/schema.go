@@ -1,6 +1,7 @@
 package huma
 
 import (
+	"encoding"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,10 +15,18 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/danielgtaylor/huma/v2/validation"
 )
 
 // ErrSchemaInvalid is sent when there is a problem building the schema.
 var ErrSchemaInvalid = errors.New("schema is invalid")
+
+// DefaultArrayNullable controls whether arrays are nullable by default. Set
+// this to `false` to make arrays non-nullable by default, but be aware that
+// any `nil` slice will still encode as `null` in JSON. See also:
+// https://pkg.go.dev/encoding/json#Marshal.
+var DefaultArrayNullable = true
 
 // JSON Schema type constants
 const (
@@ -127,6 +136,7 @@ type Schema struct {
 	patternRe     *regexp.Regexp  `yaml:"-"`
 	requiredMap   map[string]bool `yaml:"-"`
 	propertyNames []string        `yaml:"-"`
+	hidden        bool            `yaml:"-"`
 
 	// Precomputed validation messages. These prevent allocations during
 	// validation and are known at schema creation time.
@@ -154,10 +164,26 @@ func (s *Schema) MarshalJSON() ([]byte, error) {
 	if s.Nullable {
 		typ = []string{s.Type, "null"}
 	}
+
 	var contentMediaType string
 	if s.Format == "binary" {
 		contentMediaType = "application/octet-stream"
 	}
+
+	props := s.Properties
+	for _, ps := range props {
+		if ps.hidden {
+			// Copy the map to avoid modifying the original schema.
+			props = make(map[string]*Schema, len(s.Properties))
+			for k, v := range s.Properties {
+				if !v.hidden {
+					props[k] = v
+				}
+			}
+			break
+		}
+	}
+
 	return marshalJSON([]jsonFieldInfo{
 		{"type", typ, omitEmpty},
 		{"title", s.Title, omitEmpty},
@@ -170,7 +196,7 @@ func (s *Schema) MarshalJSON() ([]byte, error) {
 		{"examples", s.Examples, omitEmpty},
 		{"items", s.Items, omitEmpty},
 		{"additionalProperties", s.AdditionalProperties, omitNil},
-		{"properties", s.Properties, omitEmpty},
+		{"properties", props, omitEmpty},
 		{"enum", s.Enum, omitEmpty},
 		{"minimum", s.Minimum, omitEmpty},
 		{"exclusiveMinimum", s.ExclusiveMinimum, omitEmpty},
@@ -202,49 +228,49 @@ func (s *Schema) MarshalJSON() ([]byte, error) {
 // PrecomputeMessages tries to precompute as many validation error messages
 // as possible so that new strings aren't allocated during request validation.
 func (s *Schema) PrecomputeMessages() {
-	s.msgEnum = "expected value to be one of \"" + strings.Join(mapTo(s.Enum, func(v any) string {
+	s.msgEnum = ErrorFormatter(validation.MsgExpectedOneOf, strings.Join(mapTo(s.Enum, func(v any) string {
 		return fmt.Sprintf("%v", v)
-	}), ", ") + "\""
+	}), ", "))
 	if s.Minimum != nil {
-		s.msgMinimum = fmt.Sprintf("expected number >= %v", *s.Minimum)
+		s.msgMinimum = ErrorFormatter(validation.MsgExpectedMinimumNumber, *s.Minimum)
 	}
 	if s.ExclusiveMinimum != nil {
-		s.msgExclusiveMinimum = fmt.Sprintf("expected number > %v", *s.ExclusiveMinimum)
+		s.msgExclusiveMinimum = ErrorFormatter(validation.MsgExpectedExclusiveMinimumNumber, *s.ExclusiveMinimum)
 	}
 	if s.Maximum != nil {
-		s.msgMaximum = fmt.Sprintf("expected number <= %v", *s.Maximum)
+		s.msgMaximum = ErrorFormatter(validation.MsgExpectedMaximumNumber, *s.Maximum)
 	}
 	if s.ExclusiveMaximum != nil {
-		s.msgExclusiveMaximum = fmt.Sprintf("expected number < %v", *s.ExclusiveMaximum)
+		s.msgExclusiveMaximum = ErrorFormatter(validation.MsgExpectedExclusiveMaximumNumber, *s.ExclusiveMaximum)
 	}
 	if s.MultipleOf != nil {
-		s.msgMultipleOf = fmt.Sprintf("expected number to be a multiple of %v", *s.MultipleOf)
+		s.msgMultipleOf = ErrorFormatter(validation.MsgExpectedNumberBeMultipleOf, *s.MultipleOf)
 	}
 	if s.MinLength != nil {
-		s.msgMinLength = fmt.Sprintf("expected length >= %d", *s.MinLength)
+		s.msgMinLength = ErrorFormatter(validation.MsgExpectedMinLength, *s.MinLength)
 	}
 	if s.MaxLength != nil {
-		s.msgMaxLength = fmt.Sprintf("expected length <= %d", *s.MaxLength)
+		s.msgMaxLength = ErrorFormatter(validation.MsgExpectedMaxLength, *s.MaxLength)
 	}
 	if s.Pattern != "" {
 		s.patternRe = regexp.MustCompile(s.Pattern)
 		if s.PatternDescription != "" {
-			s.msgPattern = "expected string to be " + s.PatternDescription
+			s.msgPattern = ErrorFormatter(validation.MsgExpectedBePattern, s.PatternDescription)
 		} else {
-			s.msgPattern = "expected string to match pattern " + s.Pattern
+			s.msgPattern = ErrorFormatter(validation.MsgExpectedMatchPattern, s.Pattern)
 		}
 	}
 	if s.MinItems != nil {
-		s.msgMinItems = fmt.Sprintf("expected array length >= %d", *s.MinItems)
+		s.msgMinItems = ErrorFormatter(validation.MsgExpectedMinItems, *s.MinItems)
 	}
 	if s.MaxItems != nil {
-		s.msgMaxItems = fmt.Sprintf("expected array length <= %d", *s.MaxItems)
+		s.msgMaxItems = ErrorFormatter(validation.MsgExpectedMaxItems, *s.MaxItems)
 	}
 	if s.MinProperties != nil {
-		s.msgMinProperties = fmt.Sprintf("expected object with at least %d properties", *s.MinProperties)
+		s.msgMinProperties = ErrorFormatter(validation.MsgExpectedMinProperties, *s.MinProperties)
 	}
 	if s.MaxProperties != nil {
-		s.msgMaxProperties = fmt.Sprintf("expected object with at most %d properties", *s.MaxProperties)
+		s.msgMaxProperties = ErrorFormatter(validation.MsgExpectedMaxProperties, *s.MaxProperties)
 	}
 
 	if s.Required != nil {
@@ -252,7 +278,7 @@ func (s *Schema) PrecomputeMessages() {
 			s.msgRequired = map[string]string{}
 		}
 		for _, name := range s.Required {
-			s.msgRequired[name] = "expected required property " + name + " to be present"
+			s.msgRequired[name] = ErrorFormatter(validation.MsgExpectedRequiredProperty, name)
 		}
 	}
 
@@ -265,23 +291,20 @@ func (s *Schema) PrecomputeMessages() {
 				if s.msgDependentRequired[name] == nil {
 					s.msgDependentRequired[name] = map[string]string{}
 				}
-				s.msgDependentRequired[name][dependent] = "expected property " + dependent + " to be present when " + name + " is present"
+				s.msgDependentRequired[name][dependent] = ErrorFormatter(validation.MsgExpectedDependentRequiredProperty, dependent, name)
 			}
 		}
 	}
 
-	if s.propertyNames == nil {
-		s.propertyNames = make([]string, 0, len(s.Properties))
-		for name := range s.Properties {
-			s.propertyNames = append(s.propertyNames, name)
-		}
+	s.propertyNames = make([]string, 0, len(s.Properties))
+	for name := range s.Properties {
+		s.propertyNames = append(s.propertyNames, name)
 	}
+	sort.Strings(s.propertyNames)
 
-	if s.requiredMap == nil {
-		s.requiredMap = map[string]bool{}
-		for _, name := range s.Required {
-			s.requiredMap[name] = true
-		}
+	s.requiredMap = map[string]bool{}
+	for _, name := range s.Required {
+		s.requiredMap[name] = true
 	}
 
 	if s.Items != nil {
@@ -309,20 +332,21 @@ func (s *Schema) PrecomputeMessages() {
 	}
 }
 
-func boolTag(f reflect.StructField, tag string) bool {
+func boolTag(f reflect.StructField, tag string, def bool) bool {
 	if v := f.Tag.Get(tag); v != "" {
-		if v == "true" {
+		switch v {
+		case "true":
 			return true
-		} else if v == "false" {
+		case "false":
 			return false
-		} else {
+		default:
 			panic(fmt.Errorf("invalid bool tag '%s' for field '%s': %v", tag, f.Name, v))
 		}
 	}
-	return false
+	return def
 }
 
-func intTag(f reflect.StructField, tag string) *int {
+func intTag(f reflect.StructField, tag string, def *int) *int {
 	if v := f.Tag.Get(tag); v != "" {
 		if i, err := strconv.Atoi(v); err == nil {
 			return &i
@@ -330,10 +354,10 @@ func intTag(f reflect.StructField, tag string) *int {
 			panic(fmt.Errorf("invalid int tag '%s' for field '%s': %v (%w)", tag, f.Name, v, err))
 		}
 	}
-	return nil
+	return def
 }
 
-func floatTag(f reflect.StructField, tag string) *float64 {
+func floatTag(f reflect.StructField, tag string, def *float64) *float64 {
 	if v := f.Tag.Get(tag); v != "" {
 		if i, err := strconv.ParseFloat(v, 64); err == nil {
 			return &i
@@ -341,7 +365,14 @@ func floatTag(f reflect.StructField, tag string) *float64 {
 			panic(fmt.Errorf("invalid float tag '%s' for field '%s': %v (%w)", tag, f.Name, v, err))
 		}
 	}
-	return nil
+	return def
+}
+
+func stringTag(f reflect.StructField, tag string, def string) string {
+	if v := f.Tag.Get(tag); v != "" {
+		return v
+	}
+	return def
 }
 
 // ensureType panics if the given value does not match the JSON Schema type.
@@ -411,11 +442,27 @@ func convertType(fieldName string, t reflect.Type, v any) any {
 			// the original to the new type.
 			tmp := reflect.MakeSlice(t, 0, vv.Len())
 			for i := 0; i < vv.Len(); i++ {
-				if !vv.Index(i).Elem().Type().ConvertibleTo(t.Elem()) {
-					panic(fmt.Errorf("unable to convert %v to %v for field '%s': %w", vv.Index(i).Interface(), t.Elem(), fieldName, ErrSchemaInvalid))
+				item := vv.Index(i)
+				if item.Kind() == reflect.Interface {
+					// E.g. []any and we want the underlying type.
+					item = item.Elem()
+				}
+				item = reflect.Indirect(item)
+				typ := deref(t.Elem())
+				if !item.Type().ConvertibleTo(typ) {
+					panic(fmt.Errorf("unable to convert %v to %v for field '%s': %w", item.Interface(), t.Elem(), fieldName, ErrSchemaInvalid))
 				}
 
-				tmp = reflect.Append(tmp, vv.Index(i).Elem().Convert(t.Elem()))
+				value := item.Convert(typ)
+				if t.Elem().Kind() == reflect.Ptr {
+					// Special case: if the field is a pointer, we need to get a pointer
+					// to the converted value.
+					ptr := reflect.New(value.Type())
+					ptr.Elem().Set(value)
+					value = ptr
+				}
+
+				tmp = reflect.Append(tmp, value)
 			}
 			v = tmp.Interface()
 		} else if !tv.ConvertibleTo(deref(t)) {
@@ -488,18 +535,14 @@ func SchemaFromField(registry Registry, f reflect.StructField, hint string) *Sch
 	if fs == nil {
 		return fs
 	}
-	if doc := f.Tag.Get("doc"); doc != "" {
-		fs.Description = doc
-	}
+	fs.Description = stringTag(f, "doc", fs.Description)
 	if fs.Format == "date-time" && f.Tag.Get("header") != "" {
 		// Special case: this is a header and uses a different date/time format.
 		// Note that it can still be overridden by the `format` or `timeFormat`
 		// tags later.
 		fs.Format = "date-time-http"
 	}
-	if format := f.Tag.Get("format"); format != "" {
-		fs.Format = format
-	}
+	fs.Format = stringTag(f, "format", fs.Format)
 	if timeFmt := f.Tag.Get("timeFormat"); timeFmt != "" {
 		switch timeFmt {
 		case "2006-01-02":
@@ -510,10 +553,10 @@ func SchemaFromField(registry Registry, f reflect.StructField, hint string) *Sch
 			fs.Format = timeFmt
 		}
 	}
-	if enc := f.Tag.Get("encoding"); enc != "" {
-		fs.ContentEncoding = enc
+	fs.ContentEncoding = stringTag(f, "encoding", fs.ContentEncoding)
+	if defaultValue := jsonTag(registry, f, fs, "default"); defaultValue != nil {
+		fs.Default = defaultValue
 	}
-	fs.Default = jsonTag(registry, f, fs, "default")
 
 	if value := f.Tag.Get("example"); value != "" {
 		if e := jsonTagValue(registry, f.Name, fs, value); e != nil {
@@ -537,37 +580,37 @@ func SchemaFromField(registry Registry, f reflect.StructField, hint string) *Sch
 		}
 	}
 
-	if _, ok := f.Tag.Lookup("nullable"); ok {
-		fs.Nullable = boolTag(f, "nullable")
-		if fs.Nullable && fs.Ref != "" {
-			// Nullability is only supported for scalar types for now. Objects are
-			// much more complicated because the `null` type lives within the object
-			// definition (requiring multiple copies of the object) or needs to use
-			// `anyOf` or `not` which is not supported by all code generators, or is
-			// supported poorly & generates hard-to-use code. This is less than ideal
-			// but a compromise for now to support some nullability built-in.
-			panic(fmt.Errorf("nullable is not supported for field '%s' which is type '%s'", f.Name, fs.Ref))
-		}
+	fs.Nullable = boolTag(f, "nullable", fs.Nullable)
+	if fs.Nullable && fs.Ref != "" && registry.SchemaFromRef(fs.Ref).Type == "object" {
+		// Nullability is only supported for scalar types for now. Objects are
+		// much more complicated because the `null` type lives within the object
+		// definition (requiring multiple copies of the object) or needs to use
+		// `anyOf` or `not` which is not supported by all code generators, or is
+		// supported poorly & generates hard-to-use code. This is less than ideal
+		// but a compromise for now to support some nullability built-in.
+		panic(fmt.Errorf("nullable is not supported for field '%s' which is type '%s'", f.Name, fs.Ref))
 	}
 
-	fs.Minimum = floatTag(f, "minimum")
-	fs.ExclusiveMinimum = floatTag(f, "exclusiveMinimum")
-	fs.Maximum = floatTag(f, "maximum")
-	fs.ExclusiveMaximum = floatTag(f, "exclusiveMaximum")
-	fs.MultipleOf = floatTag(f, "multipleOf")
-	fs.MinLength = intTag(f, "minLength")
-	fs.MaxLength = intTag(f, "maxLength")
-	fs.Pattern = f.Tag.Get("pattern")
-	fs.PatternDescription = f.Tag.Get("patternDescription")
-	fs.MinItems = intTag(f, "minItems")
-	fs.MaxItems = intTag(f, "maxItems")
-	fs.UniqueItems = boolTag(f, "uniqueItems")
-	fs.MinProperties = intTag(f, "minProperties")
-	fs.MaxProperties = intTag(f, "maxProperties")
-	fs.ReadOnly = boolTag(f, "readOnly")
-	fs.WriteOnly = boolTag(f, "writeOnly")
-	fs.Deprecated = boolTag(f, "deprecated")
+	fs.Minimum = floatTag(f, "minimum", fs.Minimum)
+	fs.ExclusiveMinimum = floatTag(f, "exclusiveMinimum", fs.ExclusiveMinimum)
+	fs.Maximum = floatTag(f, "maximum", fs.Maximum)
+	fs.ExclusiveMaximum = floatTag(f, "exclusiveMaximum", fs.ExclusiveMaximum)
+	fs.MultipleOf = floatTag(f, "multipleOf", fs.MultipleOf)
+	fs.MinLength = intTag(f, "minLength", fs.MinLength)
+	fs.MaxLength = intTag(f, "maxLength", fs.MaxLength)
+	fs.Pattern = stringTag(f, "pattern", fs.Pattern)
+	fs.PatternDescription = stringTag(f, "patternDescription", fs.PatternDescription)
+	fs.MinItems = intTag(f, "minItems", fs.MinItems)
+	fs.MaxItems = intTag(f, "maxItems", fs.MaxItems)
+	fs.UniqueItems = boolTag(f, "uniqueItems", fs.UniqueItems)
+	fs.MinProperties = intTag(f, "minProperties", fs.MinProperties)
+	fs.MaxProperties = intTag(f, "maxProperties", fs.MaxProperties)
+	fs.ReadOnly = boolTag(f, "readOnly", fs.ReadOnly)
+	fs.WriteOnly = boolTag(f, "writeOnly", fs.WriteOnly)
+	fs.Deprecated = boolTag(f, "deprecated", fs.Deprecated)
 	fs.PrecomputeMessages()
+
+	fs.hidden = boolTag(f, "hidden", fs.hidden)
 
 	return fs
 }
@@ -643,10 +686,15 @@ type SchemaTransformer interface {
 //	schema := huma.SchemaFromType(registry, reflect.TypeOf(MyType{}))
 func SchemaFromType(r Registry, t reflect.Type) *Schema {
 	s := schemaFromType(r, t)
+	t = deref(t)
+
 	// Transform generated schema if type implements SchemaTransformer
 	v := reflect.New(t).Interface()
 	if st, ok := v.(SchemaTransformer); ok {
-		return st.TransformSchema(r, s)
+		s = st.TransformSchema(r, s)
+
+		// The schema may have been modified, so recompute the error messages.
+		s.PrecomputeMessages()
 	}
 	return s
 }
@@ -660,10 +708,12 @@ func schemaFromType(r Registry, t reflect.Type) *Schema {
 	v := reflect.New(t).Interface()
 	if sp, ok := v.(SchemaProvider); ok {
 		// Special case: type provides its own schema. Do not try to generate.
-		return sp.Schema(r)
+		custom := sp.Schema(r)
+		custom.PrecomputeMessages()
+		return custom
 	}
 
-	// Handle special cases.
+	// Handle special cases for known stdlib types.
 	switch t {
 	case timeType:
 		return &Schema{Type: TypeString, Nullable: isPointer, Format: "date-time"}
@@ -675,6 +725,14 @@ func schemaFromType(r Registry, t reflect.Type) *Schema {
 		return &Schema{Type: TypeString, Nullable: isPointer, Format: "ipv4"}
 	case rawMessageType:
 		return &Schema{}
+	}
+
+	if _, ok := v.(encoding.TextUnmarshaler); ok {
+		// Special case: types that implement encoding.TextUnmarshaler are able to
+		// be loaded from plain text, and so should be treated as strings.
+		// This behavior can be overridden by implementing `huma.SchemaProvider`
+		// and returning a custom schema.
+		return &Schema{Type: TypeString, Nullable: isPointer}
 	}
 
 	minZero := 0.0
@@ -727,6 +785,7 @@ func schemaFromType(r Registry, t reflect.Type) *Schema {
 			s.ContentEncoding = "base64"
 		} else {
 			s.Type = TypeArray
+			s.Nullable = DefaultArrayNullable
 			s.Items = r.Schema(t.Elem(), true, t.Name()+"Item")
 
 			if t.Kind() == reflect.Array {
@@ -776,13 +835,7 @@ func schemaFromType(r Registry, t reflect.Type) *Schema {
 			}
 
 			if _, ok := f.Tag.Lookup("required"); ok {
-				fieldRequired = boolTag(f, "required")
-			}
-
-			if boolTag(f, "hidden") {
-				// This field is deliberately ignored. It may still exist, but won't
-				// be documented.
-				continue
+				fieldRequired = boolTag(f, "required", false)
 			}
 
 			if dr := f.Tag.Get("dependentRequired"); strings.TrimSpace(dr) != "" {
@@ -793,6 +846,12 @@ func schemaFromType(r Registry, t reflect.Type) *Schema {
 			if fs != nil {
 				props[name] = fs
 				propNames = append(propNames, name)
+
+				if fs.hidden {
+					// This field is deliberately ignored. It may still exist, but won't
+					// be documented as a required field.
+					fieldRequired = false
+				}
 
 				if fieldRequired {
 					required = append(required, name)
@@ -831,12 +890,12 @@ func schemaFromType(r Registry, t reflect.Type) *Schema {
 		additionalProps := false
 		if f, ok := t.FieldByName("_"); ok {
 			if _, ok = f.Tag.Lookup("additionalProperties"); ok {
-				additionalProps = boolTag(f, "additionalProperties")
+				additionalProps = boolTag(f, "additionalProperties", false)
 			}
 
 			if _, ok := f.Tag.Lookup("nullable"); ok {
 				// Allow overriding nullability per struct.
-				s.Nullable = boolTag(f, "nullable")
+				s.Nullable = boolTag(f, "nullable", false)
 			}
 		}
 		s.AdditionalProperties = additionalProps
@@ -856,7 +915,7 @@ func schemaFromType(r Registry, t reflect.Type) *Schema {
 	switch s.Type {
 	case TypeBoolean, TypeInteger, TypeNumber, TypeString:
 		// Scalar types which are pointers are nullable by default. This can be
-		// overidden via the `nullable:"false"` field tag in structs.
+		// overridden via the `nullable:"false"` field tag in structs.
 		s.Nullable = isPointer
 	}
 

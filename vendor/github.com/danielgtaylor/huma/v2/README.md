@@ -63,12 +63,31 @@ This project was inspired by [FastAPI](https://fastapi.tiangolo.com/). Logo & br
 
 ## Sponsors
 
-A big thank you to our current & former sponsors:
+A big thank you to our current & former sponsors!
+
+<div>
+					<img width="1000" height="0" />
+					<a href="https://zuplo.link/huma-gh ">
+					<picture>
+							<!-- <source media="(prefers-color-scheme: dark)" srcset="docs/zuplo-dark.png"> -->
+							<img src="https://github.com/user-attachments/assets/aace5aa7-32bd-45cf-a8f8-2e352feaf017" alt="Zuplo" width="260" align="right">
+					</picture>
+					</a>
+					<h3>Zuplo: Scale, Protect, and Productize your Huma API</h3>
+					<p>
+							Our API Gateway allows you to secure your API, scale it globally, generate documentation from your OpenAPI, and monetize your users.
+					</p>
+					<a href="https://zuplo.link/huma-gh ">Start for Free</a>
+</div>
+<hr/>
 
 - [@bclements](https://github.com/bclements)
 - [@bekabaz](https://github.com/bekabaz)
 - [@victoraugustolls](https://github.com/victoraugustolls)
 - [@phoenixtechnologies-io](https://github.com/phoenixtechnologies-io)
+- [@chenjr0719](https://github.com/chenjr0719)
+- [@vinogradovkonst](https://github.com/vinogradovkonst)
+- [@miyamo2](https://github.com/miyamo2)
 
 ## Testimonials
 
@@ -84,9 +103,11 @@ A big thank you to our current & former sponsors:
 
 > It took us 3 months to build our platform in Python with FastAPI, SQL Alchemy and only 3 weeks to rewrite it in Go with Huma and SQL C. Things just work and I seldomly have to debug where in Python I spent a majority of my time debugging. - [Bitclick\_](https://www.reddit.com/r/golang/comments/1cj2znb/comment/l2e4u6y/)
 
+> Look at Huma, it's great. A nice slim layer on top of stdlib mux/chi and automatic body and parameter serialization, kinda feels like doing dotnet web APIs, but forces you to actually design request and response structs, which is great imo. - [Kirides](https://www.reddit.com/r/golang/comments/1fnn5c2/comment/lokuvpo/)
+
 # Install
 
-Install via `go get`. Note that Go 1.20 or newer is required.
+Install via `go get`. Note that Go 1.21 or newer is required.
 
 ```sh
 # After: go mod init ...

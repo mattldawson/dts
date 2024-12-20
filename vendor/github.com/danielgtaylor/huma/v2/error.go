@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strconv"
+	"os"
 )
 
 // ErrorDetailer returns error details for responses & debugging. This enables
@@ -248,28 +248,26 @@ var NewError = func(status int, msg string, errs ...error) StatusError {
 	}
 }
 
+var NewErrorWithContext = func(_ Context, status int, msg string, errs ...error) StatusError {
+	return NewError(status, msg, errs...)
+}
+
 // WriteErr writes an error response with the given context, using the
 // configured error type and with the given status code and message. It is
 // marshaled using the API's content negotiation methods.
 func WriteErr(api API, ctx Context, status int, msg string, errs ...error) error {
-	var err any = NewError(status, msg, errs...)
+	var err = NewErrorWithContext(ctx, status, msg, errs...)
 
-	ct, negotiateErr := api.Negotiate(ctx.Header("Accept"))
-	if negotiateErr != nil {
-		return negotiateErr
-	}
+	// NewError may have modified the status code, so update it here if needed.
+	// If it was not modified then this is a no-op.
+	status = err.GetStatus()
 
-	if ctf, ok := err.(ContentTypeFilter); ok {
-		ct = ctf.ContentType(ct)
+	writeErr := writeResponse(api, ctx, status, "", err)
+	if writeErr != nil {
+		// If we can't write the error, log it so we know what happened.
+		fmt.Fprintf(os.Stderr, "could not write error: %v\n", writeErr)
 	}
-
-	ctx.SetHeader("Content-Type", ct)
-	ctx.SetStatus(status)
-	tval, terr := api.Transform(ctx, strconv.Itoa(status), err)
-	if terr != nil {
-		return terr
-	}
-	return api.Marshal(ctx.BodyWriter(), ct, tval)
+	return writeErr
 }
 
 // Status304NotModified returns a 304. This is not really an error, but
@@ -362,3 +360,6 @@ func Error503ServiceUnavailable(msg string, errs ...error) StatusError {
 func Error504GatewayTimeout(msg string, errs ...error) StatusError {
 	return NewError(http.StatusGatewayTimeout, msg, errs...)
 }
+
+// ErrorFormatter is a function that formats an error message
+var ErrorFormatter = fmt.Sprintf

@@ -6,7 +6,6 @@ import (
 	"mime/multipart"
 	"net/http"
 	"reflect"
-	"slices"
 	"strings"
 )
 
@@ -14,6 +13,8 @@ type FormFile struct {
 	multipart.File
 	ContentType string // Content-Type as declared in the multipart form field, or detected when parsing request as fallback
 	IsSet       bool   // Indicates whether content was received when working with optional files
+	Size        int64  // File size in bytes
+	Filename    string // Filename as declared in the multipart form field, if any
 }
 
 type MultipartFormFiles[T any] struct {
@@ -53,19 +54,22 @@ func (v MimeTypeValidator) Validate(fh *multipart.FileHeader, location string) (
 		file.Seek(int64(0), io.SeekStart)
 		mimeType = http.DetectContentType(buffer)
 	}
-	accept := slices.ContainsFunc(v.accept, func(m string) bool {
+	accept := false
+	for _, m := range v.accept {
 		if m == "text/plain" || m == "application/octet-stream" {
-			return true
+			accept = true
+			break
 		}
 		if strings.HasSuffix(m, "/*") &&
 			strings.HasPrefix(mimeType, strings.TrimRight(m, "*")) {
-			return true
+			accept = true
+			break
 		}
 		if mimeType == m {
-			return true
+			accept = true
+			break
 		}
-		return false
-	})
+	}
 
 	if accept {
 		return mimeType, nil
@@ -94,7 +98,13 @@ func (m *MultipartFormFiles[T]) readFile(
 	if validationErr != nil {
 		return FormFile{}, validationErr
 	}
-	return FormFile{File: f, ContentType: contentType, IsSet: true}, nil
+	return FormFile{
+		File:        f,
+		ContentType: contentType,
+		IsSet:       true,
+		Size:        fh.Size,
+		Filename:    fh.Filename,
+	}, nil
 }
 
 func (m *MultipartFormFiles[T]) readSingleFile(key string, opMediaType *MediaType) (FormFile, *ErrorDetail) {
@@ -170,7 +180,7 @@ func (m *MultipartFormFiles[T]) Decode(opMediaType *MediaType) []error {
 		case field.Type() == reflect.TypeOf([]FormFile{}):
 			files, errs := m.readMultipleFiles(key, opMediaType)
 			if errs != nil {
-				errors = slices.Concat(errors, errs)
+				errors = append(errors, errs...)
 				continue
 			}
 			field.Set(reflect.ValueOf(files))
@@ -216,7 +226,7 @@ func multiPartFormFileSchema(t reflect.Type) *Schema {
 			continue
 		}
 
-		if _, ok := f.Tag.Lookup("required"); ok && boolTag(f, "required") {
+		if _, ok := f.Tag.Lookup("required"); ok && boolTag(f, "required", false) {
 			requiredFields[i] = name
 			schema.requiredMap[name] = true
 		}

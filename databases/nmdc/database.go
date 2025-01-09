@@ -311,7 +311,9 @@ type credential struct {
 // fetches an access token / type from NMDC using a credential
 func (db *Database) getAccessToken(credential credential) (authorization, error) {
 	var auth authorization
-	resource := baseApiURL + "token/"
+	// NOTE: no slash at the end of the resource, or there's an
+	// NOTE: HTTPS -> HTTP redirect (?!??!!)
+	resource := baseApiURL + "token"
 
 	// the token request must be URL-encoded
 	data := url.Values{}
@@ -593,7 +595,8 @@ func (db Database) studyIdsForDataObjectIds(dataObjectIds []string) (map[string]
 	}
 
 	// run the query and extract the results
-	body, err := db.post("queries:run/", bytes.NewReader(data))
+	// NOTE: recall that trailing slashes in POSTs currently cause chaos!
+	body, err := db.post("queries:run", bytes.NewReader(data))
 	if err != nil {
 		return nil, err
 	}

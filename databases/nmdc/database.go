@@ -59,6 +59,17 @@ type Database struct {
 	EndpointForHost map[string]string
 }
 
+// This error type is emitted if an NMDC endpoint redirects an HTTPS request
+// to an HTTP endpoint.
+type DowngradedRedirectError struct {
+	Endpoint string
+}
+
+func (e DowngradedRedirectError) Error() string {
+	return fmt.Sprintf("An NMDC database endpoint (%s) is attempting to downgrade an HTTPS request to HTTP",
+		e.Endpoint)
+}
+
 func NewDatabase(orcid string) (databases.Database, error) {
 	if orcid == "" {
 		return nil, databases.UnauthorizedError{
@@ -104,21 +115,35 @@ func NewDatabase(orcid string) (databases.Database, error) {
 	nerscEndpoint := config.Databases["nmdc"].Endpoints["nersc"]
 	emslEndpoint := config.Databases["nmdc"].Endpoints["emsl"]
 
-	// get an API access token
-	auth, err := getAccessToken(credential{User: nmdcUser, Password: nmdcPassword})
-	if err != nil {
-		return nil, err
-	}
-
-	return &Database{
-		Id:    "nmdc",
-		Orcid: orcid,
-		Auth:  auth,
+	// NOTE: we prevent redirects from HTTPS -> HTTP!
+	db := &Database{
+		Client: http.Client{
+			Timeout: time.Second * 10,
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				if req.URL.Scheme == "http" {
+					return DowngradedRedirectError{
+						Endpoint: fmt.Sprintf("%s%s", req.URL.Host, req.URL.Path),
+					}
+				}
+				return http.ErrUseLastResponse
+			},
+		},
 		EndpointForHost: map[string]string{
 			"https://data.microbiomedata.org/data/": nerscEndpoint,
 			"https://nmdcdemo.emsl.pnnl.gov/":       emslEndpoint,
 		},
-	}, nil
+		Id:    "nmdc",
+		Orcid: orcid,
+	}
+
+	// get an API access token
+	auth, err := db.getAccessToken(credential{User: nmdcUser, Password: nmdcPassword})
+	if err != nil {
+		return nil, err
+	}
+	db.Auth = auth
+
+	return db, nil
 }
 
 func (db Database) SpecificSearchParameters() map[string]interface{} {
@@ -284,9 +309,11 @@ type credential struct {
 }
 
 // fetches an access token / type from NMDC using a credential
-func getAccessToken(credential credential) (authorization, error) {
+func (db *Database) getAccessToken(credential credential) (authorization, error) {
 	var auth authorization
-	resource := baseApiURL + "token/"
+	// NOTE: no slash at the end of the resource, or there's an
+	// NOTE: HTTPS -> HTTP redirect (?!??!!)
+	resource := baseApiURL + "token"
 
 	// the token request must be URL-encoded
 	data := url.Values{}
@@ -297,8 +324,7 @@ func getAccessToken(credential credential) (authorization, error) {
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	request.Header.Set("Accept", "application/json")
 
-	var client http.Client
-	response, err := client.Do(request)
+	response, err := db.Client.Do(request)
 	if err != nil {
 		return auth, err
 	}
@@ -363,7 +389,7 @@ func getAccessToken(credential credential) (authorization, error) {
 func (db *Database) renewAccessTokenIfExpired() error {
 	var err error
 	if time.Now().After(db.Auth.ExpirationTime) { // token has expired
-		db.Auth, err = getAccessToken(db.Auth.Credential)
+		db.Auth, err = db.getAccessToken(db.Auth.Credential)
 	}
 	return err
 }
@@ -569,7 +595,8 @@ func (db Database) studyIdsForDataObjectIds(dataObjectIds []string) (map[string]
 	}
 
 	// run the query and extract the results
-	body, err := db.post("queries:run/", bytes.NewReader(data))
+	// NOTE: recall that trailing slashes in POSTs currently cause chaos!
+	body, err := db.post("queries:run", bytes.NewReader(data))
 	if err != nil {
 		return nil, err
 	}

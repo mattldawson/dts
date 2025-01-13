@@ -59,17 +59,6 @@ type Database struct {
 	EndpointForHost map[string]string
 }
 
-// This error type is emitted if an NMDC endpoint redirects an HTTPS request
-// to an HTTP endpoint.
-type DowngradedRedirectError struct {
-	Endpoint string
-}
-
-func (e DowngradedRedirectError) Error() string {
-	return fmt.Sprintf("An NMDC database endpoint (%s) is attempting to downgrade an HTTPS request to HTTP",
-		e.Endpoint)
-}
-
 func NewDatabase(orcid string) (databases.Database, error) {
 	if orcid == "" {
 		return nil, databases.UnauthorizedError{
@@ -117,17 +106,7 @@ func NewDatabase(orcid string) (databases.Database, error) {
 
 	// NOTE: we prevent redirects from HTTPS -> HTTP!
 	db := &Database{
-		Client: http.Client{
-			Timeout: time.Second * 10,
-			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				if req.URL.Scheme == "http" {
-					return DowngradedRedirectError{
-						Endpoint: fmt.Sprintf("%s%s", req.URL.Host, req.URL.Path),
-					}
-				}
-				return http.ErrUseLastResponse
-			},
-		},
+		Client: databases.SecureHttpClient(),
 		EndpointForHost: map[string]string{
 			"https://data.microbiomedata.org/data/": nerscEndpoint,
 			"https://nmdcdemo.emsl.pnnl.gov/":       emslEndpoint,

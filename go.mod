@@ -5,6 +5,7 @@ go 1.22
 toolchain go1.23.1
 
 require (
+	github.com/StalkR/hsts v1.0.3
 	github.com/danielgtaylor/huma/v2 v2.27.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.1

@@ -124,3 +124,14 @@ type ResourceEndpointNotFoundError struct {
 func (e ResourceEndpointNotFoundError) Error() string {
 	return fmt.Sprintf("Can't determine endpoint for resource '%s' in database '%s'", e.ResourceId, e.Database)
 }
+
+// this error type is emitted if an endpoint redirects an HTTPS request to an
+// HTTP endpoint (it's NUTS that this can happen!)
+type DowngradedRedirectError struct {
+	Endpoint string
+}
+
+func (e DowngradedRedirectError) Error() string {
+	return fmt.Sprintf("The endpoint %s is attempting to downgrade an HTTPS request to HTTP",
+		e.Endpoint)
+}

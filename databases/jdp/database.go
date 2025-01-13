@@ -92,7 +92,11 @@ func NewDatabase(orcid string) (databases.Database, error) {
 		}
 	}
 
+	// NOTE: we can't enable HSTS for JDP requests at this time, because the
+	// NOTE: server doesn't seem to support it. Maybe raise this issue with the
+	// NOTE: team?
 	return &Database{
+		//Client:          databases.SecureHttpClient(),
 		Id:              "jdp",
 		Orcid:           orcid,
 		Secret:          secret,

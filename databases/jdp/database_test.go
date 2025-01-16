@@ -18,11 +18,7 @@ databases:
   jdp:
     name: JGI Data Portal
     organization: Joint Genome Institue
-    url: https://files.jgi.doe.gov
     endpoint: globus-jdp
-    auth:
-      client_id: ${JGI_CLIENT_ID}
-      client_secret: ${JGI_CLIENT_SECRET}
 endpoints:
   globus-jdp:
     name: Globus NERSC DTN
@@ -105,7 +101,7 @@ func TestResources(t *testing.T) {
 	assert.Nil(err, "JDP resource query encountered an error")
 	assert.Equal(10, len(resources),
 		"JDP resource query didn't return requested number of results")
-	for i, _ := range resources {
+	for i := range resources {
 		jdpSearchResult := results.Resources[i]
 		resource := resources[i]
 		assert.Equal(jdpSearchResult.Id, resource.Id, "Resource ID mismatch")

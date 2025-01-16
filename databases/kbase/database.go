@@ -26,7 +26,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/kbase/dts/auth"
 	"github.com/kbase/dts/databases"
 	"github.com/kbase/dts/frictionless"
 )
@@ -42,6 +41,8 @@ func NewDatabase(orcid string) (databases.Database, error) {
 	if orcid == "" {
 		return nil, fmt.Errorf("No ORCID was given")
 	}
+
+	startUserFederation()
 
 	return &Database{
 		Id: "kbase",
@@ -73,9 +74,7 @@ func (db *Database) StagingStatus(id uuid.UUID) (databases.StagingStatus, error)
 }
 
 func (db *Database) LocalUser(orcid string) (string, error) {
-	// for KBase user federation, we rely on a table maintained by our KBase
-	// auth server proxy
-	return auth.KBaseLocalUsernameForOrcid(orcid)
+	return usernameForOrcid(orcid)
 }
 
 func (db Database) Save() (databases.DatabaseSaveState, error) {

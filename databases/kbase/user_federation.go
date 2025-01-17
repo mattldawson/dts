@@ -24,6 +24,7 @@ package kbase
 import (
 	"bufio"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -44,23 +45,37 @@ import (
 // so a new file can be dropped into the data directory with predictable results.
 
 // starts up the user federation machinery if it hasn't yet been started
-func startUserFederation() {
+func startUserFederation() error {
 	// fire up the user federation goroutine if needed
 	if !kbaseUserFederationStarted {
 		started := make(chan struct{})
 		go kbaseUserFederation(started)
 		<-started // wait for it to start
 
+		// load the user table
+		kbaseUpdateChan <- struct{}{}
+		err := <-kbaseErrorChan
+		if err != nil {
+			return err
+		}
+
 		// start a pulse that reloads the user table from a file at the top of every hour
 		go func() {
 			for {
-				kbaseUpdateChan <- struct{}{}
 				t := time.Now()
 				topOfHour := time.Date(t.Year(), t.Month(), t.Day(), t.Hour()+1, 0, 0, 0, t.Location())
 				time.Sleep(time.Until(topOfHour))
+				kbaseUpdateChan <- struct{}{}
+
+				// reloading errors are logged, not propagated
+				err := <-kbaseErrorChan
+				if err != nil {
+					slog.Warn(err.Error())
+				}
 			}
 		}()
 	}
+	return nil
 }
 
 // returns the KBase username associated with the given ORCID

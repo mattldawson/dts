@@ -89,12 +89,23 @@ func usernameForOrcid(orcid string) (string, error) {
 	return username, err
 }
 
+// stops the user federation machinery
+func stopUserFederation() error {
+	if !kbaseUserFederationStarted {
+		return fmt.Errorf("KBase user federation not started!")
+	}
+	kbaseStopChan <- struct{}{}
+	err := <-kbaseErrorChan
+	return err
+}
+
 //-----------
 // Internals
 //-----------
 
 var kbaseUserFederationStarted = false
 var kbaseUpdateChan chan struct{} // triggers updates to the ORCID/user table
+var kbaseStopChan chan struct{}   // stops the user federation subsystem
 var kbaseOrcidChan chan string    // passes ORCIDs in for lookup
 var kbaseUserChan chan string     // passes usernames out
 var kbaseErrorChan chan error     // passes errors out
@@ -108,6 +119,7 @@ func kbaseUserFederation(started chan struct{}) {
 	kbaseUserChan = make(chan string)
 	kbaseErrorChan = make(chan error)
 	kbaseUpdateChan = make(chan struct{})
+	kbaseStopChan = make(chan struct{})
 
 	// mapping of ORCIDs to KBase users
 	kbaseUserTable := make(map[string]string)
@@ -133,6 +145,10 @@ func kbaseUserFederation(started chan struct{}) {
 				kbaseUserTable = newUserTable
 			}
 			kbaseErrorChan <- err
+		case <-kbaseStopChan: // stop the subsystem
+			kbaseUserFederationStarted = false
+			kbaseErrorChan <- nil
+			break
 		}
 	}
 }
@@ -169,7 +185,8 @@ func readUserTable(csvFile string) (map[string]string, error) {
 	usersForOrcids := make(map[string]string)
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
-		cells := strings.Split(scanner.Text(), ",")
+		line := scanner.Text()
+		cells := strings.Split(line, ",")
 		if len(cells) != 2 {
 			return nil, InvalidKBaseUserSpreadsheet{
 				File:    csvFile,
@@ -186,8 +203,11 @@ func readUserTable(csvFile string) (map[string]string, error) {
 			}
 		} else if !isOrcid(cells[orcidColumn]) {
 			// we've already established the ORCID column, but this line disagrees,
-			// so discard it
-			continue
+			// so the whole file is suspect
+			return nil, InvalidKBaseUserSpreadsheet{
+				File:    csvFile,
+				Message: "Different lines list username, ORCID data in different columns",
+			}
 		}
 
 		if orcidColumn != -1 {
@@ -236,7 +256,7 @@ func readUserTable(csvFile string) (map[string]string, error) {
 // returns true iff s contains a valid username
 func isUsername(s string) bool {
 	return len(s) > 0 && !strings.ContainsFunc(s, func(c rune) bool {
-		return !unicode.IsLetter(c) || !unicode.IsDigit(c) || c != '_'
+		return !unicode.IsLetter(c) && !unicode.IsDigit(c) && c != '_'
 	})
 }
 

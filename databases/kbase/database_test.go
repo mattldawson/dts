@@ -58,22 +58,28 @@ func (t *SerialTests) TestUserFederation() {
 
 	// make sure we can create a db with good user tables
 	for i := range goodUserTables {
-		copyDataFile(fmt.Sprintf("good_user_table_%d", i), "kbase_user_orcids.csv")
+		err := copyDataFile(fmt.Sprintf("good_user_table_%d.csv", i), "kbase_user_orcids.csv")
+		assert.Nil(err, "Couldn't copy good_user_table_%d.csv into place.")
 		db, err := NewDatabase(orcid)
 		assert.NotNil(db, fmt.Sprintf("KBase database not created with good_user_table_%d", i))
 		assert.Nil(err, "KBase database creation encountered an error")
+		err = stopUserFederation()
+		assert.Nil(err, "Couldn't stop user federation subsystem.")
 	}
 
 	// make sure we CAN'T create a db with bad user tables
 	for i := range badUserTables {
-		copyDataFile(fmt.Sprintf("bad_user_table_%d", i), "kbase_user_orcids.csv")
+		err := copyDataFile(fmt.Sprintf("bad_user_table_%d.csv", i), "kbase_user_orcids.csv")
+		assert.Nil(err, "Couldn't copy bad_user_table_%d.csv into place.")
 		db, err := NewDatabase(orcid)
-		assert.Nil(db, fmt.Sprintf("KBase database created with bad_user_table_%d", i))
+		assert.Nil(db, fmt.Sprintf("KBase database created with bad_user_table_%d.csv", i))
 		assert.NotNil(err, "KBase database creation with bad user table didn't encounter an error")
+		err = stopUserFederation()
+		assert.Nil(err, "Couldn't stop user federation subsystem.")
 	}
 
 	// copy a good user table back into place
-	copyDataFile("good_user_table_0", "kbase_user_orcids.csv")
+	copyDataFile("good_user_table_0.csv", "kbase_user_orcids.csv")
 }
 
 func (t *SerialTests) TestSearch() {
@@ -105,9 +111,12 @@ func (t *SerialTests) TestLocalUser() {
 	assert := assert.New(t.Test)
 	orcid := os.Getenv("DTS_KBASE_TEST_ORCID")
 	db, _ := NewDatabase(orcid)
-	username, err := db.LocalUser(orcid)
+	username, err := db.LocalUser("1234-5678-9101-112X")
 	assert.Nil(err)
-	assert.True(len(username) > 0)
+	assert.Equal("Alice", username)
+	username, err = db.LocalUser("1235-5678-9101-112X")
+	assert.NotNil(err)
+	assert.Equal("", username)
 }
 
 var CWD string
@@ -144,7 +153,8 @@ Bob,1234-5678-9101-1121
 }
 
 var badUserTables = []string{
-	`nocommas
+	`nocommas`,
+	`orcid,orcid
 1234-5678-9101-1121,1234-5678-9101-1121
 `,
 	`username,orcid

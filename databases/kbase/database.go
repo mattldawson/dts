@@ -42,7 +42,10 @@ func NewDatabase(orcid string) (databases.Database, error) {
 		return nil, fmt.Errorf("No ORCID was given")
 	}
 
-	startUserFederation()
+	err := startUserFederation()
+	if err != nil {
+		return nil, err
+	}
 
 	return &Database{
 		Id: "kbase",

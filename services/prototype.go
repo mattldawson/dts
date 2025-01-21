@@ -141,7 +141,7 @@ func (service *prototype) Close() {
 
 // Version numbers
 var majorVersion = 0
-var minorVersion = 2
+var minorVersion = 3
 var patchVersion = 0
 
 // Version string

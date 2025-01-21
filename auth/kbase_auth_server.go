@@ -59,27 +59,13 @@ func NewKBaseAuthServer(accessToken string) (*KBaseAuthServer, error) {
 		}
 
 		// verify that the access token works (i.e. that the client is logged in)
-		kbaseUser, err := server.kbaseUser()
+		_, err := server.kbaseUser()
 		if err != nil {
 			return nil, err
 		}
 
-		// register the local username under all its ORCIDs with our KBase user
-		// federation mechanism
-		for _, pid := range kbaseUser.Idents {
-			if pid.Provider == "OrcID" {
-				orcid := pid.UserName
-				err = SetKBaseLocalUsernameForOrcid(orcid, kbaseUser.Username)
-				if err != nil {
-					break
-				}
-			}
-		}
-
-		if err == nil {
-			// register this instance of the auth server
-			instances[accessToken] = &server
-		}
+		// register this instance of the auth server
+		instances[accessToken] = &server
 		return &server, err
 	}
 }

@@ -58,7 +58,7 @@ func (t *SerialTests) TestUserFederation() {
 
 	// make sure we can create a db with good user tables
 	for i := range goodUserTables {
-		err := copyDataFile(fmt.Sprintf("good_user_table_%d.csv", i), "kbase_user_orcids.csv")
+		err := copyDataFile(fmt.Sprintf("good_user_table_%d.csv", i), kbaseUserTableFile)
 		assert.Nil(err, "Couldn't copy good_user_table_%d.csv into place.")
 		db, err := NewDatabase(orcid)
 		assert.NotNil(db, fmt.Sprintf("KBase database not created with good_user_table_%d", i))
@@ -69,7 +69,7 @@ func (t *SerialTests) TestUserFederation() {
 
 	// make sure we CAN'T create a db with bad user tables
 	for i := range badUserTables {
-		err := copyDataFile(fmt.Sprintf("bad_user_table_%d.csv", i), "kbase_user_orcids.csv")
+		err := copyDataFile(fmt.Sprintf("bad_user_table_%d.csv", i), kbaseUserTableFile)
 		assert.Nil(err, "Couldn't copy bad_user_table_%d.csv into place.")
 		db, err := NewDatabase(orcid)
 		assert.Nil(db, fmt.Sprintf("KBase database created with bad_user_table_%d.csv", i))
@@ -79,7 +79,7 @@ func (t *SerialTests) TestUserFederation() {
 	}
 
 	// copy a good user table back into place
-	copyDataFile("good_user_table_0.csv", "kbase_user_orcids.csv")
+	copyDataFile("good_user_table_0.csv", kbaseUserTableFile)
 }
 
 func (t *SerialTests) TestSearch() {
@@ -208,7 +208,7 @@ func setup() {
 	}
 
 	// copy a good user table into place
-	copyDataFile("good_user_table_0.csv", "kbase_user_orcids.csv")
+	copyDataFile("good_user_table_0.csv", kbaseUserTableFile)
 
 	databases.RegisterDatabase("kbase", NewDatabase)
 	endpoints.RegisterEndpointProvider("globus", globus.NewEndpoint)

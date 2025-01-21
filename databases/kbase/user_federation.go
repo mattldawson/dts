@@ -40,9 +40,9 @@ import (
 
 // In order to map an ORCID to a KBase username, we maintain a mapping that
 // stores entries for all KBase users with ORCIDs. This mapping currently lives
-// a 2-column spreadsheet (kbase_user_orcids.csv) in the DTS data directory.
-// The data in this spreadsheet is reloaded every hour on the top of the hour
-// so a new file can be dropped into the data directory with predictable results.
+// a 2-column spreadsheet (CSV) in the DTS data directory. The data in this
+// spreadsheet is reloaded every hour on the top of the hour so a new file can
+// be dropped into the data directory with predictable results.
 
 // starts up the user federation machinery if it hasn't yet been started
 func startUserFederation() error {
@@ -107,6 +107,8 @@ func stopUserFederation() error {
 // Internals
 //-----------
 
+const kbaseUserTableFile = "kbase_user_orcids.csv"
+
 var kbaseUserFederationStarted = false
 var kbaseUpdateChan chan struct{} // triggers updates to the ORCID/user table
 var kbaseStopChan chan struct{}   // stops the user federation subsystem
@@ -144,7 +146,7 @@ func kbaseUserFederation(started chan struct{}) {
 			}
 		case <-kbaseUpdateChan: // update ORCID/user table
 			var err error
-			newUserTable, err := readUserTable("kbase_user_orcids.csv")
+			newUserTable, err := readUserTable()
 			if err == nil {
 				kbaseUserTable = newUserTable
 			}
@@ -157,15 +159,16 @@ func kbaseUserFederation(started chan struct{}) {
 	}
 }
 
-// reads the specified .csv file within the DTS data directory, returning a map
+// reads the user table file within the DTS data directory, returning a map
 // with ORCID keys associated with username values
-func readUserTable(csvFile string) (map[string]string, error) {
+func readUserTable() (map[string]string, error) {
 	// open the CVS file containing the user mapping
-	filename := filepath.Join(config.Service.DataDirectory, csvFile)
+	filename := filepath.Join(config.Service.DataDirectory, kbaseUserTableFile)
+	slog.Info(fmt.Sprintf("Reading KBase user table from %s", filename))
 	file, err := os.Open(filename)
 	if err != nil {
 		return nil, InvalidKBaseUserSpreadsheet{
-			File:    csvFile,
+			File:    kbaseUserTableFile,
 			Message: "nonexistent file",
 		}
 	}
@@ -193,7 +196,7 @@ func readUserTable(csvFile string) (map[string]string, error) {
 		cells := strings.Split(line, ",")
 		if len(cells) != 2 {
 			return nil, InvalidKBaseUserSpreadsheet{
-				File:    csvFile,
+				File:    kbaseUserTableFile,
 				Message: fmt.Sprintf("%d comma-separated columns found (2 expected)", len(cells)),
 			}
 		}
@@ -209,7 +212,7 @@ func readUserTable(csvFile string) (map[string]string, error) {
 			// we've already established the ORCID column, but this line disagrees,
 			// so the whole file is suspect
 			return nil, InvalidKBaseUserSpreadsheet{
-				File:    csvFile,
+				File:    kbaseUserTableFile,
 				Message: "Different lines list username, ORCID data in different columns",
 			}
 		}
@@ -227,7 +230,7 @@ func readUserTable(csvFile string) (map[string]string, error) {
 			if existingUser, found := usersForOrcids[orcid]; found {
 				if existingUser != orcid {
 					return nil, InvalidKBaseUserSpreadsheet{
-						File:    csvFile,
+						File:    kbaseUserTableFile,
 						Message: fmt.Sprintf("ORCID %s is associated with multiple users", orcid),
 					}
 				}
@@ -237,7 +240,7 @@ func readUserTable(csvFile string) (map[string]string, error) {
 			if existingOrcid, found := orcidsForUsers[username]; found {
 				if existingOrcid != orcid {
 					return nil, InvalidKBaseUserSpreadsheet{
-						File:    csvFile,
+						File:    kbaseUserTableFile,
 						Message: fmt.Sprintf("User %s has multiple ORCIDs", username),
 					}
 				}
@@ -249,7 +252,7 @@ func readUserTable(csvFile string) (map[string]string, error) {
 
 	if len(usersForOrcids) == 0 {
 		return nil, InvalidKBaseUserSpreadsheet{
-			File:    csvFile,
+			File:    kbaseUserTableFile,
 			Message: "No valid username/ORCID pairs found",
 		}
 	}

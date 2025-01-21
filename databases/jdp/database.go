@@ -53,8 +53,6 @@ type Database struct {
 	Client http.Client
 	// shared secret used for authentication
 	Secret string
-	// SSO token used for interim JDP access
-	SsoToken string
 	// mapping from staging UUIDs to JDP restoration request ID
 	StagingRequests map[uuid.UUID]StagingRequest
 }
@@ -70,10 +68,7 @@ func NewDatabase(orcid string) (databases.Database, error) {
 	// make sure we have a shared secret or an SSO token
 	secret, haveSecret := os.LookupEnv("DTS_JDP_SECRET")
 	if !haveSecret { // check for SSO token
-		_, haveToken := os.LookupEnv("DTS_JDP_SSO_TOKEN")
-		if !haveToken {
-			return nil, fmt.Errorf("No shared secret or SSO token was found for JDP authentication")
-		}
+		return nil, fmt.Errorf("No shared secret was found for JDP authentication")
 	}
 
 	// make sure we are using only a single endpoint
@@ -90,7 +85,6 @@ func NewDatabase(orcid string) (databases.Database, error) {
 	return &Database{
 		//Client:          databases.SecureHttpClient(),
 		Secret:          secret,
-		SsoToken:        os.Getenv("DTS_JDP_SSO_TOKEN"),
 		StagingRequests: make(map[uuid.UUID]StagingRequest),
 	}, nil
 }
@@ -623,12 +617,8 @@ func dataResourceFromFile(file File) frictionless.DataResource {
 }
 
 // adds an appropriate authorization header to given HTTP request
-func (db Database) addAuthHeader(orcidOrSSOToken string, request *http.Request) {
-	if len(db.Secret) > 0 { // use shared secret
-		request.Header.Add("Authorization", fmt.Sprintf("Token %s_%s", orcidOrSSOToken, db.Secret))
-	} else { // try SSO token
-		request.Header.Add("Authorization", fmt.Sprintf("Bearer %s", orcidOrSSOToken))
-	}
+func (db Database) addAuthHeader(orcid string, request *http.Request) {
+	request.Header.Add("Authorization", fmt.Sprintf("Token %s_%s", orcid, db.Secret))
 }
 
 // performs a GET request on the given resource, returning the resulting

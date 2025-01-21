@@ -433,6 +433,15 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#maintaining-the-dts-data-directory" class="md-nav__link">
+    <span class="md-ellipsis">
+      Maintaining the DTS Data Directory
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1046,6 +1055,15 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#maintaining-the-dts-data-directory" class="md-nav__link">
+    <span class="md-ellipsis">
+      Maintaining the DTS Data Directory
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1145,7 +1163,7 @@ navigate to the <code>dts</code> deployment.</p>
 <li>If needed, navigate to the <code>Volumes</code> section and edit the CFS directory for
    the volume mounted at <code>/data</code>. Usually, this is set to <code>/global/cfs/cdirs/kbase/dts/</code>,
    so you usually don't need to edit this. Similarly, check the volume mounted
-   at <code>/manifests</code> (usually set to <code>/global/cfs/cdirs/kbase/gsharing/manifests/</code>).</li>
+   at <code>/manifests</code> (usually set to <code>/global/cfs/cdirs/kbase/gsharing/dts/manifests/</code>).</li>
 <li>Edit the Docker image for the deployment, changing the tag after the colon
    to match the tag of the Docker image pushed by <code>deploy-to-spin.sh</code> above.</li>
 <li>Make sure that the Scaling/Upgrade Policy on the Deployment is set to
@@ -1155,6 +1173,19 @@ navigate to the <code>dts</code> deployment.</p>
 <li>Click <code>Save</code> to restart the deployment with this new information.</li>
 </ol>
 <p>That's it! You've now updated the service with new features and bugfixes.</p>
+<h2 id="maintaining-the-dts-data-directory">Maintaining the DTS Data Directory</h2>
+<p>The DTS uses its data directory to manage its own state, as well as its
+interactions with other services. Currently, the data directory contains the
+following files:</p>
+<ul>
+<li><code>dts.gob</code> - a file containing information about pending and recently finished
+  file transfers, along with any related database-specific state information</li>
+<li><code>kbase_user_orcids.csv</code> - a comma-separated variable file associating ORCID
+  identifiers with KBase users. This file is a temporary mechanism that allows
+  the DTS to obtain the username of a KBase user given their ORCID. It is
+  re-read at the top of the hour, making it easy to replace without restarting
+  a deployment.</li>
+</ul>
 
 
 

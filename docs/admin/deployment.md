@@ -96,7 +96,7 @@ navigate to the `dts` deployment.
 3. If needed, navigate to the `Volumes` section and edit the CFS directory for
    the volume mounted at `/data`. Usually, this is set to `/global/cfs/cdirs/kbase/dts/`,
    so you usually don't need to edit this. Similarly, check the volume mounted
-   at `/manifests` (usually set to `/global/cfs/cdirs/kbase/gsharing/manifests/`).
+   at `/manifests` (usually set to `/global/cfs/cdirs/kbase/gsharing/dts/manifests/`).
 4. Edit the Docker image for the deployment, changing the tag after the colon
    to match the tag of the Docker image pushed by `deploy-to-spin.sh` above.
 5. Make sure that the Scaling/Upgrade Policy on the Deployment is set to
@@ -106,3 +106,17 @@ navigate to the `dts` deployment.
 6. Click `Save` to restart the deployment with this new information.
 
 That's it! You've now updated the service with new features and bugfixes.
+
+## Maintaining the DTS Data Directory
+
+The DTS uses its data directory to manage its own state, as well as its
+interactions with other services. Currently, the data directory contains the
+following files:
+
+* `dts.gob` - a file containing information about pending and recently finished
+  file transfers, along with any related database-specific state information
+* `kbase_user_orcids.csv` - a comma-separated variable file associating ORCID
+  identifiers with KBase users. This file is a temporary mechanism that allows
+  the DTS to obtain the username of a KBase user given their ORCID. It is
+  re-read at the top of the hour, making it easy to replace without restarting
+  a deployment.

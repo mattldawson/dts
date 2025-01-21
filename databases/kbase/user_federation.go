@@ -65,10 +65,9 @@ func startUserFederation() error {
 				t := time.Now()
 				topOfHour := time.Date(t.Year(), t.Month(), t.Day(), t.Hour()+1, 0, 0, 0, t.Location())
 				time.Sleep(time.Until(topOfHour))
-				kbaseUpdateChan <- struct{}{}
+				err := reloadUserTable()
 
 				// reloading errors are logged, not propagated
-				err := <-kbaseErrorChan
 				if err != nil {
 					slog.Warn(err.Error())
 				}
@@ -87,6 +86,11 @@ func usernameForOrcid(orcid string) (string, error) {
 	username := <-kbaseUserChan
 	err := <-kbaseErrorChan
 	return username, err
+}
+
+func reloadUserTable() error {
+	kbaseUpdateChan <- struct{}{}
+	return <-kbaseErrorChan
 }
 
 // stops the user federation machinery

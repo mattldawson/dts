@@ -49,10 +49,6 @@ import (
 // file database appropriate for handling JDP searches and transfers
 // (implements the databases.Database interface)
 type Database struct {
-	// database identifier
-	Id string
-	// ORCID identifier for database proxy
-	Orcid string
 	// HTTP client that caches queries
 	Client http.Client
 	// shared secret used for authentication
@@ -71,10 +67,6 @@ type StagingRequest struct {
 }
 
 func NewDatabase(orcid string) (databases.Database, error) {
-	if orcid == "" {
-		return nil, fmt.Errorf("No ORCID was given")
-	}
-
 	// make sure we have a shared secret or an SSO token
 	secret, haveSecret := os.LookupEnv("DTS_JDP_SECRET")
 	if !haveSecret { // check for SSO token
@@ -97,8 +89,6 @@ func NewDatabase(orcid string) (databases.Database, error) {
 	// NOTE: team?
 	return &Database{
 		//Client:          databases.SecureHttpClient(),
-		Id:              "jdp",
-		Orcid:           orcid,
 		Secret:          secret,
 		SsoToken:        os.Getenv("DTS_JDP_SSO_TOKEN"),
 		StagingRequests: make(map[uuid.UUID]StagingRequest),
@@ -265,7 +255,7 @@ func (db *Database) StageFiles(fileIds []string) (uuid.UUID, error) {
 
 	// NOTE: The slash in the resource is all-important for POST requests to
 	// NOTE: the JDP!!
-	response, err := db.post("request_archived_files/", bytes.NewReader(data))
+	response, err := db.postWithOrcid("request_archived_files/", bytes.NewReader(data))
 	if err != nil {
 		return xferId, err
 	}
@@ -633,11 +623,11 @@ func dataResourceFromFile(file File) frictionless.DataResource {
 }
 
 // adds an appropriate authorization header to given HTTP request
-func (db Database) addAuthHeader(request *http.Request) {
+func (db Database) addAuthHeader(orcidOrSSOToken string, request *http.Request) {
 	if len(db.Secret) > 0 { // use shared secret
-		request.Header.Add("Authorization", fmt.Sprintf("Token %s_%s", db.Orcid, db.Secret))
+		request.Header.Add("Authorization", fmt.Sprintf("Token %s_%s", orcidOrSSOToken, db.Secret))
 	} else { // try SSO token
-		request.Header.Add("Authorization", fmt.Sprintf("Bearer %s", db.SsoToken))
+		request.Header.Add("Authorization", fmt.Sprintf("Bearer %s", orcidOrSSOToken))
 	}
 }
 
@@ -657,13 +647,12 @@ func (db *Database) get(resource string, values url.Values) (*http.Response, err
 	if err != nil {
 		return nil, err
 	}
-	db.addAuthHeader(req)
 	return db.Client.Do(req)
 }
 
 // performs a POST request on the given resource, returning the resulting
 // response and error
-func (db *Database) post(resource string, body io.Reader) (*http.Response, error) {
+func (db *Database) postWithOrcid(resource, orcid string, body io.Reader) (*http.Response, error) {
 	u, err := url.ParseRequestURI(jdpBaseURL)
 	if err != nil {
 		return nil, err
@@ -675,9 +664,17 @@ func (db *Database) post(resource string, body io.Reader) (*http.Response, error
 	if err != nil {
 		return nil, err
 	}
-	db.addAuthHeader(req)
+	if orcid != "" {
+		db.addAuthHeader(orcid, req)
+	}
 	req.Header.Set("Content-Type", "application/json")
 	return db.Client.Do(req)
+}
+
+// performs a POST request on the given resource, returning the resulting
+// response and error
+func (db *Database) post(resource string, body io.Reader) (*http.Response, error) {
+	return db.postWithOrcid(resource, "", body)
 }
 
 // this helper extracts files for the JDP /search GET query with given parameters

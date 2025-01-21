@@ -193,6 +193,12 @@ func readUserTable() (map[string]string, error) {
 	usersForOrcids := make(map[string]string)
 	reader := csv.NewReader(file)
 	records, err := reader.ReadAll()
+	if err != nil {
+		return nil, InvalidKBaseUserSpreadsheet{
+			File:    kbaseUserTableFile,
+			Message: "Couldn't parse CVS file",
+		}
+	}
 	for _, record := range records {
 		if len(record) != 2 {
 			return nil, InvalidKBaseUserSpreadsheet{

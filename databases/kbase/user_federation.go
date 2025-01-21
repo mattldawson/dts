@@ -22,11 +22,12 @@
 package kbase
 
 import (
-	"bufio"
+	"encoding/csv"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 	"unicode"
@@ -190,25 +191,24 @@ func readUserTable() (map[string]string, error) {
 	userColumn := -1
 	orcidsForUsers := make(map[string]string)
 	usersForOrcids := make(map[string]string)
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := scanner.Text()
-		cells := strings.Split(line, ",")
-		if len(cells) != 2 {
+	reader := csv.NewReader(file)
+	records, err := reader.ReadAll()
+	for _, record := range records {
+		if len(record) != 2 {
 			return nil, InvalidKBaseUserSpreadsheet{
 				File:    kbaseUserTableFile,
-				Message: fmt.Sprintf("%d comma-separated columns found (2 expected)", len(cells)),
+				Message: fmt.Sprintf("%d comma-separated columns found (2 expected)", len(record)),
 			}
 		}
 
 		if orcidColumn == -1 { // find the column with an ORCID
 			for i := 0; i < 2; i++ {
-				if isOrcid(cells[i]) {
+				if isOrcid(record[i]) {
 					orcidColumn = i
 					userColumn = (i + 1) % 2 // user column's the other one
 				}
 			}
-		} else if !isOrcid(cells[orcidColumn]) {
+		} else if !isOrcid(record[orcidColumn]) {
 			// we've already established the ORCID column, but this line disagrees,
 			// so the whole file is suspect
 			return nil, InvalidKBaseUserSpreadsheet{
@@ -218,12 +218,12 @@ func readUserTable() (map[string]string, error) {
 		}
 
 		if orcidColumn != -1 {
-			orcid := cells[orcidColumn]
+			orcid := record[orcidColumn]
 			// ORCID column's okay, but what about the user column?
-			if !isUsername(cells[userColumn]) {
+			if !isUsername(record[userColumn]) {
 				continue
 			}
-			username := cells[userColumn]
+			username := record[userColumn]
 
 			// have we seen this ORCID or username before? It's okay, as long as everything
 			// is consistent
@@ -267,23 +267,8 @@ func isUsername(s string) bool {
 	})
 }
 
-// returns true iff s contains a valid ORCID
+// returns true iff s contains a valid ORCID (nnnn-nnnn-nnnn-nnn[nX])
 func isOrcid(s string) bool {
-	if len(s) != 19 {
-		return false
-	}
-	if s[4] != '-' || s[9] != '-' || s[14] != '-' {
-		return false
-	}
-	isAllDigits := func(s string) bool {
-		return !strings.ContainsFunc(s, func(c rune) bool { return !unicode.IsDigit(c) })
-	}
-	if !isAllDigits(s[:4]) || !isAllDigits(s[5:9]) || !isAllDigits(s[10:14]) || !isAllDigits(s[15:18]) {
-		return false
-	}
-	// the last character can be either a digit or X (representing a checksum of 10)
-	if !unicode.IsDigit(rune(s[18])) && s[18] != 'X' {
-		return false
-	}
-	return true
+	matched, err := regexp.MatchString(`^(\d{4}-){3}\d{3}[\dX]$`, s)
+	return err == nil && matched
 }

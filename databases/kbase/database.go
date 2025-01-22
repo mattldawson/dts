@@ -33,40 +33,32 @@ import (
 // file database appropriate for handling KBase searches and transfers
 // (implements the databases.Database interface)
 type Database struct {
-	// database identifier
-	Id string
 }
 
-func NewDatabase(orcid string) (databases.Database, error) {
-	if orcid == "" {
-		return nil, fmt.Errorf("No ORCID was given")
-	}
-
+func NewDatabase() (databases.Database, error) {
 	err := startUserFederation()
 	if err != nil {
 		return nil, err
 	}
 
-	return &Database{
-		Id: "kbase",
-	}, nil
+	return &Database{}, nil
 }
 
 func (db *Database) SpecificSearchParameters() map[string]interface{} {
 	return nil
 }
 
-func (db *Database) Search(params databases.SearchParameters) (databases.SearchResults, error) {
+func (db *Database) Search(orcid string, params databases.SearchParameters) (databases.SearchResults, error) {
 	err := fmt.Errorf("Search not implemented for kbase database!")
 	return databases.SearchResults{}, err
 }
 
-func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, error) {
+func (db *Database) Resources(orcid string, fileIds []string) ([]frictionless.DataResource, error) {
 	err := fmt.Errorf("Resources not implemented for kbase database!")
 	return nil, err
 }
 
-func (db *Database) StageFiles(fileIds []string) (uuid.UUID, error) {
+func (db *Database) StageFiles(orcid string, fileIds []string) (uuid.UUID, error) {
 	err := fmt.Errorf("StageFiles not implemented for kbase database!")
 	return uuid.UUID{}, err
 }

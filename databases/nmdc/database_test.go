@@ -71,29 +71,21 @@ func breakdown() {
 
 func TestNewDatabase(t *testing.T) {
 	assert := assert.New(t)
-	orcid := os.Getenv("DTS_KBASE_TEST_ORCID")
-	db, err := NewDatabase(orcid)
+	db, err := NewDatabase()
 	assert.NotNil(db, "NMDC database not created")
 	assert.Nil(err, "NMDC database creation encountered an error")
-}
-
-func TestNewDatabaseWithoutOrcid(t *testing.T) {
-	assert := assert.New(t)
-	db, err := NewDatabase("")
-	assert.Nil(db, "Invalid NMDC database somehow created")
-	assert.NotNil(err, "NMDC database creation without ORCID encountered no error")
 }
 
 func TestSearch(t *testing.T) {
 	assert := assert.New(t)
 	orcid := os.Getenv("DTS_KBASE_TEST_ORCID")
-	db, _ := NewDatabase(orcid)
+	db, _ := NewDatabase()
 
 	params := databases.SearchParameters{
 		Query:    "",
 		Specific: nmdcSearchParams,
 	}
-	results, err := db.Search(params)
+	results, err := db.Search(orcid, params)
 	assert.True(len(results.Resources) > 0, "NMDC search query returned no results")
 	assert.Nil(err, "NMDC search query encountered an error")
 }
@@ -101,17 +93,17 @@ func TestSearch(t *testing.T) {
 func TestResources(t *testing.T) {
 	assert := assert.New(t)
 	orcid := os.Getenv("DTS_KBASE_TEST_ORCID")
-	db, _ := NewDatabase(orcid)
+	db, _ := NewDatabase()
 	params := databases.SearchParameters{
 		Query:    "",
 		Specific: nmdcSearchParams,
 	}
-	results, _ := db.Search(params)
+	results, _ := db.Search(orcid, params)
 	fileIds := make([]string, len(results.Resources))
 	for i, res := range results.Resources {
 		fileIds[i] = res.Id
 	}
-	resources, err := db.Resources(fileIds[:10])
+	resources, err := db.Resources(orcid, fileIds[:10])
 	assert.Nil(err, "NMDC resource query encountered an error")
 	assert.Equal(10, len(resources),
 		"NMDC resource query didn't return requested number of results")

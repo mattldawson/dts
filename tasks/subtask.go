@@ -49,7 +49,7 @@ type transferSubtask struct {
 	StagingStatus       databases.StagingStatus // staging status
 	Transfer            uuid.NullUUID           // file transfer UUID (if any)
 	TransferStatus      TransferStatus          // status of file transfer operation
-	Client              auth.Client             // info about client used for transfer
+	User                auth.User               // info about user requesting transfer
 }
 
 func (subtask *transferSubtask) start() error {
@@ -68,7 +68,7 @@ func (subtask *transferSubtask) start() error {
 	} else {
 		// tell the source DB to stage the files, stash the task, and return
 		// its new ID
-		source, err := databases.NewDatabase(subtask.Client.Orcid, subtask.Source)
+		source, err := databases.NewDatabase(subtask.Source)
 		if err != nil {
 			return err
 		}
@@ -76,7 +76,7 @@ func (subtask *transferSubtask) start() error {
 		for i, resource := range subtask.Resources {
 			fileIds[i] = resource.Id
 		}
-		taskId, err := source.StageFiles(fileIds)
+		taskId, err := source.StageFiles(subtask.User.Orcid, fileIds)
 		if err != nil {
 			return err
 		}
@@ -106,7 +106,7 @@ func (subtask *transferSubtask) update() error {
 // checks whether files for a subtask are finished staging and, if so,
 // initiates the transfer process
 func (subtask *transferSubtask) checkStaging() error {
-	source, err := databases.NewDatabase(subtask.Client.Orcid, subtask.Source)
+	source, err := databases.NewDatabase(subtask.Source)
 	if err != nil {
 		return err
 	}

@@ -168,8 +168,6 @@ type Specification struct {
 	// the name of source database from which files are transferred (as specified
 	// in the DTS config file)
 	Source string
-	// information about the client accessing the DTS
-	Client auth.Client
 	// information about the user requesting the task
 	User auth.User
 }
@@ -188,18 +186,17 @@ func Create(spec Specification) (uuid.UUID, error) {
 
 	// verify that we can fetch the task's source and destination databases
 	// without incident
-	_, err := databases.NewDatabase(spec.Client.Orcid, spec.Source)
+	_, err := databases.NewDatabase(spec.Source)
 	if err != nil {
 		return taskId, err
 	}
-	_, err = databases.NewDatabase(spec.Client.Orcid, spec.Destination)
+	_, err = databases.NewDatabase(spec.Destination)
 	if err != nil {
 		return taskId, err
 	}
 
 	// create a new task and send it along for processing
 	taskChannels.CreateTask <- transferTask{
-		Client:       spec.Client,
 		User:         spec.User,
 		Source:       spec.Source,
 		Destination:  spec.Destination,
@@ -353,10 +350,6 @@ func processTasks() {
 			returnTaskIdChan <- newTask.Id
 			slog.Info(fmt.Sprintf("Created new transfer task %s (%d file(s) requested)",
 				newTask.Id.String(), len(newTask.FileIds)))
-			// FIXME: this can be removed when we remove the user -> client ORCID fallback
-			if newTask.User.Orcid == newTask.Client.Orcid {
-				slog.Debug(fmt.Sprintf("Task %s: No user ORCID specified, using client ORCID", newTask.Id.String()))
-			}
 		case taskId := <-cancelTaskChan: // Cancel() called
 			if task, found := tasks[taskId]; found {
 				slog.Info(fmt.Sprintf("Task %s: received cancellation request", taskId.String()))

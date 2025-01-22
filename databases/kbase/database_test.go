@@ -30,7 +30,6 @@ func TestMain(m *testing.M) {
 func TestRunner(t *testing.T) {
 	tester := SerialTests{Test: t}
 	tester.TestNewDatabase()
-	tester.TestNewDatabaseWithoutOrcid()
 	tester.TestUserFederation()
 	tester.TestSearch()
 	tester.TestResources()
@@ -39,28 +38,19 @@ func TestRunner(t *testing.T) {
 
 func (t *SerialTests) TestNewDatabase() {
 	assert := assert.New(t.Test)
-	orcid := os.Getenv("DTS_KBASE_TEST_ORCID")
-	db, err := NewDatabase(orcid)
+	db, err := NewDatabase()
 	assert.NotNil(db, "KBase database not created")
 	assert.Nil(err, "KBase database creation encountered an error")
 }
 
-func (t *SerialTests) TestNewDatabaseWithoutOrcid() {
-	assert := assert.New(t.Test)
-	db, err := NewDatabase("")
-	assert.Nil(db, "Invalid KBase database somehow created")
-	assert.NotNil(err, "KBase database creation without ORCID encountered no error")
-}
-
 func (t *SerialTests) TestUserFederation() {
 	assert := assert.New(t.Test)
-	orcid := os.Getenv("DTS_KBASE_TEST_ORCID")
 
 	// make sure we can create a db with good user tables
 	for i := range goodUserTables {
 		err := copyDataFile(fmt.Sprintf("good_user_table_%d.csv", i), kbaseUserTableFile)
 		assert.Nil(err, "Couldn't copy good_user_table_%d.csv into place.")
-		db, err := NewDatabase(orcid)
+		db, err := NewDatabase()
 		assert.NotNil(db, fmt.Sprintf("KBase database not created with good_user_table_%d", i))
 		assert.Nil(err, "KBase database creation encountered an error")
 		err = stopUserFederation()
@@ -71,7 +61,7 @@ func (t *SerialTests) TestUserFederation() {
 	for i := range badUserTables {
 		err := copyDataFile(fmt.Sprintf("bad_user_table_%d.csv", i), kbaseUserTableFile)
 		assert.Nil(err, "Couldn't copy bad_user_table_%d.csv into place.")
-		db, err := NewDatabase(orcid)
+		db, err := NewDatabase()
 		assert.Nil(db, fmt.Sprintf("KBase database created with bad_user_table_%d.csv", i))
 		assert.NotNil(err, "KBase database creation with bad user table didn't encounter an error")
 		err = stopUserFederation()
@@ -85,7 +75,7 @@ func (t *SerialTests) TestUserFederation() {
 func (t *SerialTests) TestSearch() {
 	assert := assert.New(t.Test)
 	orcid := os.Getenv("DTS_KBASE_TEST_ORCID")
-	db, _ := NewDatabase(orcid)
+	db, _ := NewDatabase()
 	params := databases.SearchParameters{
 		Query: "prochlorococcus",
 		Pagination: struct {
@@ -95,22 +85,21 @@ func (t *SerialTests) TestSearch() {
 			MaxNum: 50,
 		},
 	}
-	_, err := db.Search(params)
+	_, err := db.Search(orcid, params)
 	assert.NotNil(err, "Search not implemented for kbase database!")
 }
 
 func (t *SerialTests) TestResources() {
 	assert := assert.New(t.Test)
 	orcid := os.Getenv("DTS_KBASE_TEST_ORCID")
-	db, _ := NewDatabase(orcid)
-	_, err := db.Resources(nil)
+	db, _ := NewDatabase()
+	_, err := db.Resources(orcid, nil)
 	assert.NotNil(err, "Resources not implemented for kbase database!")
 }
 
 func (t *SerialTests) TestLocalUser() {
 	assert := assert.New(t.Test)
-	orcid := os.Getenv("DTS_KBASE_TEST_ORCID")
-	db, _ := NewDatabase(orcid)
+	db, _ := NewDatabase()
 	username, err := db.LocalUser("1234-5678-9101-112X")
 	assert.Nil(err)
 	assert.Equal("Alice", username)

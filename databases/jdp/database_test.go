@@ -43,25 +43,16 @@ func breakdown() {
 
 func TestNewDatabase(t *testing.T) {
 	assert := assert.New(t)
-	orcid := os.Getenv("DTS_KBASE_TEST_ORCID")
-	jdpDb, err := NewDatabase(orcid)
+	jdpDb, err := NewDatabase()
 	assert.NotNil(jdpDb, "JDP database not created")
 	assert.Nil(err, "JDP database creation encountered an error")
 }
 
-func TestNewDatabaseWithoutOrcid(t *testing.T) {
-	assert := assert.New(t)
-	jdpDb, err := NewDatabase("")
-	assert.Nil(jdpDb, "Invalid JDP database somehow created")
-	assert.NotNil(err, "JDP database creation without ORCID encountered no error")
-}
-
 func TestNewDatabaseWithoutJDPSharedSecret(t *testing.T) {
 	assert := assert.New(t)
-	orcid := os.Getenv("DTS_KBASE_TEST_ORCID")
 	jdpSecret := os.Getenv("DTS_JDP_SECRET")
 	os.Unsetenv("DTS_JDP_SECRET")
-	jdpDb, err := NewDatabase(orcid)
+	jdpDb, err := NewDatabase()
 	os.Setenv("DTS_JDP_SECRET", jdpSecret)
 	assert.Nil(jdpDb, "JDP database somehow created without shared secret available")
 	assert.NotNil(err, "JDP database creation without shared secret encountered no error")
@@ -70,7 +61,7 @@ func TestNewDatabaseWithoutJDPSharedSecret(t *testing.T) {
 func TestSearch(t *testing.T) {
 	assert := assert.New(t)
 	orcid := os.Getenv("DTS_KBASE_TEST_ORCID")
-	db, _ := NewDatabase(orcid)
+	db, _ := NewDatabase()
 	params := databases.SearchParameters{
 		Query: "prochlorococcus",
 		Pagination: struct {
@@ -80,7 +71,7 @@ func TestSearch(t *testing.T) {
 			MaxNum: 50,
 		},
 	}
-	results, err := db.Search(params)
+	results, err := db.Search(orcid, params)
 	assert.True(len(results.Resources) > 0, "JDP search query returned no results")
 	assert.Nil(err, "JDP search query encountered an error")
 }
@@ -88,16 +79,16 @@ func TestSearch(t *testing.T) {
 func TestResources(t *testing.T) {
 	assert := assert.New(t)
 	orcid := os.Getenv("DTS_KBASE_TEST_ORCID")
-	db, _ := NewDatabase(orcid)
+	db, _ := NewDatabase()
 	params := databases.SearchParameters{
 		Query: "prochlorococcus",
 	}
-	results, _ := db.Search(params)
+	results, _ := db.Search(orcid, params)
 	fileIds := make([]string, len(results.Resources))
 	for i, res := range results.Resources {
 		fileIds[i] = res.Id
 	}
-	resources, err := db.Resources(fileIds[:10])
+	resources, err := db.Resources(orcid, fileIds[:10])
 	assert.Nil(err, "JDP resource query encountered an error")
 	assert.Equal(10, len(resources),
 		"JDP resource query didn't return requested number of results")

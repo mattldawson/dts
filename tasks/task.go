@@ -54,7 +54,6 @@ type transferTask struct {
 	Source            string            // name of source database (in config)
 	Status            TransferStatus    // status of file transfer operation
 	Subtasks          []transferSubtask // list of constituent file transfer subtasks
-	Client            auth.Client       // info about the DTS client used for this task
 	User              auth.User         // info about user requesting transfer
 }
 
@@ -69,13 +68,13 @@ func payloadSize(resources []DataResource) float64 {
 
 // starts a task going, initiating staging if needed
 func (task *transferTask) start() error {
-	source, err := databases.NewDatabase(task.Client.Orcid, task.Source)
+	source, err := databases.NewDatabase(task.Source)
 	if err != nil {
 		return err
 	}
 
 	// resolve resource data using file IDs
-	resources, err := source.Resources(task.FileIds)
+	resources, err := source.Resources(task.User.Orcid, task.FileIds)
 	if err != nil {
 		return err
 	}
@@ -115,7 +114,7 @@ func (task *transferTask) start() error {
 	destinationEndpoint := config.Databases[task.Destination].Endpoint
 
 	// construct a destination folder name
-	destination, err := databases.NewDatabase(task.Client.Orcid, task.Destination)
+	destination, err := databases.NewDatabase(task.Destination)
 	if err != nil {
 		return err
 	}
@@ -151,7 +150,7 @@ func (task *transferTask) start() error {
 			Resources:           resourcesForEndpoint,
 			Source:              task.Source,
 			SourceEndpoint:      sourceEndpoint,
-			Client:              task.Client,
+			User:                task.User,
 		})
 	}
 

@@ -49,16 +49,10 @@ import (
 // file database appropriate for handling JDP searches and transfers
 // (implements the databases.Database interface)
 type Database struct {
-	// database identifier
-	Id string
-	// ORCID identifier for database proxy
-	Orcid string
 	// HTTP client that caches queries
 	Client http.Client
 	// shared secret used for authentication
 	Secret string
-	// SSO token used for interim JDP access
-	SsoToken string
 	// mapping from staging UUIDs to JDP restoration request ID
 	StagingRequests map[uuid.UUID]StagingRequest
 }
@@ -70,18 +64,11 @@ type StagingRequest struct {
 	Time time.Time
 }
 
-func NewDatabase(orcid string) (databases.Database, error) {
-	if orcid == "" {
-		return nil, fmt.Errorf("No ORCID was given")
-	}
-
+func NewDatabase() (databases.Database, error) {
 	// make sure we have a shared secret or an SSO token
 	secret, haveSecret := os.LookupEnv("DTS_JDP_SECRET")
 	if !haveSecret { // check for SSO token
-		_, haveToken := os.LookupEnv("DTS_JDP_SSO_TOKEN")
-		if !haveToken {
-			return nil, fmt.Errorf("No shared secret or SSO token was found for JDP authentication")
-		}
+		return nil, fmt.Errorf("No shared secret was found for JDP authentication")
 	}
 
 	// make sure we are using only a single endpoint
@@ -97,10 +84,7 @@ func NewDatabase(orcid string) (databases.Database, error) {
 	// NOTE: team?
 	return &Database{
 		//Client:          databases.SecureHttpClient(),
-		Id:              "jdp",
-		Orcid:           orcid,
 		Secret:          secret,
-		SsoToken:        os.Getenv("DTS_JDP_SSO_TOKEN"),
 		StagingRequests: make(map[uuid.UUID]StagingRequest),
 	}, nil
 }
@@ -117,7 +101,7 @@ func (db Database) SpecificSearchParameters() map[string]interface{} {
 	}
 }
 
-func (db *Database) Search(params databases.SearchParameters) (databases.SearchResults, error) {
+func (db *Database) Search(orcid string, params databases.SearchParameters) (databases.SearchResults, error) {
 	// we assume the JDP interface for ElasticSearch queries
 	// (see https://files.jgi.doe.gov/apidoc/)
 	pageNumber, pageSize := pageNumberAndSize(params.Pagination.Offset, params.Pagination.MaxNum)
@@ -142,7 +126,7 @@ func (db *Database) Search(params databases.SearchParameters) (databases.SearchR
 	return db.filesFromSearch(p)
 }
 
-func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, error) {
+func (db *Database) Resources(orcid string, fileIds []string) ([]frictionless.DataResource, error) {
 	// strip the "JDP:" prefix from our files and create a mapping from IDs to
 	// their original order so we can hand back metadata accordingly
 	strippedFileIds := make([]string, len(fileIds))
@@ -166,7 +150,7 @@ func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, er
 		return nil, err
 	}
 
-	resp, err := db.post("search/by_file_ids/", bytes.NewReader(data))
+	resp, err := db.post("search/by_file_ids/", orcid, bytes.NewReader(data))
 	defer resp.Body.Close()
 	var body []byte
 	body, err = io.ReadAll(resp.Body)
@@ -234,7 +218,7 @@ func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, er
 	return resources, err
 }
 
-func (db *Database) StageFiles(fileIds []string) (uuid.UUID, error) {
+func (db *Database) StageFiles(orcid string, fileIds []string) (uuid.UUID, error) {
 	var xferId uuid.UUID
 
 	// construct a POST request to restore archived files with the given IDs
@@ -265,7 +249,7 @@ func (db *Database) StageFiles(fileIds []string) (uuid.UUID, error) {
 
 	// NOTE: The slash in the resource is all-important for POST requests to
 	// NOTE: the JDP!!
-	response, err := db.post("request_archived_files/", bytes.NewReader(data))
+	response, err := db.post("request_archived_files/", orcid, bytes.NewReader(data))
 	if err != nil {
 		return xferId, err
 	}
@@ -633,12 +617,8 @@ func dataResourceFromFile(file File) frictionless.DataResource {
 }
 
 // adds an appropriate authorization header to given HTTP request
-func (db Database) addAuthHeader(request *http.Request) {
-	if len(db.Secret) > 0 { // use shared secret
-		request.Header.Add("Authorization", fmt.Sprintf("Token %s_%s", db.Orcid, db.Secret))
-	} else { // try SSO token
-		request.Header.Add("Authorization", fmt.Sprintf("Bearer %s", db.SsoToken))
-	}
+func (db Database) addAuthHeader(orcid string, request *http.Request) {
+	request.Header.Add("Authorization", fmt.Sprintf("Token %s_%s", orcid, db.Secret))
 }
 
 // performs a GET request on the given resource, returning the resulting
@@ -657,13 +637,12 @@ func (db *Database) get(resource string, values url.Values) (*http.Response, err
 	if err != nil {
 		return nil, err
 	}
-	db.addAuthHeader(req)
 	return db.Client.Do(req)
 }
 
-// performs a POST request on the given resource, returning the resulting
-// response and error
-func (db *Database) post(resource string, body io.Reader) (*http.Response, error) {
+// performs a POST request on the given resource on behalf of the user with the
+// given ORCID, returning the resulting response and error
+func (db *Database) post(resource, orcid string, body io.Reader) (*http.Response, error) {
 	u, err := url.ParseRequestURI(jdpBaseURL)
 	if err != nil {
 		return nil, err
@@ -675,7 +654,7 @@ func (db *Database) post(resource string, body io.Reader) (*http.Response, error
 	if err != nil {
 		return nil, err
 	}
-	db.addAuthHeader(req)
+	db.addAuthHeader(orcid, req)
 	req.Header.Set("Content-Type", "application/json")
 	return db.Client.Do(req)
 }

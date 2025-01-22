@@ -47,8 +47,6 @@ import (
 // file database appropriate for handling searches and transfers
 // (implements the databases.Database interface)
 type Database struct {
-	// database identifier
-	Id string
 	// HTTP client that caches queries
 	Client http.Client
 	// authorization info
@@ -102,7 +100,6 @@ func NewDatabase() (databases.Database, error) {
 			"https://data.microbiomedata.org/data/": nerscEndpoint,
 			"https://nmdcdemo.emsl.pnnl.gov/":       emslEndpoint,
 		},
-		Id: "nmdc",
 	}
 
 	// get an API access token

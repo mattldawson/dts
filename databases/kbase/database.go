@@ -33,8 +33,6 @@ import (
 // file database appropriate for handling KBase searches and transfers
 // (implements the databases.Database interface)
 type Database struct {
-	// database identifier
-	Id string
 }
 
 func NewDatabase() (databases.Database, error) {
@@ -43,9 +41,7 @@ func NewDatabase() (databases.Database, error) {
 		return nil, err
 	}
 
-	return &Database{
-		Id: "kbase",
-	}, nil
+	return &Database{}, nil
 }
 
 func (db *Database) SpecificSearchParameters() map[string]interface{} {

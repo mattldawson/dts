@@ -201,7 +201,7 @@ type Database struct {
 // Registers a database test fixture with the given name in the configuration.
 func RegisterDatabase(databaseName string, resources map[string]frictionless.DataResource) error {
 	slog.Debug(fmt.Sprintf("Registering test database %s...", databaseName))
-	newDatabaseFunc := func(orcid string) (databases.Database, error) {
+	newDatabaseFunc := func() (databases.Database, error) {
 		endpoint, err := endpoints.NewEndpoint(config.Databases[databaseName].Endpoint)
 		if err != nil {
 			return nil, err
@@ -226,7 +226,7 @@ func (db Database) SpecificSearchParameters() map[string]interface{} {
 	}
 }
 
-func (db *Database) Search(params databases.SearchParameters) (databases.SearchResults, error) {
+func (db *Database) Search(orcid string, params databases.SearchParameters) (databases.SearchResults, error) {
 	// look for file IDs in the search query
 	results := databases.SearchResults{
 		Resources: make([]frictionless.DataResource, 0),
@@ -239,7 +239,7 @@ func (db *Database) Search(params databases.SearchParameters) (databases.SearchR
 	return results, nil
 }
 
-func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, error) {
+func (db *Database) Resources(orcid string, fileIds []string) ([]frictionless.DataResource, error) {
 	resources := make([]frictionless.DataResource, 0)
 	for _, fileId := range fileIds {
 		if resource, found := db.resources[fileId]; found {
@@ -249,7 +249,7 @@ func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, er
 	return resources, nil
 }
 
-func (db *Database) StageFiles(fileIds []string) (uuid.UUID, error) {
+func (db *Database) StageFiles(orcid string, fileIds []string) (uuid.UUID, error) {
 	id := uuid.New()
 	db.Staging[id] = stagingRequest{
 		FileIds: fileIds,

@@ -24,7 +24,6 @@ package databases
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/google/uuid"
 
@@ -41,17 +40,18 @@ type Database interface {
 	//   (useful for pulldown menus)
 	// * databases with no specific search parameters should return nil
 	SpecificSearchParameters() map[string]interface{}
-	// search for files using the given parameters
-	Search(params SearchParameters) (SearchResults, error)
-	// returns a slice of Frictionless DataResources for the files with the
-	// given IDs
-	Resources(fileIds []string) ([]frictionless.DataResource, error)
-	// begins staging the files for a transfer, returning a UUID representing the
-	// staging operation
-	StageFiles(fileIds []string) (uuid.UUID, error)
+	// search for files visible to the user with the given ORCID using the given
+	// parameters
+	Search(orcid string, params SearchParameters) (SearchResults, error)
+	// returns a slice of Frictionless DataResources for the files visible to the
+	// user with the given ORCID that match the given IDs
+	Resources(orcid string, fileIds []string) ([]frictionless.DataResource, error)
+	// begins staging the files visible to the user with the given ORCID for
+	// transfer, returning a UUID representing the staging operation
+	StageFiles(orcid string, fileIds []string) (uuid.UUID, error)
 	// returns the status of a given staging operation
 	StagingStatus(id uuid.UUID) (StagingStatus, error)
-	// returns the local username associated with the given Orcid ID
+	// returns the local username associated with the given ORCID
 	LocalUser(orcid string) (string, error)
 	// returns the saved state of the Database, loadable via Load
 	Save() (DatabaseSaveState, error)
@@ -120,7 +120,7 @@ const (
 
 // registers a database creation function under the given database name
 // to allow for e.g. test database implementations
-func RegisterDatabase(dbName string, createDb func(orcid string) (Database, error)) error {
+func RegisterDatabase(dbName string, createDb func() (Database, error)) error {
 	if _, found := createDatabaseFuncs_[dbName]; found {
 		return AlreadyRegisteredError{
 			Database: dbName,
@@ -133,21 +133,20 @@ func RegisterDatabase(dbName string, createDb func(orcid string) (Database, erro
 
 // creates a database proxy associated with the given ORCID, based on the
 // configured type, or returns an existing instance
-func NewDatabase(orcid, dbName string) (Database, error) {
+func NewDatabase(dbName string) (Database, error) {
 	var err error
 
 	// do we have one of these already?
-	key := fmt.Sprintf("orcid: %s db: %s", orcid, dbName)
-	db, found := allDatabases_[key]
+	db, found := allDatabases_[dbName]
 	if !found {
 		// create the requested database
 		if createDb, valid := createDatabaseFuncs_[dbName]; valid {
-			db, err = createDb(orcid)
+			db, err = createDb()
 		} else {
 			err = NotFoundError{dbName}
 		}
 		if err == nil {
-			allDatabases_[key] = db // stash it
+			allDatabases_[dbName] = db // stash it
 		}
 	}
 	return db, err
@@ -172,14 +171,11 @@ func Save() (DatabaseSaveStates, error) {
 // loads a previously saved map of save states for all databases, restoring
 // their previous states
 func Load(states DatabaseSaveStates) error {
-	for key, state := range states.Data {
-		start := strings.Index(key, "orcid: ") + 8
-		end := strings.Index(key, "db: ") - 1
-		if start == 7 || end == -2 {
+	for dbName, state := range states.Data {
+		if dbName != state.Name {
 			return fmt.Errorf("Couldn't load saved state for database '%s'", state.Name)
 		}
-		orcid := key[start:end]
-		db, err := NewDatabase(orcid, state.Name)
+		db, err := NewDatabase(state.Name)
 		if err != nil {
 			return err
 		}
@@ -199,4 +195,4 @@ func Load(states DatabaseSaveStates) error {
 var allDatabases_ = make(map[string]Database)
 
 // a table of database creation functions
-var createDatabaseFuncs_ = make(map[string]func(name string) (Database, error))
+var createDatabaseFuncs_ = make(map[string]func() (Database, error))

@@ -448,9 +448,11 @@ func TestFetchJdpMetadata(t *testing.T) {
 // creates a transfer from source -> destination1
 func TestCreateTransfer(t *testing.T) {
 	assert := assert.New(t)
+	orcid := os.Getenv("DTS_KBASE_TEST_ORCID")
 
 	// request a transfer of file1.txt, file2.txt, and file3.txt
 	payload, err := json.Marshal(TransferRequest{
+		Orcid:       orcid,
 		Source:      "source",
 		FileIds:     []string{"1", "2", "3"},
 		Destination: "destination1",
@@ -505,9 +507,11 @@ func TestCreateTransfer(t *testing.T) {
 // creates a transfer from source -> destination2 and then cancels it
 func TestCreateAndCancelTransfer(t *testing.T) {
 	assert := assert.New(t)
+	orcid := os.Getenv("DTS_KBASE_TEST_ORCID")
 
 	// request a transfer of file1.txt, file2.txt, and file3.txt
 	payload, err := json.Marshal(TransferRequest{
+		Orcid:       orcid,
 		Source:      "source",
 		FileIds:     []string{"1", "2", "3"},
 		Destination: "destination2",

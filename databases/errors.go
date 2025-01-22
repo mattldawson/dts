@@ -96,6 +96,16 @@ func (e InvalidResourceEndpointError) Error() string {
 		e.ResourceId, e.Database, e.Endpoint)
 }
 
+// this error type is returned when an operation requires a user ORCID but none
+// is provided
+type MissingOrcidError struct {
+	Database string
+}
+
+func (e MissingOrcidError) Error() string {
+	return fmt.Sprintf("Missing user ORCID for request to database '%s'", e.Database)
+}
+
 // this error type is returned when a resource is requested for which the requester
 // does not have permission
 type PermissionDeniedError struct {

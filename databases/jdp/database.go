@@ -64,7 +64,7 @@ type StagingRequest struct {
 	Time time.Time
 }
 
-func NewDatabase(orcid string) (databases.Database, error) {
+func NewDatabase() (databases.Database, error) {
 	// make sure we have a shared secret or an SSO token
 	secret, haveSecret := os.LookupEnv("DTS_JDP_SECRET")
 	if !haveSecret { // check for SSO token
@@ -101,7 +101,7 @@ func (db Database) SpecificSearchParameters() map[string]interface{} {
 	}
 }
 
-func (db *Database) Search(params databases.SearchParameters) (databases.SearchResults, error) {
+func (db *Database) Search(orcid string, params databases.SearchParameters) (databases.SearchResults, error) {
 	// we assume the JDP interface for ElasticSearch queries
 	// (see https://files.jgi.doe.gov/apidoc/)
 	pageNumber, pageSize := pageNumberAndSize(params.Pagination.Offset, params.Pagination.MaxNum)
@@ -126,7 +126,7 @@ func (db *Database) Search(params databases.SearchParameters) (databases.SearchR
 	return db.filesFromSearch(p)
 }
 
-func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, error) {
+func (db *Database) Resources(orcid string, fileIds []string) ([]frictionless.DataResource, error) {
 	// strip the "JDP:" prefix from our files and create a mapping from IDs to
 	// their original order so we can hand back metadata accordingly
 	strippedFileIds := make([]string, len(fileIds))
@@ -150,7 +150,7 @@ func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, er
 		return nil, err
 	}
 
-	resp, err := db.post("search/by_file_ids/", bytes.NewReader(data))
+	resp, err := db.post("search/by_file_ids/", orcid, bytes.NewReader(data))
 	defer resp.Body.Close()
 	var body []byte
 	body, err = io.ReadAll(resp.Body)
@@ -218,7 +218,7 @@ func (db *Database) Resources(fileIds []string) ([]frictionless.DataResource, er
 	return resources, err
 }
 
-func (db *Database) StageFiles(fileIds []string) (uuid.UUID, error) {
+func (db *Database) StageFiles(orcid string, fileIds []string) (uuid.UUID, error) {
 	var xferId uuid.UUID
 
 	// construct a POST request to restore archived files with the given IDs
@@ -249,7 +249,7 @@ func (db *Database) StageFiles(fileIds []string) (uuid.UUID, error) {
 
 	// NOTE: The slash in the resource is all-important for POST requests to
 	// NOTE: the JDP!!
-	response, err := db.postWithOrcid("request_archived_files/", bytes.NewReader(data))
+	response, err := db.post("request_archived_files/", orcid, bytes.NewReader(data))
 	if err != nil {
 		return xferId, err
 	}
@@ -640,9 +640,9 @@ func (db *Database) get(resource string, values url.Values) (*http.Response, err
 	return db.Client.Do(req)
 }
 
-// performs a POST request on the given resource, returning the resulting
-// response and error
-func (db *Database) postWithOrcid(resource, orcid string, body io.Reader) (*http.Response, error) {
+// performs a POST request on the given resource on behalf of the user with the
+// given ORCID, returning the resulting response and error
+func (db *Database) post(resource, orcid string, body io.Reader) (*http.Response, error) {
 	u, err := url.ParseRequestURI(jdpBaseURL)
 	if err != nil {
 		return nil, err
@@ -654,17 +654,9 @@ func (db *Database) postWithOrcid(resource, orcid string, body io.Reader) (*http
 	if err != nil {
 		return nil, err
 	}
-	if orcid != "" {
-		db.addAuthHeader(orcid, req)
-	}
+	db.addAuthHeader(orcid, req)
 	req.Header.Set("Content-Type", "application/json")
 	return db.Client.Do(req)
-}
-
-// performs a POST request on the given resource, returning the resulting
-// response and error
-func (db *Database) post(resource string, body io.Reader) (*http.Response, error) {
-	return db.postWithOrcid(resource, "", body)
 }
 
 // this helper extracts files for the JDP /search GET query with given parameters

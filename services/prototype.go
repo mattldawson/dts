@@ -346,7 +346,7 @@ func (service *prototype) getDatabaseSearchParameters(ctx context.Context,
 		Database      string `path:"db" example:"jdp" doc:"the abbreviated name of a database"`
 	}) (*SearchParametersOutput, error) {
 
-	client, err := authorize(input.Authorization)
+	_, err := authorize(input.Authorization)
 	if err != nil {
 		return nil, err
 	}
@@ -356,7 +356,7 @@ func (service *prototype) getDatabaseSearchParameters(ctx context.Context,
 	if !ok {
 		return nil, fmt.Errorf("Database %s not found", input.Database)
 	}
-	db, err := databases.NewDatabase(client.Orcid, input.Database)
+	db, err := databases.NewDatabase(input.Database)
 	if err != nil {
 		return nil, err
 	}
@@ -375,6 +375,7 @@ type SearchResultsOutput struct {
 
 type SearchDatabaseInputWithoutHeader struct {
 	Database string `json:"database" query:"database" example:"jdp" doc:"The ID of the database to search"`
+	Orcid    string `json:"orcid" query:"orcid" example:"1234-5678-9101=112X" doc:"The ORCID of the user searching for files"`
 	Query    string `json:"query" query:"query" example:"prochlorococcus" doc:"A query used to search the database for matching files"`
 	Status   string `json:"status" query:"status" example:"\"staged\"" doc:"(Optional) The staged or unstaged status of the desired files"`
 	Offset   int    `json:"offset" query:"offset" example:"100" doc:"Search results begin at the given offset"`
@@ -435,13 +436,19 @@ func searchDatabase(_ context.Context,
 		return nil, fmt.Errorf("Invalid status parameter: %s", input.Status)
 	}
 
+	// FIXME: for now, if a user ORCID is not specified, use the client's ORCID
+	orcid := input.Orcid
+	if orcid == "" {
+		orcid = client.Orcid
+	}
+
 	slog.Info(fmt.Sprintf("Searching database %s for files...", input.Database))
-	db, err := databases.NewDatabase(client.Orcid, input.Database)
+	db, err := databases.NewDatabase(input.Database)
 	if err != nil {
 		return nil, databaseError(err)
 	}
 
-	results, err := db.Search(databases.SearchParameters{
+	results, err := db.Search(orcid, databases.SearchParameters{
 		Query:  input.Query,
 		Status: fileStatus,
 		Pagination: databases.SearchPaginationParameters{
@@ -489,6 +496,7 @@ func (service *prototype) searchDatabaseWithSpecificParams(ctx context.Context,
 		Authorization: input.Authorization,
 		SearchDatabaseInputWithoutHeader: SearchDatabaseInputWithoutHeader{
 			Database: body.Database,
+			Orcid:    body.Orcid,
 			Query:    body.Query,
 			Status:   body.Status,
 			Offset:   body.Offset,
@@ -507,6 +515,7 @@ func (service *prototype) fetchFileMetadata(ctx context.Context,
 	input *struct {
 		Authorization string `header:"authorization" doc:"Authorization header with encoded access token"`
 		Database      string `json:"database" query:"database" example:"jdp" doc:"The ID of the database for which file metadata is fetched"`
+		Orcid         string `json:"orcid" query:"orcid" example:"1234-5678-9101-112X" doc:"The ORCID of the user requesting metadata"`
 		Ids           string `json:"ids" query:"ids" example:"JDP:6101cc0f2b1f2eeea564c978" doc:"A comma-separated list of file IDs"`
 		Offset        int    `json:"offset" query:"offset" example:"100" doc:"Metadata records begin at the given offset"`
 		Limit         int    `json:"limit" query:"limit" example:"50" doc:"Limits the number of metadata records returned"`
@@ -531,12 +540,18 @@ func (service *prototype) fetchFileMetadata(ctx context.Context,
 
 	slog.Info(fmt.Sprintf("Fetching file metadata for %d files in database %s...",
 		len(ids), input.Database))
-	db, err := databases.NewDatabase(client.Orcid, input.Database)
+	db, err := databases.NewDatabase(input.Database)
 	if err != nil {
 		return nil, err
 	}
 
-	results, err := db.Resources(ids)
+	// FIXME: for now, if a user ORCID is not specified, use the client's ORCID
+	orcid := input.Orcid
+	if orcid == "" {
+		orcid = client.Orcid
+	}
+
+	results, err := db.Resources(orcid, ids)
 	if err != nil {
 		slog.Error(err.Error())
 		return nil, err
@@ -562,30 +577,21 @@ func (service *prototype) createTransfer(ctx context.Context,
 		ContentType   string          `header:"Content-Type" doc:"Content-Type header (must be application/json)"`
 	}) (*TransferOutput, error) {
 
-	client, err := authorize(input.Authorization)
+	_, err := authorize(input.Authorization)
 	if err != nil {
 		return nil, err
 	}
 
 	// fetch information about the requesting user
 	var user auth.User
-	if input.Body.Orcid != "" {
-		// FIXME: we just extract the ORCID at the moment
-		// FIXME: we should get the other stuff from the ORCID public API
-		user.Orcid = input.Body.Orcid
-	} else {
-		// FIXME: for now, while we're in transition, we can fall back to the client's
-		// FIXME: info if a user ORCID is not provided
-		user = auth.User{
-			Name:         client.Name,
-			Email:        client.Email,
-			Orcid:        client.Orcid,
-			Organization: client.Organization,
-		}
+	if input.Body.Orcid == "" {
+		return nil, huma.Error401Unauthorized("No user ORCID was provided")
 	}
+	// FIXME: we just extract the ORCID at the moment
+	// FIXME: we should get the other stuff from the ORCID public API
+	user.Orcid = input.Body.Orcid
 
 	taskId, err := tasks.Create(tasks.Specification{
-		Client:       client,
 		User:         user,
 		Source:       input.Body.Source,
 		Destination:  input.Body.Destination,

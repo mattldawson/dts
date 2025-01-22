@@ -49,8 +49,6 @@ import (
 type Database struct {
 	// database identifier
 	Id string
-	// ORCID identifier for database proxy
-	Orcid string
 	// HTTP client that caches queries
 	Client http.Client
 	// authorization info
@@ -59,14 +57,7 @@ type Database struct {
 	EndpointForHost map[string]string
 }
 
-func NewDatabase(orcid string) (databases.Database, error) {
-	if orcid == "" {
-		return nil, databases.UnauthorizedError{
-			Database: "nmdc",
-			Message:  "No ORCID was given",
-		}
-	}
-
+func NewDatabase() (databases.Database, error) {
 	nmdcUser, haveNmdcUser := os.LookupEnv("DTS_NMDC_USER")
 	if !haveNmdcUser {
 		return nil, databases.UnauthorizedError{
@@ -111,8 +102,7 @@ func NewDatabase(orcid string) (databases.Database, error) {
 			"https://data.microbiomedata.org/data/": nerscEndpoint,
 			"https://nmdcdemo.emsl.pnnl.gov/":       emslEndpoint,
 		},
-		Id:    "nmdc",
-		Orcid: orcid,
+		Id: "nmdc",
 	}
 
 	// get an API access token
@@ -140,7 +130,7 @@ func (db Database) SpecificSearchParameters() map[string]interface{} {
 	}
 }
 
-func (db *Database) Search(params databases.SearchParameters) (databases.SearchResults, error) {
+func (db *Database) Search(orcid string, params databases.SearchParameters) (databases.SearchResults, error) {
 	if err := db.renewAccessTokenIfExpired(); err != nil {
 		return databases.SearchResults{}, err
 	}
@@ -174,7 +164,7 @@ func (db *Database) Search(params databases.SearchParameters) (databases.SearchR
 	return db.dataObjects(p)
 }
 
-func (db Database) Resources(fileIds []string) ([]frictionless.DataResource, error) {
+func (db Database) Resources(orcid string, fileIds []string) ([]frictionless.DataResource, error) {
 	if err := db.renewAccessTokenIfExpired(); err != nil {
 		return nil, err
 	}
@@ -225,7 +215,7 @@ func (db Database) Resources(fileIds []string) ([]frictionless.DataResource, err
 	return resources, nil
 }
 
-func (db Database) StageFiles(fileIds []string) (uuid.UUID, error) {
+func (db Database) StageFiles(orcid string, fileIds []string) (uuid.UUID, error) {
 	// NMDC keeps all of its NERSC data on disk, so all files are already staged.
 	// We simply generate a new UUID that can be handed to db.StagingStatus,
 	// which returns databases.StagingStatusSucceeded.

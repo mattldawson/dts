@@ -158,6 +158,9 @@ func (db *Database) Resources(orcid string, fileIds []string) ([]frictionless.Da
 		return nil, err
 	}
 
+	// NOTE: The metadata returned by this endpoint is different from what's
+	// NOTE: in search results, so we construct a DataResource gingerly here.
+	// NOTE: Someday things may make more sense...
 	type MetadataResponse struct {
 		Hits struct {
 			Hits []struct {
@@ -171,7 +174,41 @@ func (db *Database) Resources(orcid string, fileIds []string) ([]frictionless.Da
 					FileName     string `json:"file_name"`
 					FileSize     int    `json:"file_size"`
 					MD5Sum       string `json:"md5sum"`
-					Metadata     Metadata
+					Metadata     struct {
+						Img struct {
+							TaxonOid          int     `json:"taxon_oid"`
+							Database          string  `json:"database"`
+							AddDate           string  `json:"add_date"`
+							FileType          string  `json:"file_type"`
+							Domain            string  `json:"domain"`
+							TaxonDisplayName  string  `json:"taxon_display_name"`
+							NScaffolds        int     `json:"n_scaffolds"`
+							JgiProjectId      int     `json:"jgi_project_id"`
+							GcPercent         float64 `json:"gc_percent"`
+							TotalBases        int     `json:"total_bases"`
+							Assembled         string  `json:"assembled"`
+							AnalysisProjectId string  `json:"analysis_project_id"`
+						} `json:"img"`
+						PmoProject struct {
+							ScientificProgram string `json:"scientific_program"`
+							PiName            string `json:"pi_name"`
+							Name              string `json:"name"`
+						} `json:"pmo_project"`
+						GoldData struct {
+							GoldStampId string `json:"gold_stamp_id"`
+						} `json:"gold_data"`
+						ProposalId      int    `json:"proposal_id"`
+						ContentType     string `json:"content_type"`
+						PmoProjectId    int    `json:"pmo_project_id"`
+						AnalysisProject struct {
+							Status string `json:"status"`
+						} `json:"analysis_project"`
+						Portal struct {
+							DisplayLocation []string `json:"display_location"`
+							JdpKingdom      string   `json:"jdp_kingdom"`
+						} `json:"portal"`
+						// AnalysisProjectId string `json:"analysis_project_id"` <-- too polymorphic!
+					} `json:"metadata"`
 				} `json:"_source"`
 			} `json:"hits"`
 		} `json:"hits"`
@@ -192,18 +229,57 @@ func (db *Database) Resources(orcid string, fileIds []string) ([]frictionless.Da
 		if !found {
 			return nil, &FileIdNotFoundError{fileIds[i]}
 		}
-		file := File{
-			Id:           md.Id,
-			Name:         md.Source.FileName,
-			Path:         md.Source.FilePath,
-			Date:         md.Source.Date,
-			AddedDate:    md.Source.AddedDate,
-			ModifiedDate: md.Source.ModifiedDate,
-			Size:         md.Source.FileSize,
-			Metadata:     md.Source.Metadata,
-			MD5Sum:       md.Source.MD5Sum,
+		id := "JDP:" + md.Id
+		format := formatFromFileName(md.Source.FileName)
+		filePath := filepath.Join(strings.TrimPrefix(md.Source.FilePath, filePathPrefix), md.Source.FileName)
+		piName := strings.TrimSpace(md.Source.Metadata.PmoProject.PiName)
+		resources[index] = frictionless.DataResource{
+			Id:        id,
+			Name:      dataResourceName(md.Source.FileName),
+			Path:      filePath,
+			Format:    format,
+			MediaType: mimeTypeFromFormatAndTypes(format, []string{}),
+			Bytes:     md.Source.FileSize,
+			Hash:      md.Source.MD5Sum,
+			Sources:   []frictionless.DataSource{},
+			Credit: credit.CreditMetadata{
+				Identifier:   id,
+				ResourceType: "dataset",
+				Titles: []credit.Title{
+					{
+						Title: dataResourceName(md.Source.FileName),
+					},
+				},
+				Dates: []credit.EventDate{
+					{
+						Date:  md.Source.Date,
+						Event: "Created",
+					},
+					{
+						Date:  md.Source.AddedDate,
+						Event: "Accepted",
+					},
+					{
+						Date:  md.Source.ModifiedDate,
+						Event: "Updated",
+					},
+				},
+				Publisher: credit.Organization{
+					OrganizationId:   "ROR:04xm1d337",
+					OrganizationName: "Joint Genome Institute",
+				},
+				Contributors: []credit.Contributor{
+					{
+						ContributorType: "Person",
+						// ContributorId: nothing yet
+						Name:             strings.TrimSpace(piName),
+						ContributorRoles: "PI",
+					},
+				},
+				Version: md.Source.ModifiedDate,
+			},
 		}
-		resources[index] = dataResourceFromFile(file)
+
 		if resources[index].Path == "" || resources[index].Path == "/" { // permissions problem
 			return nil, &PermissionDeniedError{fileIds[index]}
 		}

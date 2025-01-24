@@ -63,7 +63,7 @@ type File struct {
 	DataGroup string `json:"data_group"`
 }
 
-// this type represents metadata associated with a jdpFile
+// this type represents metadata associated with a File ^^^
 type Metadata struct {
 	// proposal info
 	Proposal struct {

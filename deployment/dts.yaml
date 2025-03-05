@@ -2,6 +2,7 @@
 # running in a Docker container. The host environment must define the following
 # environment variables:
 #
+# AUTH_SECRET: a secret that decrypts the DTS-specific authorization file
 # DATA_DIRECTORY: an absolute path to the directory used by DTS to manage its
 #                 own data
 # MANIFEST_DIRECTORY: an absolute path to the directory used by DTS to write
@@ -23,6 +24,7 @@
 #                 (seconds)
 
 service:
+  secret: ${AUTH_SECRET}
   port: ${PORT}
   max_connections: ${MAX_CONNECTIONS}
   max_payload_size: ${MAX_PAYLOAD_SIZE}

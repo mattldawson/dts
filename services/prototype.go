@@ -141,8 +141,8 @@ func (service *prototype) Close() {
 
 // Version numbers
 var majorVersion = 0
-var minorVersion = 3
-var patchVersion = 3
+var minorVersion = 4
+var patchVersion = 0
 
 // Version string
 var version = fmt.Sprintf("%d.%d.%d", majorVersion, minorVersion, patchVersion)
@@ -166,7 +166,8 @@ func authorize(authorizationHeader string) (auth.Client, error) {
 	// first, check the access token against the DTS authenticator
 	authenticator, err := auth.NewAuthenticator()
 	if err == nil {
-		user, err := authenticator.GetUser(accessToken)
+		var user auth.User
+		user, err = authenticator.GetUser(accessToken)
 		if err == nil {
 			client = auth.Client{
 				Name:         user.Name,
@@ -177,7 +178,7 @@ func authorize(authorizationHeader string) (auth.Client, error) {
 		}
 	}
 	if err != nil {
-		slog.Error(fmt.Sprintf("authenticator: %s", err.Error()))
+		slog.Info(fmt.Sprintf("authenticator: %s", err.Error()))
 		slog.Info("Falling back to KBase authentication.")
 
 		// maybe it's a KBase dev token, so check with the KBase auth server

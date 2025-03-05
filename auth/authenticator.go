@@ -45,8 +45,7 @@ type Authenticator struct {
 func NewAuthenticator() (*Authenticator, error) {
 	var a Authenticator
 	var err error
-	filePath := filepath.Join(config.Service.DataDirectory, "access.dat")
-	a.UserForToken, err = readAccessTokenFile(filePath)
+	a.UserForToken, err = readAccessTokenFile()
 	if err != nil {
 		return nil, err
 	}
@@ -59,10 +58,22 @@ func (a *Authenticator) GetUser(accessToken string) (User, error) {
 	if user, found := a.UserForToken[accessToken]; found {
 		return user, nil
 	}
+
+	// reread the file and try once more (just in case it's been changed)
+	var err error
+	a.UserForToken, err = readAccessTokenFile()
+	if err != nil {
+		return User{}, err
+	}
+	if user, found := a.UserForToken[accessToken]; found {
+		return user, nil
+	}
+
 	return User{}, errors.New("Invalid access token!")
 }
 
-func readAccessTokenFile(tokenFilePath string) (map[string]User, error) {
+func readAccessTokenFile() (map[string]User, error) {
+	tokenFilePath := filepath.Join(config.Service.DataDirectory, "access.dat")
 	key, err := fernet.DecodeKey(config.Service.Secret)
 	if err != nil {
 		return nil, err

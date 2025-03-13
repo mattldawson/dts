@@ -1,7 +1,6 @@
 module github.com/kbase/dts
 
 go 1.22
-
 toolchain go1.23.1
 
 require (
@@ -11,7 +10,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.1
 	github.com/stretchr/testify v1.9.0
-	golang.org/x/net v0.33.0
+	golang.org/x/net v0.36.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 

@@ -3,27 +3,31 @@
 # environment variables:
 #
 # AUTH_SECRET: a secret that decrypts the DTS-specific authorization file
+# CONFIG_NAME: a name for the DTS instance (e.g. `dev` or `prod`)
 # DATA_DIRECTORY: an absolute path to the directory used by DTS to manage its
 #                 own data
-# MANIFEST_DIRECTORY: an absolute path to the directory used by DTS to write
-#                     transfer manifests (must be visible to an endpoint)
 # DEBUG: true to enable debug-level logging, false to disable
 # GLOBUS_CLIENT_ID: the Globus client ID registered for the DTS application
 # GLOBUS_CLIENT_SECRET: the Globus client secret associated with the client ID
-# JDP_ENDPOINT_ID: a UUID identifying the JGI Data Portal Globus endpoint
-# KBASE_ENDPOINT_ID: a UUID identifying the KBase Globus endpoint
-# LOCAL_ENDPOINT_ID: a UUID identifying the DTS local Globus endpoint
+# JDP_ENDPOINT_ID: a UUID identifying the JGI Data Portal Globus share
+# KBASE_ENDPOINT_ID: a UUID identifying the KBase Globus share
+# LOCAL_ENDPOINT_ID: a UUID identifying the DTS local Globus share
 #                    (for writing transfer manifests)
+# MANIFEST_DIRECTORY: an absolute path to the directory used by DTS to write
+#                     transfer manifests (must be visible to an endpoint)
 # MAX_CONNECTIONS: the maximum number of connections allowed for accepting
 #                  and queueing queries. Any additional connections are
 #                  rejected.
 # MAX_PAYLOAD_SIZE: the maximum size for any given payload (gigabytes)
+# NMDC_EMSL_ENDPOINT_ID: a UUID identifying the NMDC EMSL Globus share
+# NMDC_NERSC_ENDPOINT_ID: a UUID identifying the NMDC NERSC Globus share
 # POLL_INTERVAL: the interval at which DTS updates tasks (milliseconds)
 # PORT: the port on which the service listens
 # PURGE_INTERVAL: the interval at which DTS purges completed task records
 #                 (seconds)
 
 service:
+  name: ${CONFIG_NAME}
   secret: ${AUTH_SECRET}
   port: ${PORT}
   max_connections: ${MAX_CONNECTIONS}

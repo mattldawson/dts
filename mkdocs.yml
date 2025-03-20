@@ -20,6 +20,7 @@ nav:
   - 'Developer Guide':
     - 'Overview': 'developer/index.md'
     - 'Architecture Decision Records': 'developer/adrs.md'
+      - 'Transmitting Metadata': 'developer/adrs/transmit-metadata.md'
     - 'Code Organization':
       - 'auth package': 'developer/auth.md'
       - 'config package': 'developer/config.md'

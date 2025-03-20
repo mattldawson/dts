@@ -19,6 +19,7 @@ nav:
     - 'Glossary': 'integration/glossary.md'
   - 'Developer Guide':
     - 'Overview': 'developer/index.md'
+    - 'Architecture Decision Records': 'developer/adrs.md'
     - 'Code Organization':
       - 'auth package': 'developer/auth.md'
       - 'config package': 'developer/config.md'

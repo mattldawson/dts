@@ -1,6 +1,11 @@
 # DTS Developer Guide
 
-This guide explains the internal workings of the Data Transfer Service (DTS).
+This guide contains technical information about the Data Transfer Service (DTS).
+
+## Architecture Decision Records
+
+[Here](adrs.md) we've recorded design decisions in a succinct format that
+connects technical issues, decisions, and consequences in a transparent way.
 
 ## Code Organization
 

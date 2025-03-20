@@ -9,4 +9,4 @@ structure, so you can just copy an existing ADR to create a new one.
 
 ## List of Architecture Design Recods
 
-* [Transferring metadata for file transfers](transfer-metadata.md)
+* [Transmitting metadata](transmit-metadata.md)

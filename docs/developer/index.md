@@ -4,7 +4,7 @@ This guide contains technical information about the Data Transfer Service (DTS).
 
 ## Architecture Decision Records
 
-[Here](adrs.md) we've recorded design decisions in a succinct format that
+[Here](adrs/index.md) we've recorded design decisions in a succinct format that
 connects technical issues, decisions, and consequences in a transparent way.
 
 ## Code Organization

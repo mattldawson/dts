@@ -19,7 +19,8 @@ nav:
     - 'Glossary': 'integration/glossary.md'
   - 'Developer Guide':
     - 'Overview': 'developer/index.md'
-    - 'Architecture Decision Records': 'developer/adrs.md'
+    - 'Architecture Decision Records':
+      - 'developer/adrs/index.md'
       - 'Transmitting Metadata': 'developer/adrs/transmit-metadata.md'
     - 'Code Organization':
       - 'auth package': 'developer/auth.md'

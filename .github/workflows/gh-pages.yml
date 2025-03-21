@@ -21,7 +21,7 @@ jobs:
   Build-and-Deploy-docs:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       pull-requests: write
     steps:
       - uses: actions/checkout@v4

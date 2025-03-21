@@ -9,25 +9,25 @@
       
       
       
-        <link rel="prev" href="config.html">
+        <link rel="prev" href="../index.html">
       
       
-        <link rel="next" href="../integration/index.html">
+        <link rel="next" href="transmit-metadata.html">
       
       
-      <link rel="icon" href="../assets/images/favicon.png">
+      <link rel="icon" href="../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.5.3, mkdocs-material-9.5.16">
     
     
       
-        <title>Granting the DTS Access to a Globus Endpoint - DTS: A Data Transfer System</title>
+        <title>DTS Architecture Decision Records - DTS: A Data Transfer System</title>
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.bcfcd587.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.bcfcd587.min.css">
       
         
-        <link rel="stylesheet" href="../assets/stylesheets/palette.06af60db.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
       
       
 
@@ -46,7 +46,7 @@
       
     
     
-    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -72,7 +72,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#granting-the-dts-access-to-a-globus-endpoint" class="md-skip">
+        <a href="#dts-architecture-decision-records" class="md-skip">
           Skip to content
         </a>
       
@@ -88,7 +88,7 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../index.html" title="DTS: A Data Transfer System" class="md-header__button md-logo" aria-label="DTS: A Data Transfer System" data-md-component="logo">
+    <a href="../../index.html" title="DTS: A Data Transfer System" class="md-header__button md-logo" aria-label="DTS: A Data Transfer System" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54Z"/></svg>
@@ -108,7 +108,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Granting the DTS Access to a Globus Endpoint
+              DTS Architecture Decision Records
             
           </span>
         </div>
@@ -221,7 +221,7 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../index.html" title="DTS: A Data Transfer System" class="md-nav__button md-logo" aria-label="DTS: A Data Transfer System" data-md-component="logo">
+    <a href="../../index.html" title="DTS: A Data Transfer System" class="md-nav__button md-logo" aria-label="DTS: A Data Transfer System" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54Z"/></svg>
@@ -251,7 +251,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../index.html" class="md-nav__link">
+      <a href="../../index.html" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -268,8 +268,6 @@
       
   
   
-    
-  
   
   
     
@@ -281,11 +279,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
         
           
           <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
@@ -299,7 +297,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_2">
             <span class="md-nav__icon md-icon"></span>
             Administrator Guide
@@ -313,7 +311,7 @@
   
   
     <li class="md-nav__item">
-      <a href="index.html" class="md-nav__link">
+      <a href="../../admin/index.html" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -334,7 +332,7 @@
   
   
     <li class="md-nav__item">
-      <a href="installation.html" class="md-nav__link">
+      <a href="../../admin/installation.html" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -355,7 +353,7 @@
   
   
     <li class="md-nav__item">
-      <a href="deployment.html" class="md-nav__link">
+      <a href="../../admin/deployment.html" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -376,7 +374,7 @@
   
   
     <li class="md-nav__item">
-      <a href="config.html" class="md-nav__link">
+      <a href="../../admin/config.html" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -394,30 +392,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  <span class="md-ellipsis">
-    Granting the DTS Access to a Globus Endpoint
-  </span>
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="globus.html" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../admin/globus.html" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -426,44 +404,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#globus-glossary" class="md-nav__link">
-    <span class="md-ellipsis">
-      Globus Glossary
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#setting-up-access-to-a-globus-endpoint" class="md-nav__link">
-    <span class="md-ellipsis">
-      Setting up Access to a Globus Endpoint
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -523,7 +463,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../integration/index.html" class="md-nav__link">
+      <a href="../../integration/index.html" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -544,7 +484,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../integration/resources.html" class="md-nav__link">
+      <a href="../../integration/resources.html" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -565,7 +505,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../integration/search.html" class="md-nav__link">
+      <a href="../../integration/search.html" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -586,7 +526,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../integration/staging_area.html" class="md-nav__link">
+      <a href="../../integration/staging_area.html" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -607,7 +547,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../integration/stage_files.html" class="md-nav__link">
+      <a href="../../integration/stage_files.html" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -628,7 +568,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../integration/staging_status.html" class="md-nav__link">
+      <a href="../../integration/staging_status.html" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -649,7 +589,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../integration/local_user.html" class="md-nav__link">
+      <a href="../../integration/local_user.html" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -670,7 +610,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../integration/glossary.html" class="md-nav__link">
+      <a href="../../integration/glossary.html" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -695,8 +635,10 @@
       
   
   
+    
   
   
+  
     
     
     
@@ -706,11 +648,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
         
           
           <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
@@ -724,7 +666,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_4">
             <span class="md-nav__icon md-icon"></span>
             Developer Guide
@@ -738,7 +680,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../developer/index.html" class="md-nav__link">
+      <a href="../index.html" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -756,6 +698,8 @@
                 
   
   
+    
+  
   
   
     
@@ -764,11 +708,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_2" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_2" checked>
         
           
           <label class="md-nav__link" for="__nav_4_2" id="__nav_4_2_label" tabindex="0">
@@ -782,7 +726,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_2_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_2_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_4_2">
             <span class="md-nav__icon md-icon"></span>
             Architecture Decision Records
@@ -793,10 +737,30 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../developer/adrs/index.html" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    DTS Architecture Decision Records
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="index.html" class="md-nav__link md-nav__link--active">
         
   
   <span class="md-ellipsis">
@@ -805,6 +769,35 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#list-of-architecture-design-recods" class="md-nav__link">
+    <span class="md-ellipsis">
+      List of Architecture Design Recods
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -817,7 +810,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../developer/adrs/transmit-metadata.html" class="md-nav__link">
+      <a href="transmit-metadata.html" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -883,7 +876,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../developer/auth.html" class="md-nav__link">
+      <a href="../auth.html" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -904,7 +897,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../developer/config.html" class="md-nav__link">
+      <a href="../config.html" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -925,7 +918,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../developer/credit.html" class="md-nav__link">
+      <a href="../credit.html" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -946,7 +939,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../developer/databases.html" class="md-nav__link">
+      <a href="../databases.html" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -967,7 +960,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../developer/endpoints.html" class="md-nav__link">
+      <a href="../endpoints.html" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -988,7 +981,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../developer/frictionless.html" class="md-nav__link">
+      <a href="../frictionless.html" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1009,7 +1002,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../developer/services.html" class="md-nav__link">
+      <a href="../services.html" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1030,7 +1023,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../developer/tasks.html" class="md-nav__link">
+      <a href="../tasks.html" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1086,18 +1079,9 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#globus-glossary" class="md-nav__link">
+  <a href="#list-of-architecture-design-recods" class="md-nav__link">
     <span class="md-ellipsis">
-      Globus Glossary
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#setting-up-access-to-a-globus-endpoint" class="md-nav__link">
-    <span class="md-ellipsis">
-      Setting up Access to a Globus Endpoint
+      List of Architecture Design Recods
     </span>
   </a>
   
@@ -1118,59 +1102,16 @@
                   
 
 
-<h1 id="granting-the-dts-access-to-a-globus-endpoint">Granting the DTS Access to a Globus Endpoint</h1>
-<p>The Data Transfer Service (DTS) relies heavily on <a href="https://www.globus.org/">Globus</a>
-for performing file transfers between different databases. Globus is an elaborate
-and continuously evolving platform, so configuring access from an application
-can be confusing. Here we describe all the things you need to know to grant
-the DTS access to a Globus endpoint.</p>
-<h2 id="globus-glossary">Globus Glossary</h2>
-<p>Globus has its own set of terminology that is slightly different from that we've
- used to describe the DTS, so let's clarify some definitions first.</p>
+<h1 id="dts-architecture-decision-records">DTS Architecture Decision Records</h1>
+<p>Here we list all of our design decisions in the form of
+<a href="https://github.com/joelparkerhenderson/architecture-decision-record">architecture decision records (ADRs)</a>.</p>
+<p>Each ADR resides in its own separate Markdown file named
+<code>&lt;imperative-verb&gt;-&lt;noun&gt;</code>. The content of each ADR follows a simple common
+structure, so you can just copy an existing ADR to create a new one.</p>
+<h2 id="list-of-architecture-design-recods">List of Architecture Design Recods</h2>
 <ul>
-<li><strong>Globus Endpoint</strong>: A Globus endpoint is a server running Globus software,
-  providing access to a filesystem that can be shared with Globus users. To the
-  DTS, an endpoint is "a thing that can send and receive files."</li>
-<li><strong>Globus Collection</strong>: A Globus Collection is a portion of a filesystem on a
-  Globus Endpoint associated with roles and permissions for Globus users. It is
-  not a server--it's a set of metadata that tells Globus which users have what
-  access privileges on a Globus Endpoint.</li>
-<li><strong>Globus Guest Collection</strong>: A Guest Collection is a Globus Collection that allows
-  a Globus user to share files on with other Globus users and with applications.
-  In particular, a Guest Collection is the <em>only mechanism</em> that can provide
-  client applications with access to resources on Globus endpoints. This is the
-  closest concept to what the DTS considers an endpoint.</li>
+<li><a href="transmit-metadata.html">Transmitting metadata</a></li>
 </ul>
-<h2 id="setting-up-access-to-a-globus-endpoint">Setting up Access to a Globus Endpoint</h2>
-<p><a href="https://docs.globus.org/guides/recipes/automate-with-service-account/">This guide</a>
-gives a complete set of instructions using the terminology above. Below, we briefly
-summarize the steps in the guide. Of course, you need a Globus user account to play
-this game.</p>
-<ol>
-<li>
-<p><strong>Obtain an Application/Service Credential for the DTS.</strong> The credential
-   consists of a unique client ID and an associated client secret. The client ID
-   can be used to identify the DTS as an entity that can be granted access
-   permissions. Of course, the primary instance of the DTS already has one of
-   these.</p>
-</li>
-<li>
-<p><strong>Create a Guest Collection on the Globus Endpoint or on an existing Collection.</strong>
-   Without a Guest Collection, you can't grant the DTS access to anything. You might
-   have to poke around a bit to find an endpoint or existing collection that (a) you
-   have access to and (b) that exposes the resources that you want to grant to the
-   DTS.</p>
-</li>
-<li>
-<p><strong>Grant the DTS read or read/write access to the Guest Collection.</strong> Since
-   the DTS has its own client ID, you can grant it access to a Guest Collection
-   just as you would any other Globus user.</p>
-</li>
-</ol>
-<p>The DTS stores its Globus credentials (client ID, client secret) in environment
-variables to prevent them from being read from a file or mined from the executable.
-The <a href="deployment.html">deployment</a> section describes how these environment variables
-are managed in practice.</p>
 
 
 
@@ -1223,10 +1164,10 @@ are managed in practice.</p>
     </div>
     
     
-    <script id="__config" type="application/json">{"base": "..", "features": ["navigation.indices", "navigation.instant", "navigation.sections", "navigation.top"], "search": "../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.indices", "navigation.instant", "navigation.sections", "navigation.top"], "search": "../../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
     
     
-      <script src="../assets/javascripts/bundle.bd41221c.min.js"></script>
+      <script src="../../assets/javascripts/bundle.bd41221c.min.js"></script>
       
         <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
       

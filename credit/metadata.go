@@ -187,10 +187,9 @@ type PermanentID struct {
 	 */
 	Description string `json:"description"`
 	/*
-			 * The relationship between the ID and some other entity.
-		For example, when a PermanentID class is used to represent objects in the CreditMetadata field 'related_identifiers', the 'relationship_type' field captures the relationship between the resource being registered and this ID.
-
-	*/
+	 * The relationship between the ID and some other entity.
+	 * 	For example, when a PermanentID class is used to represent objects in the CreditMetadata field 'related_identifiers', the 'relationship_type' field captures the relationship between the resource being registered and this ID.
+	 */
 	RelationshipType string `json:"relationship_type"`
 }
 

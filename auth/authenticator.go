@@ -34,6 +34,8 @@ import (
 	"github.com/kbase/dts/config"
 )
 
+var timeOfLastFileRead_ time.Time
+
 // This type accepts a valid access token in exchange for a user record. It is
 // used as an additional method of authentication for the DTS. It's really a
 // short-term solution, as the encrypted file is maintained manually, but it
@@ -59,14 +61,16 @@ func (a *Authenticator) GetUser(accessToken string) (User, error) {
 		return user, nil
 	}
 
-	// reread the file and try once more (just in case it's been changed)
-	var err error
-	a.UserForToken, err = readAccessTokenFile()
-	if err != nil {
-		return User{}, err
-	}
-	if user, found := a.UserForToken[accessToken]; found {
-		return user, nil
+	// if it's been more than a minute since we read the file, reread it
+	if time.Since(timeOfLastFileRead_).Minutes() > 1.0 {
+		var err error
+		a.UserForToken, err = readAccessTokenFile()
+		if err != nil {
+			return User{}, err
+		}
+		if user, found := a.UserForToken[accessToken]; found {
+			return user, nil
+		}
 	}
 
 	return User{}, errors.New("Invalid access token!")
@@ -112,6 +116,8 @@ func readAccessTokenFile() (map[string]User, error) {
 			Organization: record[3],
 		}
 	}
+
+	timeOfLastFileRead_ = time.Now()
 
 	return userRecords, nil
 }

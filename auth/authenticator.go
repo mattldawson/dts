@@ -34,20 +34,18 @@ import (
 	"github.com/kbase/dts/config"
 )
 
-var timeOfLastFileRead_ time.Time
-
 // This type accepts a valid access token in exchange for a user record. It is
 // used as an additional method of authentication for the DTS. It's really a
 // short-term solution, as the encrypted file is maintained manually, but it
 // provides a method for adding DTS users without Acts of God.
 type Authenticator struct {
-	UserForToken map[string]User
+	UserForToken   map[string]User
+	TimeOfLastRead time.Time
 }
 
 func NewAuthenticator() (*Authenticator, error) {
 	var a Authenticator
-	var err error
-	a.UserForToken, err = readAccessTokenFile()
+	err := a.readAccessTokenFile()
 	if err != nil {
 		return nil, err
 	}
@@ -62,9 +60,8 @@ func (a *Authenticator) GetUser(accessToken string) (User, error) {
 	}
 
 	// if it's been more than a minute since we read the file, reread it
-	if time.Since(timeOfLastFileRead_).Minutes() > 1.0 {
-		var err error
-		a.UserForToken, err = readAccessTokenFile()
+	if time.Since(a.TimeOfLastRead).Minutes() > 1.0 {
+		err := a.readAccessTokenFile()
 		if err != nil {
 			return User{}, err
 		}
@@ -76,22 +73,22 @@ func (a *Authenticator) GetUser(accessToken string) (User, error) {
 	return User{}, errors.New("Invalid access token!")
 }
 
-func readAccessTokenFile() (map[string]User, error) {
+func (a *Authenticator) readAccessTokenFile() error {
 	tokenFilePath := filepath.Join(config.Service.DataDirectory, "access.dat")
 	key, err := fernet.DecodeKey(config.Service.Secret)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	cipherText, err := os.ReadFile(tokenFilePath)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	ttl := time.Hour * 24 * 365 // accept secrets signed <= 1 year ago
 	plaintext := fernet.VerifyAndDecrypt(cipherText, ttl, []*fernet.Key{key})
 	if plaintext == nil {
-		return nil, errors.New("Authentication failed: invalid secret")
+		return errors.New("Authentication failed: invalid secret")
 	}
 
 	// the plaintext content is a tab-delimited file with records like so:
@@ -103,7 +100,7 @@ func readAccessTokenFile() (map[string]User, error) {
 
 	records, err := reader.ReadAll()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	userRecords := make(map[string]User)
@@ -117,7 +114,8 @@ func readAccessTokenFile() (map[string]User, error) {
 		}
 	}
 
-	timeOfLastFileRead_ = time.Now()
+	a.UserForToken = userRecords
+	a.TimeOfLastRead = time.Now()
 
-	return userRecords, nil
+	return nil
 }

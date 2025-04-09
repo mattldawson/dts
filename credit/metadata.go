@@ -46,6 +46,28 @@ type Contributor struct {
 }
 
 /*
+ * Source of any kind of data.
+ */
+type DataSource struct {
+	/*
+	 * Unix timestamp for when the data was retrieved from that source.
+	 */
+	AccessTimestamp int `json:"access_timestamp"`
+	/*
+	 * The date when the data source was last updated, if available.
+	 */
+	SourceDataUpdated string `json:"source_data_updated"`
+	/*
+	 * Where the data was retrieved from.
+	 */
+	SourceName string `json:"source_name"`
+	/*
+	 * URL from whence data was retrieved.
+	 */
+	SourceUrl string `json:"source_url"`
+}
+
+/*
  * Textual information about the resource being represented.
  */
 type Description struct {
@@ -133,7 +155,11 @@ type Metadata struct {
 	 */
 	CreditMetadataSchemaVersion string `json:"credit_metadata_schema_version"`
 	/*
-	 * KBase workspace ID of the user who added this entry.
+	 * Information about where the credit metadata was sourced from.
+	 */
+	CreditMetadataSource []DataSource `json:"credit_metadata_source"`
+	/*
+	 * PID for the user who added this entry.
 	 */
 	SavedBy string `json:"saved_by"`
 	/*
@@ -187,8 +213,7 @@ type PermanentID struct {
 	 */
 	Description string `json:"description"`
 	/*
-	 * The relationship between the ID and some other entity.
-	 * 	For example, when a PermanentID class is used to represent objects in the CreditMetadata field 'related_identifiers', the 'relationship_type' field captures the relationship between the resource being registered and this ID.
+	 * The relationship between the ID and some other entity. For example, when a PermanentID class is used to represent objects in the CreditMetadata field 'related_identifiers', the 'relationship_type' field captures the relationship between the resource being registered and this ID.
 	 */
 	RelationshipType string `json:"relationship_type"`
 }
@@ -216,7 +241,7 @@ type Title struct {
 /*
   - Represents the credit metadata associated with an object.
 
-In the following documentation, 'Resource' is used to refer to the object
+In the following documentation, 'resource' is used to refer to the object
 that the CM pertains to, for example, a KBase Workspace object; a
 sample from NMDC or ESS-DIVE; sequence data from IMG.
 
@@ -258,10 +283,6 @@ type CreditMetadata struct {
 	 */
 	Contributors []Contributor `json:"contributors"`
 	/*
-	 * A list of CURIEs, URIs, or free text entries denoting the source of the credit metadata.
-	 */
-	CreditMetadataSource string `json:"credit_metadata_source"`
-	/*
 	 * A list of relevant lifecycle events for the resource. Note that these dates apply only to the resource itself, and not to the creation or update of the credit metadata record for the resource.
 	 */
 	Dates []EventDate `json:"dates"`
@@ -279,7 +300,7 @@ type CreditMetadata struct {
 	Identifier string `json:"identifier"`
 	/*
 	 * Usage license for the resource. Use one of the SPDX license identifiers or provide a link to the license text if no SPDX ID is available.
-	 * All data published at KBase is done so under a Creative Commons 0 or Creative Commons 4.0 license.
+
 	 */
 	License License `json:"license"`
 	/*

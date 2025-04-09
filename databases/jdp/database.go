@@ -73,7 +73,7 @@ func NewDatabase() (databases.Database, error) {
 
 	// make sure we are using only a single endpoint
 	if config.Databases["jdp"].Endpoint == "" {
-		return nil, databases.InvalidEndpointsError{
+		return nil, &databases.InvalidEndpointsError{
 			Database: "jdp",
 			Message:  "The JGI data portal should only have a single endpoint configured.",
 		}

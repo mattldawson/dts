@@ -103,7 +103,7 @@ func setup() {
 	myConfig = strings.ReplaceAll(myConfig, "DESTINATION_ROOT", destinationRoot)
 	myConfig = strings.ReplaceAll(myConfig, "DESTINATION_CANCEL", destinationRootCancel)
 	fmt.Printf(myConfig)
-	err = config.Init([]byte(myConfig))
+	err = config.InitSelected([]byte(myConfig), false, false, true)
 	if err != nil {
 		panic(err)
 	}

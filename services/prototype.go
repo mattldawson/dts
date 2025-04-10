@@ -50,17 +50,6 @@ type prototype struct {
 // constructs a prototype file transfer service given our configuration
 func NewDTSPrototype() (TransferService, error) {
 
-	// validate our configuration
-	if config.Service.Endpoint == "" {
-		return nil, fmt.Errorf("No service endpoint was specified.")
-	}
-	if len(config.Databases) == 0 {
-		return nil, fmt.Errorf("No databases were specified.")
-	}
-	if len(config.Endpoints) == 0 {
-		return nil, fmt.Errorf("No endpoints were specified.")
-	}
-
 	service := new(prototype)
 	service.Name = "DTS prototype"
 	service.Version = version

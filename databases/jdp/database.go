@@ -135,6 +135,9 @@ func (db *Database) Search(orcid string, params databases.SearchParameters) (dat
 		return databases.SearchResults{}, err
 	}
 	descriptors, err := descriptorsFromResponseBody(body, extraFields)
+	if err != nil {
+		print("Crappity???\n")
+	}
 	return databases.SearchResults{
 		Descriptors: descriptors,
 	}, err
@@ -378,13 +381,6 @@ func formatFromFileName(fileName string) string {
 		}
 	}
 	return format
-}
-
-// extracts file type information from the given File
-func fileTypesFromFile(_ File) []string {
-	// TODO: See https://pkg.go.dev/encoding/json?utm_source=godoc#example-RawMessage-Unmarshal
-	// TODO: for an example of how to unmarshal a variant type.
-	return []string{}
 }
 
 // extracts source information from the given metadata
@@ -647,16 +643,17 @@ func descriptorsFromResponseBody(body []byte, extraFields []string) ([]map[strin
 					case "project_id":
 						extras += fmt.Sprintf(`"project_id": "%s"`, org.Id)
 					case "img_taxon_oid":
-						var taxonOID int
-						err := json.Unmarshal(file.Metadata.IMG.TaxonOID, &taxonOID)
-						if err != nil {
-							return nil, err
+						switch taxonOID := file.Metadata.IMG.TaxonOID.(type) {
+						case int:
+							extras += fmt.Sprintf(`"img_taxon_oid": %d`, taxonOID)
+						case string:
+							extras += fmt.Sprintf(`"img_taxon_oid": %s`, taxonOID)
 						}
-						extras += fmt.Sprintf(`"img_taxon_oid": %d`, taxonOID)
 					}
 				}
 				extras += "}"
-				descriptor["extra"] = json.RawMessage(extras)
+				rawMesg, _ := json.Marshal(extras)
+				descriptor["extra"] = rawMesg
 			}
 
 			descriptors = append(descriptors, descriptor)
@@ -687,14 +684,14 @@ func pageNumberAndSize(offset, maxNum int) (int, int) {
 }
 
 // checks JDP-specific search parameters and adds them to the given URL values
-func (db Database) addSpecificSearchParameters(params map[string]json.RawMessage, p *url.Values) error {
+func (db Database) addSpecificSearchParameters(params map[string]any, p *url.Values) error {
 	paramSpec := db.SpecificSearchParameters()
 	for name, jsonValue := range params {
+		var ok bool
 		switch name {
 		case "f": // field-specific search
 			var value string
-			err := json.Unmarshal(jsonValue, &value)
-			if err != nil {
+			if value, ok = jsonValue.(string); !ok {
 				return &databases.InvalidSearchParameter{
 					Database: "JDP",
 					Message:  "Invalid search field given (must be string)",
@@ -711,8 +708,7 @@ func (db Database) addSpecificSearchParameters(params map[string]json.RawMessage
 			}
 		case "s": // sort order
 			var value string
-			err := json.Unmarshal(jsonValue, &value)
-			if err != nil {
+			if value, ok = jsonValue.(string); !ok {
 				return &databases.InvalidSearchParameter{
 					Database: "JDP",
 					Message:  "Invalid JDP sort order given (must be string)",
@@ -729,8 +725,7 @@ func (db Database) addSpecificSearchParameters(params map[string]json.RawMessage
 			}
 		case "d": // sort direction
 			var value string
-			err := json.Unmarshal(jsonValue, &value)
-			if err != nil {
+			if value, ok = jsonValue.(string); !ok {
 				return &databases.InvalidSearchParameter{
 					Database: "JDP",
 					Message:  "Invalid JDP sort direction given (must be string)",
@@ -747,8 +742,7 @@ func (db Database) addSpecificSearchParameters(params map[string]json.RawMessage
 			}
 		case "include_private_data": // search for private data
 			var value int
-			err := json.Unmarshal(jsonValue, &value)
-			if err != nil || (value != 0 && value != 1) {
+			if value, ok = jsonValue.(int); !ok {
 				return &databases.InvalidSearchParameter{
 					Database: "JDP",
 					Message:  "Invalid flag given for include_private_data (must be 0 or 1)",
@@ -757,8 +751,7 @@ func (db Database) addSpecificSearchParameters(params map[string]json.RawMessage
 			p.Add(name, fmt.Sprintf("%d", value))
 		case "extra": // comma-separated additional fields requested
 			var value string
-			err := json.Unmarshal(jsonValue, &value)
-			if err != nil {
+			if value, ok = jsonValue.(string); !ok {
 				return &databases.InvalidSearchParameter{
 					Database: "JDP",
 					Message:  "Invalid JDP requested extra field given (must be comma-delimited string)",

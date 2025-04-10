@@ -22,7 +22,6 @@
 package tasks
 
 import (
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -50,7 +49,7 @@ type transferTask struct {
 	DestinationFolder string            // folder path to which files are transferred
 	FileIds           []string          // IDs of all files being transferred
 	Id                uuid.UUID         // task identifier
-	Instructions      json.RawMessage   // machine-readable task processing instructions
+	Instructions      map[string]any    // machine-readable task processing instructions
 	Manifest          uuid.NullUUID     // manifest generation UUID (if any)
 	ManifestFile      string            // name of locally-created manifest file
 	PayloadSize       float64           // Size of payload (gigabytes)

@@ -23,7 +23,6 @@ package databases
 
 import (
 	"encoding/gob"
-	"encoding/json"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -94,7 +93,7 @@ type SearchParameters struct {
 	Pagination SearchPaginationParameters
 	// database-specific search parameters with names matched to provided values
 	// (validated by database)
-	Specific map[string]json.RawMessage
+	Specific map[string]any
 }
 
 // results from a file search
@@ -136,7 +135,6 @@ func RegisterDatabase(dbName string, createDb func() (Database, error)) error {
 	if firstTime {
 		// register types that appear in Frictionless Descriptors (for manifests)
 		gob.Register(credit.CreditMetadata{})
-		gob.Register(json.RawMessage{})
 
 		firstTime = false
 	}

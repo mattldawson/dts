@@ -2,7 +2,6 @@ package services
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/google/uuid"
 )
@@ -54,7 +53,7 @@ type TransferRequest struct {
 	// a Markdown description of the transfer request
 	Description string `json:"description,omitempty" example:"# title\n* type: assembly\n" doc:"Markdown task description"`
 	// machine-readable instructions for processing a payload at the destination site
-	Instructions json.RawMessage `json:"instructions,omitempty" doc:"JSON object containing machine-readable instructions for processing payload at destination"`
+	Instructions map[string]any `json:"instructions,omitempty" doc:"JSON object containing machine-readable instructions for processing payload at destination"`
 }
 
 // a response for a file transfer request (POST)

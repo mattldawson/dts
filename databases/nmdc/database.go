@@ -907,15 +907,15 @@ func dataResourceName(filename string) string {
 }
 
 // checks NMDC-specific search parameters
-func (db Database) addSpecificSearchParameters(params map[string]json.RawMessage, p *url.Values) error {
+func (db Database) addSpecificSearchParameters(params map[string]any, p *url.Values) error {
 	paramSpec := db.SpecificSearchParameters()
 	for name, jsonValue := range params {
+		var ok bool
 		switch name {
 		case "activity_id", "data_object_id", "filter", "sort", "sample_id",
 			"study_id":
 			var value string
-			err := json.Unmarshal(jsonValue, &value)
-			if err != nil {
+			if value, ok = jsonValue.(string); !ok {
 				return &databases.InvalidSearchParameter{
 					Database: "nmdc",
 					Message:  fmt.Sprintf("Invalid value for parameter %s (must be string)", name),
@@ -924,8 +924,7 @@ func (db Database) addSpecificSearchParameters(params map[string]json.RawMessage
 			p.Add(name, value)
 		case "fields": // accepts comma-delimited strings
 			var value string
-			err := json.Unmarshal(jsonValue, &value)
-			if err != nil {
+			if value, ok = jsonValue.(string); !ok {
 				return &databases.InvalidSearchParameter{
 					Database: "nmdc",
 					Message:  "Invalid NMDC requested extra field given (must be comma-delimited string)",

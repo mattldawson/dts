@@ -271,7 +271,7 @@ func (service *prototype) getDatabase(ctx context.Context,
 }
 
 type SearchParametersOutput struct {
-	Body json.RawMessage `doc:"a JSON object whose fields are search parameters and whose values indicate their type"`
+	Body map[string]any `doc:"a JSON object whose fields are search parameters and whose values indicate their type"`
 }
 
 // We map database-specific search parameters to JSON according to the following
@@ -285,7 +285,7 @@ type SearchParametersOutput struct {
 // handling of the JSON object. This treatment may seem delicate and full of
 // boilerplate, but it's an easy and straightforward way of performing a
 // mapping from a minimal data structure to a self-describing representation.
-func mapSearchParamsToJson(params map[string]any) json.RawMessage {
+func mapSearchParamsToJson(params map[string]any) map[string]any {
 	obj := make(map[string]any) // map that becomes the JSON response
 
 	for field, value := range params {
@@ -346,8 +346,7 @@ func mapSearchParamsToJson(params map[string]any) json.RawMessage {
 			obj[field] = entry
 		}
 	}
-	objData, _ := json.Marshal(obj)
-	return json.RawMessage(objData)
+	return obj
 }
 
 // method for querying a single database for its specific search parameters
@@ -421,7 +420,7 @@ func databaseError(err error) error {
 // implements database search for both GET and POST requests
 func searchDatabase(_ context.Context,
 	input *SearchDatabaseInput,
-	specific map[string]json.RawMessage) (*SearchResultsOutput, error) {
+	specific map[string]any) (*SearchResultsOutput, error) {
 
 	client, err := authorize(input.Authorization)
 	if err != nil {
@@ -505,7 +504,7 @@ func (service *prototype) searchDatabaseWithSpecificParams(ctx context.Context,
 	}) (*SearchResultsOutput, error) {
 	var body struct {
 		SearchDatabaseInputWithoutHeader
-		Specific map[string]json.RawMessage `json:"specific" doc:"database-specific search parameters in a JSON object"`
+		Specific map[string]any `json:"specific" doc:"database-specific search parameters in a JSON object"`
 	}
 	err := json.Unmarshal(input.Body, &body)
 	if err != nil {

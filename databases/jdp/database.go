@@ -135,9 +135,6 @@ func (db *Database) Search(orcid string, params databases.SearchParameters) (dat
 		return databases.SearchResults{}, err
 	}
 	descriptors, err := descriptorsFromResponseBody(body, extraFields)
-	if err != nil {
-		print("Crappity???\n")
-	}
 	return databases.SearchResults{
 		Descriptors: descriptors,
 	}, err
@@ -634,26 +631,16 @@ func descriptorsFromResponseBody(body []byte, extraFields []string) ([]map[strin
 
 			// add any requested additional metadata
 			if extraFields != nil {
-				extras := "{"
-				for i, field := range extraFields {
-					if i > 0 {
-						extras += ", "
-					}
+				extras := make(map[string]any)
+				for _, field := range extraFields {
 					switch field {
 					case "project_id":
-						extras += fmt.Sprintf(`"project_id": "%s"`, org.Id)
+						extras["project_id"] = org.Id
 					case "img_taxon_oid":
-						switch taxonOID := file.Metadata.IMG.TaxonOID.(type) {
-						case int:
-							extras += fmt.Sprintf(`"img_taxon_oid": %d`, taxonOID)
-						case string:
-							extras += fmt.Sprintf(`"img_taxon_oid": %s`, taxonOID)
-						}
+						extras["img_taxon_oid"] = file.Metadata.IMG.TaxonOID
 					}
 				}
-				extras += "}"
-				rawMesg, _ := json.Marshal(extras)
-				descriptor["extra"] = rawMesg
+				descriptor["extra"] = extras
 			}
 
 			descriptors = append(descriptors, descriptor)

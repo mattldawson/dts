@@ -30,7 +30,7 @@ type SearchResultsResponse struct {
 	// ElasticSearch query string
 	Query string `json:"query" example:"prochlorococcus" doc:"the given query string"`
 	// resources matching the query
-	Descriptors []map[string]interface{} `json:"resources" doc:"an array of validated Frictionless descriptors"`
+	Descriptors []map[string]any `json:"resources" doc:"an array of validated Frictionless descriptors"`
 }
 
 // a response for a file metadata query (GET)
@@ -38,7 +38,7 @@ type FileMetadataResponse struct {
 	// name of organization database
 	Database string `json:"database" example:"jdp" doc:"the database searched"`
 	// resources corresponding to given file IDs
-	Descriptors []map[string]interface{} `json:"resources" doc:"an array of validated Frictionless descriptors"`
+	Descriptors []map[string]any `json:"resources" doc:"an array of validated Frictionless descriptors"`
 }
 
 // a request for a file transfer (POST)

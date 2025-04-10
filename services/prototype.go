@@ -296,8 +296,8 @@ type SearchParametersOutput struct {
 // handling of the JSON object. This treatment may seem delicate and full of
 // boilerplate, but it's an easy and straightforward way of performing a
 // mapping from a minimal data structure to a self-describing representation.
-func mapSearchParamsToJson(params map[string]interface{}) json.RawMessage {
-	obj := make(map[string]interface{}) // map that becomes the JSON response
+func mapSearchParamsToJson(params map[string]any) json.RawMessage {
+	obj := make(map[string]any) // map that becomes the JSON response
 
 	for field, value := range params {
 		switch val := value.(type) {

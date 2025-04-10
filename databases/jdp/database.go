@@ -89,8 +89,8 @@ func NewDatabase() (databases.Database, error) {
 	}, nil
 }
 
-func (db Database) SpecificSearchParameters() map[string]interface{} {
-	return map[string]interface{}{
+func (db Database) SpecificSearchParameters() map[string]any {
+	return map[string]any{
 		// see https://files.jgi.doe.gov/apidoc/#/GET/search_list
 		"d": []string{"asc", "desc"}, // sort direction (ascending/descending)
 		"f": []string{"ssr", "biosample", "project_id", "library", // search specific field
@@ -140,7 +140,7 @@ func (db *Database) Search(orcid string, params databases.SearchParameters) (dat
 	}, err
 }
 
-func (db *Database) Descriptors(orcid string, fileIds []string) ([]map[string]interface{}, error) {
+func (db *Database) Descriptors(orcid string, fileIds []string) ([]map[string]any, error) {
 	// strip the "JDP:" prefix from our files and create a mapping from IDs to
 	// their original order so we can hand back metadata accordingly
 	strippedFileIds := make([]string, len(fileIds))
@@ -175,7 +175,7 @@ func (db *Database) Descriptors(orcid string, fileIds []string) ([]map[string]in
 	}
 
 	// reorder the descriptors to match that of the requested file IDs
-	descriptorsByFileId := make(map[string]map[string]interface{})
+	descriptorsByFileId := make(map[string]map[string]any)
 	for _, descriptor := range descriptors {
 		descriptorsByFileId[descriptor["id"].(string)] = descriptor
 	}
@@ -388,8 +388,8 @@ func fileTypesFromFile(_ File) []string {
 }
 
 // extracts source information from the given metadata
-func sourcesFromMetadata(md Metadata) []interface{} {
-	sources := make([]interface{}, 0)
+func sourcesFromMetadata(md Metadata) []any {
+	sources := make([]any, 0)
 	piInfo := md.Proposal.PI
 	if len(piInfo.LastName) > 0 {
 		var title string
@@ -412,7 +412,7 @@ func sourcesFromMetadata(md Metadata) []interface{} {
 		if len(md.Proposal.AwardDOI) > 0 {
 			doiURL = fmt.Sprintf("https://doi.org/%s", md.Proposal.AwardDOI)
 		}
-		source := map[string]interface{}{
+		source := map[string]any{
 			"title": title,
 			"path":  doiURL,
 			"email": piInfo.EmailAddress,
@@ -461,7 +461,7 @@ func dataResourceName(filename string) string {
 }
 
 // creates a Frictionless descriptor from a File
-func descriptorFromOrganismAndFile(organism Organism, file File) map[string]interface{} {
+func descriptorFromOrganismAndFile(organism Organism, file File) map[string]any {
 	id := "JDP:" + file.Id
 	format := formatFromFileName(file.Name)
 	sources := sourcesFromMetadata(file.Metadata)
@@ -471,7 +471,7 @@ func descriptorFromOrganismAndFile(organism Organism, file File) map[string]inte
 	filePath := filepath.Join(strings.TrimPrefix(file.Path, filePathPrefix), file.Name)
 
 	pi := file.Metadata.Proposal.PI
-	descriptor := map[string]interface{}{
+	descriptor := map[string]any{
 		"id":        id,
 		"name":      dataResourceName(file.Name),
 		"path":      filePath,
@@ -620,7 +620,7 @@ func (db *Database) post(resource, orcid string, body io.Reader) ([]byte, error)
 }
 
 // this helper extracts files for the JDP /search GET query with given parameters
-func descriptorsFromResponseBody(body []byte, extraFields []string) ([]map[string]interface{}, error) {
+func descriptorsFromResponseBody(body []byte, extraFields []string) ([]map[string]any, error) {
 	type JDPResults struct {
 		Organisms []Organism `json:"organisms"`
 	}
@@ -630,7 +630,7 @@ func descriptorsFromResponseBody(body []byte, extraFields []string) ([]map[strin
 		return nil, err
 	}
 
-	descriptors := make([]map[string]interface{}, 0)
+	descriptors := make([]map[string]any, 0)
 
 	for _, org := range jdpResults.Organisms {
 		for _, file := range org.Files {

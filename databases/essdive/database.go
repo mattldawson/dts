@@ -37,11 +37,10 @@ import (
 	"unicode"
 
 	"github.com/google/uuid"
-  "github.com/piprate/json-gold/ld"
+	"github.com/piprate/json-gold/ld"
 
 	"github.com/kbase/dts/credit"
 	"github.com/kbase/dts/databases"
-	"github.com/kbase/dts/frictionless"
 )
 
 // file database appropriate for handling searches and transfers
@@ -56,7 +55,7 @@ type Database struct {
 }
 
 func NewDatabase() (databases.Database, error) {
-  /* FIXME: What about endpoints?
+	/* FIXME: What about endpoints?
 	if config.Databases["ess-dive"].Endpoint != "" {
 		return nil, databases.InvalidEndpointsError{
 			Database: "nmdc",
@@ -78,18 +77,18 @@ func NewDatabase() (databases.Database, error) {
 	// (see https://nmdc-documentation.readthedocs.io/en/latest/howto_guides/globus.html)
 	nerscEndpoint := config.Databases["nmdc"].Endpoints["nersc"]
 	emslEndpoint := config.Databases["nmdc"].Endpoints["emsl"]
-  */
+	*/
 
 	// NOTE: we prevent redirects from HTTPS -> HTTP!
 	db := &Database{
 		Client: databases.SecureHttpClient(),
-//		EndpointForHost: map[string]string{
-//			"https://data.microbiomedata.org/data/": nerscEndpoint,
-//			"https://nmdcdemo.emsl.pnnl.gov/":       emslEndpoint,
-//		},
+		//		EndpointForHost: map[string]string{
+		//			"https://data.microbiomedata.org/data/": nerscEndpoint,
+		//			"https://nmdcdemo.emsl.pnnl.gov/":       emslEndpoint,
+		//		},
 	}
 
-  err := db.getAccessToken()
+	err := db.getAccessToken()
 	if err != nil {
 		return nil, err
 	}
@@ -116,18 +115,10 @@ func (db *Database) Search(orcid string, params databases.SearchParameters) (dat
 
 	// translate pagination parameters
 	pageNumber, pageSize := pageNumberAndSize(params.Pagination.Offset, params.Pagination.MaxNum)
-	p.Add("rowStart", strconv.Itoa(pageNumber * pageSize))
+	p.Add("rowStart", strconv.Itoa(pageNumber*pageSize))
 	p.Add("pageSize", strconv.Itoa(pageSize))
 
-	// add any NMDC-specific search parameters
-	if params.Specific != nil {
-		err := db.addSpecificSearchParameters(params.Specific, &p)
-		if err != nil {
-			return databases.SearchResults{}, err
-		}
-	}
-
-  // NOTE: currently, the query string is used to specify a dataset
+	// NOTE: currently, the query string is used to specify a dataset
 	if params.Query != "" {
 		p.Add("text", params.Query)
 	}
@@ -136,7 +127,7 @@ func (db *Database) Search(orcid string, params databases.SearchParameters) (dat
 	return db.dataObjectsForDataset(p)
 }
 
-func (db Database) Resources(orcid string, fileIds []string) ([]frictionless.DataResource, error) {
+func (db Database) Descriptors(orcid string, fileIds []string) ([]map[string]any, error) {
 	if err := db.renewAccessTokenIfExpired(); err != nil {
 		return nil, err
 	}
@@ -161,7 +152,7 @@ func (db Database) Resources(orcid string, fileIds []string) ([]frictionless.Dat
 	}
 
 	// construct data resources from the IDs
-	resources := make([]frictionless.DataResource, len(fileIds))
+	resources := make([]map[string]any, len(fileIds))
 	for i, fileId := range fileIds {
 		body, err := db.get(fmt.Sprintf("data_objects/%s", fileId), url.Values{})
 		if err != nil {
@@ -220,8 +211,8 @@ func (db *Database) Load(state databases.DatabaseSaveState) error {
 //--------------------
 
 const (
-	baseApiURL  = "https://api.ess-dive.lbl.gov/"
-  fusionApiURL = "https://fusion.ess-dive.lbl.gov/"
+	baseApiURL   = "https://api.ess-dive.lbl.gov/"
+	fusionApiURL = "https://fusion.ess-dive.lbl.gov/"
 )
 
 // Authorization / authentication
@@ -249,16 +240,16 @@ func (db *Database) getAccessToken() error {
 			Database: "ess-dive",
 			Message:  "No access token (DTS_ESSDIVE_TOKEN) was provided for authentication",
 		}
-  }
+	}
 	db.Auth = authorization{
-    Token: accessToken,
-    Type: "Bearer",
-  }
-  return nil
+		Token: accessToken,
+		Type:  "Bearer",
+	}
+	return nil
 }
 
 func (db *Database) renewAccessTokenIfExpired() error {
-  // FIXME: programmatic token renewal is not yet supported
+	// FIXME: programmatic token renewal is not yet supported
 }
 
 // adds an appropriate authorization header to given HTTP request
@@ -336,21 +327,20 @@ func (db Database) post(resource string, body io.Reader) ([]byte, error) {
 }
 
 type dataset struct {
-  Context string `json:"@context"`
-  Type string `json:"@type"`
-  Id string `json:"@id"`
-  Name string `json:"name"`
-  Description []string `json:"description"`
+	Context     string   `json:"@context"`
+	Type        string   `json:"@type"`
+	Id          string   `json:"@id"`
+	Name        string   `json:"name"`
+	Description []string `json:"description"`
 }
 
 type creator struct {
-  Type string `json:"@type"`
-  Id string `json:"@id"`
-
+	Type string `json:"@type"`
+	Id   string `json:"@id"`
 }
 
-func (db Database) dataResourceFromDataObject(dataObject DataObject) (frictionless.DataResource, error) {
-	resource := frictionless.DataResource{
+func (db Database) dataResourceFromDataObject(dataObject DataObject) (map[string]any, error) {
+	resource := map[string]anyDataResource{
 		Bytes: dataObject.FileSizeBytes,
 		Credit: credit.CreditMetadata{
 			Descriptions: []credit.Description{
@@ -902,49 +892,4 @@ func dataResourceName(filename string) string {
 	}
 
 	return name
-}
-
-// checks NMDC-specific search parameters
-func (db Database) addSpecificSearchParameters(params map[string]json.RawMessage, p *url.Values) error {
-	paramSpec := db.SpecificSearchParameters()
-	for name, jsonValue := range params {
-		switch name {
-		case "activity_id", "data_object_id", "filter", "sort", "sample_id",
-			"study_id":
-			var value string
-			err := json.Unmarshal(jsonValue, &value)
-			if err != nil {
-				return &databases.InvalidSearchParameter{
-					Database: "nmdc",
-					Message:  fmt.Sprintf("Invalid value for parameter %s (must be string)", name),
-				}
-			}
-			p.Add(name, value)
-		case "fields": // accepts comma-delimited strings
-			var value string
-			err := json.Unmarshal(jsonValue, &value)
-			if err != nil {
-				return &databases.InvalidSearchParameter{
-					Database: "nmdc",
-					Message:  "Invalid NMDC requested extra field given (must be comma-delimited string)",
-				}
-			}
-			acceptedValues := paramSpec["extra"].([]string)
-			if slices.Contains(acceptedValues, value) {
-				p.Add(name, value)
-			} else {
-				return &databases.InvalidSearchParameter{
-					Database: "nmdc",
-					Message:  fmt.Sprintf("Invalid requested extra field: %s", value),
-				}
-			}
-		case "extra": // accepts comma-delimited strings
-		default:
-			return &databases.InvalidSearchParameter{
-				Database: "nmdc",
-				Message:  fmt.Sprintf("Unrecognized NMDC-specific search parameter: %s", name),
-			}
-		}
-	}
-	return nil
 }

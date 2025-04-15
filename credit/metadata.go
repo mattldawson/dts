@@ -245,10 +245,8 @@ In the following documentation, 'resource' is used to refer to the object
 that the CM pertains to, for example, a KBase Workspace object; a
 sample from NMDC or ESS-DIVE; sequence data from IMG.
 
-The 'resource_type' field should be filled using values from the DataCite
-resourceTypeGeneral field:
-
-https://support.datacite.org/docs/datacite-metadata-schema-v44-mandatory-properties#10a-resourcetypegeneral
+The 'resource_type' field should be filled using values from the [DataCite
+resourceTypeGeneral field](https://support.datacite.org/docs/datacite-metadata-schema-v44-mandatory-properties#10a-resourcetypegeneral).
 
 Currently this schema only supports credit metadata for objects of type
 'dataset'; anything else will return an error.

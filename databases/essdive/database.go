@@ -39,6 +39,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/piprate/json-gold/ld"
 
+	"github.com/kbase/dts/config"
 	"github.com/kbase/dts/credit"
 	"github.com/kbase/dts/databases"
 )
@@ -50,42 +51,19 @@ type Database struct {
 	Client http.Client
 	// authorization info
 	Auth authorization
-	// mapping of host URLs to endpoints
-	EndpointForHost map[string]string
 }
 
 func NewDatabase() (databases.Database, error) {
-	/* FIXME: What about endpoints?
 	if config.Databases["ess-dive"].Endpoint != "" {
 		return nil, databases.InvalidEndpointsError{
-			Database: "nmdc",
-			Message:  "NMDC requires 'nersc' and 'emsl' endpoints to be specified",
+			Database: "ess-dive",
+			Message:  "ESS-DIVE requires a Globus endpoint",
 		}
 	}
-	// check for "nersc" and "emsl" Globus endpoints
-	for _, functionalName := range []string{"nersc", "emsl"} {
-		// was this functional name assigned to an endpoint?
-		if _, found := config.Databases["nmdc"].Endpoints[functionalName]; !found {
-			return nil, databases.InvalidEndpointsError{
-				Database: "nmdc",
-				Message:  fmt.Sprintf("Could not find '%s' endpoint for NMDC database", functionalName),
-			}
-		}
-	}
-
-	// fetch functional endpoint names and map URLs to them
-	// (see https://nmdc-documentation.readthedocs.io/en/latest/howto_guides/globus.html)
-	nerscEndpoint := config.Databases["nmdc"].Endpoints["nersc"]
-	emslEndpoint := config.Databases["nmdc"].Endpoints["emsl"]
-	*/
 
 	// NOTE: we prevent redirects from HTTPS -> HTTP!
 	db := &Database{
 		Client: databases.SecureHttpClient(),
-		//		EndpointForHost: map[string]string{
-		//			"https://data.microbiomedata.org/data/": nerscEndpoint,
-		//			"https://nmdcdemo.emsl.pnnl.gov/":       emslEndpoint,
-		//		},
 	}
 
 	err := db.getAccessToken()

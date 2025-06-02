@@ -47,10 +47,14 @@ type Pipeline struct {
 	// channels for handling requests from the host and internal data flow
 	client   ClientChannels
 	pipeline PipelineChannels
+	// pipeline stages
+	stages pipeline.Processor[IdAndSpecification, Transfer]
 	// provider sequences (strings of stages) and associated their dispatch and return channels
 	providers map[string]ProviderSequence
 	// true iff the pipelines are running
 	running bool
+	// called to stop the pipeline
+	stop context.CancelFunc
 }
 
 //----------
@@ -71,14 +75,13 @@ type ClientChannels struct {
 
 // communication between dispatch process and pipeline
 type PipelineChannels struct {
-	ReceivesTransferRequest   chan IdAndSpecification // sends new task UUID to initial pipeline stage
-	CreatesTransfer           <-chan Transfer         // accepts newly created transfers (dispatch <- pipeline)
-	ReceivesCancellation      chan uuid.UUID
-	ReceivesDispatch          chan Task                 // dispatches tasks to providers (dispatch -> pipeline)
-	UpdatesStatus             chan TransferStatusUpdate // accepts transfer status updates (dispatch <- pipeline)
-	ReceivesCompletedTransfer <-chan Transfer           // (pipeline <- provider)
-	ReceivesStop              chan struct{}             // dispatches tasks to providers (dispatch -> pipeline)
-	ReportsError              chan error                // reports pipeline errors (dispatch <- pipeline)
+	ReceivesTransferRequest chan IdAndSpecification // sends new task UUID to initial pipeline stage
+	CreatesTransfer         <-chan Transfer         // accepts newly created transfers (dispatch <- pipeline)
+	ReceivesCancellation    chan uuid.UUID
+	ReceivesDispatch        chan Task                 // dispatches tasks to providers (dispatch -> pipeline)
+	UpdatesStatus           chan TransferStatusUpdate // accepts transfer status updates (dispatch <- pipeline)
+	ReceivesStop            chan struct{}             // dispatches tasks to providers (dispatch -> pipeline)
+	ReportsError            chan error                // reports pipeline errors (dispatch <- pipeline)
 }
 
 // sequence of provider-specific stages
@@ -101,10 +104,15 @@ type TransferStatusUpdate struct {
 
 func CreatePipeline() (*Pipeline, error) {
 	taskComplete := make(chan Task, 32)
-	var taskCompleteIn chan<- Task = taskComplete       // for providers
-	statusUpdate := make(chan TransferStatusUpdate, 32) // channel for updating task statuses
+	statusUpdate := make(chan TransferStatusUpdate, 32)
+	pipelineErrorChannel := make(chan error, 32)
+	statusChannels := StatusChannels{
+		Update: statusUpdate,         // channel for updating task statuses
+		Error:  pipelineErrorChannel, // channel for reporting errors
+	}
+	ctx, cancel := context.WithCancel(context.Background())
 	p := Pipeline{
-		context: context.TODO(),
+		context: ctx,
 		client: ClientChannels{
 			RequestsTransfer:   make(chan Specification, 32),
 			ReceivesTransferId: make(chan uuid.UUID, 32),
@@ -119,15 +127,16 @@ func CreatePipeline() (*Pipeline, error) {
 			ReceivesCancellation:    make(chan uuid.UUID, 32),
 			UpdatesStatus:           statusUpdate,
 			ReceivesStop:            make(chan struct{}),
-			ReportsError:            make(chan error, 32),
+			ReportsError:            pipelineErrorChannel,
 		},
 		providers: map[string]ProviderSequence{
-			"jdp->kbase":  JdpToKBase(statusUpdate, taskCompleteIn),
-			"nmdc->kbase": NmdcToKBase(statusUpdate, taskCompleteIn),
+			"jdp->kbase":  JdpToKBase(statusChannels, taskComplete),
+			"nmdc->kbase": NmdcToKBase(statusChannels, taskComplete),
 		},
+		stop: cancel,
 	}
 
-	p.assemble()
+	p.assembleStages(statusChannels)
 
 	return &p, nil
 }
@@ -137,7 +146,6 @@ func (p *Pipeline) Start() error {
 		return &AlreadyRunningError{}
 	}
 	go p.listenToClients()
-	go p.runPipelines()
 	p.running = true
 	return nil
 }
@@ -213,13 +221,10 @@ func (p *Pipeline) Stop() error {
 	}
 }
 
-func (p *Pipeline) assemble() {
+func (p *Pipeline) assembleStages(statusChannels StatusChannels) {
 	// wire together the pipeline's stages
-	// FIXME: include error channel!
-	statusUpdate := p.pipeline.UpdatesStatus
-	stages := pipeline.Join(CreateNewTransfer(statusUpdate), DispatchToProvider(p.providers, statusUpdate))
-	stages = pipeline.Join(stages, GenerateManifest(statusUpdate))
-	p.pipeline.ReceivesCompletedTransfer = pipeline.ProcessConcurrently(p.context, 1, stages, p.pipeline.ReceivesTransferRequest)
+	stages := pipeline.Join(CreateNewTransfer(statusChannels), DispatchToProvider(p.providers, statusChannels))
+	p.stages = pipeline.Join(stages, GenerateManifest(statusChannels))
 }
 
 // this goroutine accepts client requests and dispatches them to pipelines
@@ -286,6 +291,9 @@ func (p *Pipeline) listenToClients() {
 		}
 	}()
 
+	// start the pipeline, sending status updates, error, and results to appropriate channels
+	pipelineCompletesTransfer := pipeline.ProcessConcurrently(p.context, 1, p.stages, p.pipeline.ReceivesTransferRequest)
+
 	// start handling client requests and coordinating with the pipeline
 	for {
 		select {
@@ -348,6 +356,9 @@ func (p *Pipeline) listenToClients() {
 				slog.Error(fmt.Sprintf("Status update received for invalid transfer ID %s", statusUpdate.Id.String()))
 			}
 
+		case completedTransfer := <-pipelineCompletesTransfer:
+			transfers[completedTransfer.Id] = completedTransfer
+			slog.Info(fmt.Sprintf("Completed transfer %s", completedTransfer.Id.String()))
 		case pipelineError := <-pipelineReportsError:
 			// for now, we log pipeline errors when received
 			slog.Error(fmt.Sprintf("Pipeline error: %s", pipelineError.Error()))
@@ -361,36 +372,6 @@ func (p *Pipeline) listenToClients() {
 					delete(transfers, record.Id)
 				}
 			}
-		}
-	}
-}
-
-// this goroutine handles all pipeline activity
-func (p *Pipeline) runPipelines() {
-
-	// channels for communicating with dispatch
-	var pipelineReceivesCancellation <-chan uuid.UUID = p.pipeline.ReceivesCancellation
-	var pipelineUpdatesStatus chan<- TransferStatusUpdate = p.pipeline.UpdatesStatus
-	var pipelineReceivesStop <-chan struct{} = p.pipeline.ReceivesStop
-
-	// handle messages from dispatch
-	for {
-		select {
-		/*
-			case transfer := <-pipelineReceivesCompletedTransfer:
-				// FIXME: ???
-		*/
-
-		case transferId := <-pipelineReceivesCancellation:
-			// FIXME:
-			pipelineUpdatesStatus <- TransferStatusUpdate{
-				Id: transferId,
-				// FIXME: status!
-			}
-
-		case <-pipelineReceivesStop:
-			// FIXME:
-
 		}
 	}
 }

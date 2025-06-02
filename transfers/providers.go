@@ -25,28 +25,28 @@ import (
 	"github.com/deliveryhero/pipeline/v2"
 )
 
-func JdpToKBase(statusUpdate chan<- TransferStatusUpdate, taskComplete chan<- Task) ProviderSequence {
+func JdpToKBase(channels StatusChannels, taskComplete chan Task) ProviderSequence {
 	return ProviderSequence{
 		Channels: ProviderSequenceChannels{
 			Dispatch: make(chan Task, 32),
 			Complete: taskComplete,
 		},
 		Sequence: pipeline.Sequence(
-			StageFilesAtSource(statusUpdate),
-			TransferToDestination(statusUpdate),
+			StageFilesAtSource(channels),
+			TransferToDestination(channels),
 		),
 	}
 }
 
-func NmdcToKBase(statusUpdate chan<- TransferStatusUpdate, taskComplete chan<- Task) ProviderSequence {
+func NmdcToKBase(channels StatusChannels, taskComplete chan Task) ProviderSequence {
 	return ProviderSequence{
 		Channels: ProviderSequenceChannels{
 			Dispatch: make(chan Task, 32),
 			Complete: taskComplete,
 		},
 		Sequence: pipeline.Sequence(
-			StageFilesAtSource(statusUpdate),
-			TransferToDestination(statusUpdate),
+			StageFilesAtSource(channels),
+			TransferToDestination(channels),
 		),
 	}
 }

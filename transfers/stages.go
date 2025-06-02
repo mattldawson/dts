@@ -45,13 +45,20 @@ import (
 // goroutines that asynchronously process work, chained together in sequence by their input/output
 // channels.
 
+// this is passed to the initial stage to create new transfers
 type IdAndSpecification struct {
 	Id            uuid.UUID
 	Specification Specification
 }
 
+// these channels are passed to each stage so it can report status updates and errors
+type StatusChannels struct {
+	Update chan<- TransferStatusUpdate
+	Error  chan<- error
+}
+
 // creates a new Transfer with the given ID from the given Specification
-func CreateNewTransfer(statusUpdate chan<- TransferStatusUpdate) pipeline.Processor[IdAndSpecification, Transfer] {
+func CreateNewTransfer(channels StatusChannels) pipeline.Processor[IdAndSpecification, Transfer] {
 	process := func(ctx context.Context, idAndSpec IdAndSpecification) (Transfer, error) {
 		// access the source database, resolving resource descriptors
 		source, err := databases.NewDatabase(idAndSpec.Specification.Source)
@@ -183,11 +190,13 @@ func CreateNewTransfer(statusUpdate chan<- TransferStatusUpdate) pipeline.Proces
 		return transfer, nil
 	}
 	cancel := func(idAndSpec IdAndSpecification, err error) {
+		// send all errors to our error reporting channel
+		channels.Error <- err
 	}
 	return pipeline.NewProcessor(process, cancel)
 }
 
-func DispatchToProvider(providers map[string]ProviderSequence, statusUpdate chan<- TransferStatusUpdate) pipeline.Processor[Transfer, Transfer] {
+func DispatchToProvider(providers map[string]ProviderSequence, channels StatusChannels) pipeline.Processor[Transfer, Transfer] {
 	process := func(ctx context.Context, transfer Transfer) (Transfer, error) {
 		// this function generates a provider dispatch key given a Specification
 		providerKey := func(source, destination string) string {
@@ -216,12 +225,14 @@ func DispatchToProvider(providers map[string]ProviderSequence, statusUpdate chan
 		return transfer, nil
 	}
 	cancel := func(transfer Transfer, err error) {
+		// send all errors to our error reporting channel
+		channels.Error <- err
 	}
 	return pipeline.NewProcessor(process, cancel)
 }
 
 // moves files into place at the source, for transfer elsewhere
-func StageFilesAtSource(statusUpdate chan<- TransferStatusUpdate) pipeline.Processor[Task, Task] {
+func StageFilesAtSource(channels StatusChannels) pipeline.Processor[Task, Task] {
 	process := func(ctx context.Context, task Task) (Task, error) {
 		// check whether files are in place
 		sourceEndpoint, err := endpoints.NewEndpoint(task.SourceEndpoint)
@@ -261,11 +272,13 @@ func StageFilesAtSource(statusUpdate chan<- TransferStatusUpdate) pipeline.Proce
 		return task, nil
 	}
 	cancel := func(task Task, err error) {
+		// send all errors to our error reporting channel
+		channels.Error <- err
 	}
 	return pipeline.NewProcessor(process, cancel)
 }
 
-func TransferToDestination(statusUpdate chan<- TransferStatusUpdate) pipeline.Processor[Task, Task] {
+func TransferToDestination(channels StatusChannels) pipeline.Processor[Task, Task] {
 	process := func(ctx context.Context, task Task) (Task, error) {
 		slog.Debug(fmt.Sprintf("Transferring %d file(s) from %s to %s",
 			len(task.Descriptors), task.SourceEndpoint, task.DestinationEndpoint))
@@ -294,6 +307,7 @@ func TransferToDestination(statusUpdate chan<- TransferStatusUpdate) pipeline.Pr
 		}
 		transferId, err := sourceEndpoint.Transfer(destinationEndpoint, fileXfers)
 		if err != nil {
+			channels.Error <- err
 			return Task{}, err
 		}
 		task.Status.TransferId = uuid.NullUUID{
@@ -305,19 +319,22 @@ func TransferToDestination(statusUpdate chan<- TransferStatusUpdate) pipeline.Pr
 			NumFiles: len(task.Descriptors),
 		}
 		task.Status.StagingId = uuid.NullUUID{}
-		return task, nil
+		return task, err
 	}
 	cancel := func(task Task, err error) {
+		// send all errors to our error reporting channel
+		channels.Error <- err
 	}
 	return pipeline.NewProcessor(process, cancel)
 }
 
 // manifest generation stage
-func GenerateManifest(statusUpdate chan<- TransferStatusUpdate) pipeline.Processor[Transfer, Transfer] {
+func GenerateManifest(channels StatusChannels) pipeline.Processor[Transfer, Transfer] {
 	process := func(ctx context.Context, transfer Transfer) (Transfer, error) {
 		localEndpoint, err := endpoints.NewEndpoint(config.Service.Endpoint)
 		if err != nil {
-			return Transfer{}, nil
+			channels.Error <- err
+			return Transfer{}, err
 		}
 
 		// generate a manifest for the transfer
@@ -391,6 +408,8 @@ func GenerateManifest(statusUpdate chan<- TransferStatusUpdate) pipeline.Process
 		return transfer, nil
 	}
 	cancel := func(transfer Transfer, err error) {
+		// send all errors to our error reporting channel
+		channels.Error <- err
 	}
 	return pipeline.NewProcessor(process, cancel)
 }

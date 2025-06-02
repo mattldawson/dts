@@ -44,14 +44,22 @@ import (
 // Call these functions within your pipeline's goroutine to establish stages. Stages are simply
 // goroutines that asynchronously process work, chained together in sequence by their input/output
 // channels.
+//
+// These pipeline stages are a bit unusual in that the work is not very processor-intensive (since
+// it occurs elsewhere), but typically takes a very long time. Each transfer is processed
+// concurrently and each long-running stage has polling interval at which it checks the progress of
+// its work. There can be a very large number of concurrent pipelines (corresponding to the number
+// of outstanding transfers), because each transfer occupies its own goroutine. It's unlikely that
+// the number of concurrent DTS transfers will exceed the maximum number of Goroutines on any
+// reasonable hardware, since they're very cheap.
 
-// this is passed to the initial stage to create new transfers
+// passed to the initial stage to create new transfers
 type IdAndSpecification struct {
 	Id            uuid.UUID
 	Specification Specification
 }
 
-// these channels are passed to each stage so it can report status updates and errors
+// passed to each stage so it can report status updates and errors
 type StatusChannels struct {
 	Update chan<- TransferStatusUpdate
 	Error  chan<- error
@@ -269,6 +277,16 @@ func StageFilesAtSource(channels StatusChannels) pipeline.Processor[Task, Task] 
 				NumFiles: len(task.Descriptors),
 			}
 		}
+
+		// wait till the files are staged
+		for !staged {
+			time.Sleep(time.Duration(config.Service.PollInterval) * time.Millisecond)
+			staged, err = sourceEndpoint.FilesStaged(task.Descriptors)
+			if err != nil {
+				return Task{}, err
+			}
+		}
+
 		return task, nil
 	}
 	cancel := func(task Task, err error) {
@@ -319,6 +337,21 @@ func TransferToDestination(channels StatusChannels) pipeline.Processor[Task, Tas
 			NumFiles: len(task.Descriptors),
 		}
 		task.Status.StagingId = uuid.NullUUID{}
+
+		// wait for it to finish
+		for task.Status.Code != TaskStatusSucceeded && task.Status.Code != TaskStatusFailed {
+			time.Sleep(time.Duration(config.Service.PollInterval) * time.Millisecond)
+			status, err := sourceEndpoint.Status(transferId)
+			if err != nil {
+				return Task{}, err
+			}
+			// FIXME: need to be more careful about this info vvv
+			task.Status.TransferStatus = endpoints.TransferStatus{
+				Code:     status.Code,
+				NumFiles: status.NumFiles,
+			}
+		}
+
 		return task, err
 	}
 	cancel := func(task Task, err error) {

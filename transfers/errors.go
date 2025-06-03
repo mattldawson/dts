@@ -54,6 +54,18 @@ func (t InvalidDestinationError) Error() string {
 	return fmt.Sprintf("Invalid destination for requested transfer: %s", t.Destination)
 }
 
+func InvalidSourceOrDestinationError(source, destination string) error {
+	if _, found := config.Databases[source]; !found {
+		return &InvalidSourceError{
+			Source: source,
+		}
+	} else {
+		return &InvalidDestinationError{
+			Destination: destination,
+		}
+	}
+}
+
 // indicates that Stop() has been called when tasks are not being processed
 type NotRunningError struct{}
 

@@ -239,7 +239,7 @@ func DispatchToProvider(providers map[string]ProviderSequence, channels StageCha
 			}
 			stop() // shut down our transfer-specific context on completion
 		} else {
-			return Transfer{}, &InvalidSourceError{}
+			return Transfer{}, InvalidSourceOrDestinationError(transfer.Specification.Source, transfer.Specification.Destination)
 		}
 
 		return transfer, nil

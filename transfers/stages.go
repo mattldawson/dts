@@ -59,14 +59,16 @@ type IdAndSpecification struct {
 	Specification Specification
 }
 
-// passed to each stage so it can report status updates and errors
-type StatusChannels struct {
-	Update chan<- TransferStatusUpdate
-	Error  chan<- error
+// channels used by pipeline stages for communication with the dispatch
+type StageChannels struct {
+	Cancel   chan uuid.UUID              // receives cancellation requests
+	Complete chan Task                   // for reporting task completion
+	Update   chan<- TransferStatusUpdate // for providing status updates
+	Error    chan<- error                // for reporting errors
 }
 
 // creates a new Transfer with the given ID from the given Specification
-func CreateNewTransfer(channels StatusChannels) pipeline.Processor[IdAndSpecification, Transfer] {
+func CreateNewTransfer(channels StageChannels) pipeline.Processor[IdAndSpecification, Transfer] {
 	process := func(ctx context.Context, idAndSpec IdAndSpecification) (Transfer, error) {
 		// access the source database, resolving resource descriptors
 		source, err := databases.NewDatabase(idAndSpec.Specification.Source)
@@ -182,6 +184,7 @@ func CreateNewTransfer(channels StatusChannels) pipeline.Processor[IdAndSpecific
 			// set up a task for the endpoint
 			transfer.Tasks = append(transfer.Tasks, Task{
 				TransferId:          transfer.Id,
+				Index:               len(transfer.Tasks),
 				Destination:         transfer.Specification.Destination,
 				DestinationEndpoint: destinationEndpoint,
 				DestinationFolder:   transfer.DestinationFolder,
@@ -204,30 +207,39 @@ func CreateNewTransfer(channels StatusChannels) pipeline.Processor[IdAndSpecific
 	return pipeline.NewProcessor(process, cancel)
 }
 
-func DispatchToProvider(providers map[string]ProviderSequence, channels StatusChannels) pipeline.Processor[Transfer, Transfer] {
+// dispatches a transfer to the appropriate provider based on its source and destination
+func DispatchToProvider(providers map[string]ProviderSequence, channels StageChannels) pipeline.Processor[Transfer, Transfer] {
 	process := func(ctx context.Context, transfer Transfer) (Transfer, error) {
-		// this function generates a provider dispatch key given a Specification
-		providerKey := func(source, destination string) string {
-			return fmt.Sprintf("%s->%s", source, destination)
-		}
+		key := fmt.Sprintf("%s->%s", transfer.Specification.Source, transfer.Specification.Destination)
+		if provider, found := providers[key]; found {
+			// set up a pipeline for exclusive use by this transfer's tasks
+			input := provider.Channels.Dispatch
+			xferCtx, stop := context.WithCancel(ctx)
+			numTasks := len(transfer.Tasks)
+			output := pipeline.ProcessConcurrently(xferCtx, numTasks, provider.Sequence, input)
 
-		for _, task := range transfer.Tasks {
-			key := providerKey(task.Source, task.Destination)
-			if provider, found := providers[key]; found {
-				provider.Channels.Dispatch <- task
-			} else {
-				return Transfer{}, &InvalidSourceError{}
+			// dispatch the transfers
+			for _, task := range transfer.Tasks {
+				input <- task
 			}
-		}
 
-		// wait for all the cows to come home
-		for i, task := range transfer.Tasks {
-			key := providerKey(task.Source, task.Destination)
-			provider := providers[key]
-			select {
-			case task := <-provider.Channels.Complete:
-				transfer.Tasks[i] = task
+			// wait for all the cows to come home
+			numCompleted := 0
+			for numCompleted < numTasks {
+				select {
+				case completedTask := <-output:
+					transfer.Tasks[completedTask.Index] = completedTask
+					numCompleted++
+				case transferId := <-channels.Cancel:
+					if transferId == transfer.Id {
+						slog.Info(fmt.Sprintf("Transfer %s cancelled.", transferId.String()))
+						stop() // FIXME: this doesn't actually cancel e.g. Globus transfers
+					}
+				}
 			}
+			stop() // shut down our transfer-specific context on completion
+		} else {
+			return Transfer{}, &InvalidSourceError{}
 		}
 
 		return transfer, nil
@@ -240,7 +252,7 @@ func DispatchToProvider(providers map[string]ProviderSequence, channels StatusCh
 }
 
 // moves files into place at the source, for transfer elsewhere
-func StageFilesAtSource(channels StatusChannels) pipeline.Processor[Task, Task] {
+func StageFilesAtSource(channels StageChannels) pipeline.Processor[Task, Task] {
 	process := func(ctx context.Context, task Task) (Task, error) {
 		// check whether files are in place
 		sourceEndpoint, err := endpoints.NewEndpoint(task.SourceEndpoint)
@@ -296,7 +308,7 @@ func StageFilesAtSource(channels StatusChannels) pipeline.Processor[Task, Task] 
 	return pipeline.NewProcessor(process, cancel)
 }
 
-func TransferToDestination(channels StatusChannels) pipeline.Processor[Task, Task] {
+func TransferToDestination(channels StageChannels) pipeline.Processor[Task, Task] {
 	process := func(ctx context.Context, task Task) (Task, error) {
 		slog.Debug(fmt.Sprintf("Transferring %d file(s) from %s to %s",
 			len(task.Descriptors), task.SourceEndpoint, task.DestinationEndpoint))
@@ -362,7 +374,7 @@ func TransferToDestination(channels StatusChannels) pipeline.Processor[Task, Tas
 }
 
 // manifest generation stage
-func GenerateManifest(channels StatusChannels) pipeline.Processor[Transfer, Transfer] {
+func GenerateManifest(channels StageChannels) pipeline.Processor[Transfer, Transfer] {
 	process := func(ctx context.Context, transfer Transfer) (Transfer, error) {
 		localEndpoint, err := endpoints.NewEndpoint(config.Service.Endpoint)
 		if err != nil {

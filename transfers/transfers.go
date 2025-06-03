@@ -108,6 +108,7 @@ type TransferStatus struct {
 // A Task is an indivisible unit of work that is executed by stages in a pipeline.
 type Task struct {
 	TransferId          uuid.UUID  // ID of corresponding transfer
+	Index               int        // index of task in transfer's Tasks array
 	Destination         string     // name of destination database (in config)
 	DestinationEndpoint string     // name of destination database (in config)
 	DestinationFolder   string     // folder path to which files are transferred

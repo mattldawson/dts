@@ -23,14 +23,35 @@ package transfers
 
 import (
 	"github.com/deliveryhero/pipeline/v2"
+	"github.com/google/uuid"
 )
 
-func JdpToKBase(channels StatusChannels, taskComplete chan Task) ProviderSequence {
+// sequence of provider-specific stages
+type ProviderSequence struct {
+	Channels ProviderChannels
+	Sequence pipeline.Processor[Task, Task]
+}
+
+// channels used to dispatch tasks to provider sequences and return them completed
+type ProviderChannels struct {
+	Cancel   chan uuid.UUID
+	Complete chan Task
+	Dispatch chan Task
+}
+
+// constructs an appropriate set of channels for a provider given those that communicate with
+// pipeline stages
+func NewProviderChannels(stageChannels StageChannels) ProviderChannels {
+	return ProviderChannels{
+		Cancel:   stageChannels.Cancel,
+		Complete: stageChannels.Complete,
+		Dispatch: make(chan Task, 32), // every provider gets its own dispatch channel
+	}
+}
+
+func JdpToKBase(channels StageChannels) ProviderSequence {
 	return ProviderSequence{
-		Channels: ProviderSequenceChannels{
-			Dispatch: make(chan Task, 32),
-			Complete: taskComplete,
-		},
+		Channels: NewProviderChannels(channels),
 		Sequence: pipeline.Sequence(
 			StageFilesAtSource(channels),
 			TransferToDestination(channels),
@@ -38,12 +59,9 @@ func JdpToKBase(channels StatusChannels, taskComplete chan Task) ProviderSequenc
 	}
 }
 
-func NmdcToKBase(channels StatusChannels, taskComplete chan Task) ProviderSequence {
+func NmdcToKBase(channels StageChannels) ProviderSequence {
 	return ProviderSequence{
-		Channels: ProviderSequenceChannels{
-			Dispatch: make(chan Task, 32),
-			Complete: taskComplete,
-		},
+		Channels: NewProviderChannels(channels),
 		Sequence: pipeline.Sequence(
 			StageFilesAtSource(channels),
 			TransferToDestination(channels),

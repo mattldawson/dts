@@ -42,8 +42,6 @@ import (
 
 // this type handles requests from the host and manages specific source->destination pipelines
 type Pipeline struct {
-	// context controlling pipeline(s)
-	context context.Context
 	// channels for handling requests from the host and internal data flow
 	client   ClientChannels
 	pipeline PipelineChannels
@@ -53,8 +51,6 @@ type Pipeline struct {
 	providers map[string]ProviderSequence
 	// true iff the pipelines are running
 	running bool
-	// called to stop the pipeline
-	stop context.CancelFunc
 }
 
 //----------
@@ -80,20 +76,7 @@ type PipelineChannels struct {
 	ReceivesCancellation    chan uuid.UUID
 	ReceivesDispatch        chan Task                 // dispatches tasks to providers (dispatch -> pipeline)
 	UpdatesStatus           chan TransferStatusUpdate // accepts transfer status updates (dispatch <- pipeline)
-	ReceivesStop            chan struct{}             // dispatches tasks to providers (dispatch -> pipeline)
 	ReportsError            chan error                // reports pipeline errors (dispatch <- pipeline)
-}
-
-// sequence of provider-specific stages
-type ProviderSequence struct {
-	Channels ProviderSequenceChannels
-	Sequence pipeline.Processor[Task, Task]
-}
-
-// channels used to dispatch tasks to provider sequences and return them completed
-type ProviderSequenceChannels struct {
-	Dispatch chan Task
-	Complete chan Task
 }
 
 // information about a specific transfer status update (dispatch <- pipeline)
@@ -103,16 +86,28 @@ type TransferStatusUpdate struct {
 }
 
 func CreatePipeline() (*Pipeline, error) {
+	return CreatePipelineWithProviders(map[string]func(channels StageChannels) ProviderSequence{
+		"jdp->kbase":  JdpToKBase,
+		"nmdc->kbase": NmdcToKBase,
+	})
+}
+
+func CreatePipelineWithProviders(providerFuncs map[string]func(channels StageChannels) ProviderSequence) (*Pipeline, error) {
+	cancel := make(chan uuid.UUID)
+	errorReporting := make(chan error, 32)
 	taskComplete := make(chan Task, 32)
 	statusUpdate := make(chan TransferStatusUpdate, 32)
-	pipelineErrorChannel := make(chan error, 32)
-	statusChannels := StatusChannels{
-		Update: statusUpdate,         // channel for updating task statuses
-		Error:  pipelineErrorChannel, // channel for reporting errors
+	stageChannels := StageChannels{
+		Cancel:   cancel,
+		Complete: taskComplete,
+		Update:   statusUpdate,
+		Error:    errorReporting,
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	providers := make(map[string]ProviderSequence)
+	for name, f := range providerFuncs {
+		providers[name] = f(stageChannels)
+	}
 	p := Pipeline{
-		context: ctx,
 		client: ClientChannels{
 			RequestsTransfer:   make(chan Specification, 32),
 			ReceivesTransferId: make(chan uuid.UUID, 32),
@@ -124,19 +119,14 @@ func CreatePipeline() (*Pipeline, error) {
 		},
 		pipeline: PipelineChannels{
 			ReceivesTransferRequest: make(chan IdAndSpecification, 32),
-			ReceivesCancellation:    make(chan uuid.UUID, 32),
+			ReceivesCancellation:    cancel,
 			UpdatesStatus:           statusUpdate,
-			ReceivesStop:            make(chan struct{}),
-			ReportsError:            pipelineErrorChannel,
+			ReportsError:            errorReporting,
 		},
-		providers: map[string]ProviderSequence{
-			"jdp->kbase":  JdpToKBase(statusChannels, taskComplete),
-			"nmdc->kbase": NmdcToKBase(statusChannels, taskComplete),
-		},
-		stop: cancel,
+		providers: providers,
 	}
 
-	p.assembleStages(statusChannels)
+	p.assembleStages(stageChannels)
 
 	return &p, nil
 }
@@ -221,10 +211,10 @@ func (p *Pipeline) Stop() error {
 	}
 }
 
-func (p *Pipeline) assembleStages(statusChannels StatusChannels) {
+func (p *Pipeline) assembleStages(stageChannels StageChannels) {
 	// wire together the pipeline's stages
-	stages := pipeline.Join(CreateNewTransfer(statusChannels), DispatchToProvider(p.providers, statusChannels))
-	p.stages = pipeline.Join(stages, GenerateManifest(statusChannels))
+	stages := pipeline.Join(CreateNewTransfer(stageChannels), DispatchToProvider(p.providers, stageChannels))
+	p.stages = pipeline.Join(stages, GenerateManifest(stageChannels))
 }
 
 // this goroutine accepts client requests and dispatches them to pipelines
@@ -274,7 +264,6 @@ func (p *Pipeline) listenToClients() {
 	var pipelineReceivesCancellation chan<- uuid.UUID = p.pipeline.ReceivesCancellation
 	var pipelineReceivesDispatch chan<- Task = p.pipeline.ReceivesDispatch
 	var pipelineUpdatesStatus <-chan TransferStatusUpdate = p.pipeline.UpdatesStatus
-	var pipelineReceivesStop chan<- struct{} = p.pipeline.ReceivesStop
 	var pipelineReportsError <-chan error = p.pipeline.ReportsError
 
 	// channel for deleting old transfer records
@@ -292,7 +281,8 @@ func (p *Pipeline) listenToClients() {
 	}()
 
 	// start the pipeline, sending status updates, error, and results to appropriate channels
-	pipelineCompletesTransfer := pipeline.ProcessConcurrently(p.context, 1, p.stages, p.pipeline.ReceivesTransferRequest)
+	context, stop := context.WithCancel(context.Background())
+	pipelineCompletesTransfer := pipeline.ProcessConcurrently(context, 1, p.stages, p.pipeline.ReceivesTransferRequest)
 
 	// start handling client requests and coordinating with the pipeline
 	for {
@@ -332,7 +322,7 @@ func (p *Pipeline) listenToClients() {
 			if err != nil {
 				slog.Error("Couldn't save transfer records!")
 			}
-			pipelineReceivesStop <- struct{}{}
+			stop()
 
 		case newTransfer := <-pipelineCreatesTransfer:
 			// the dispatch maintains transfer status information

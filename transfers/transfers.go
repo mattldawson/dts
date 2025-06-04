@@ -87,8 +87,7 @@ const (
 	TransferStatusUnknown TransferStatusCode = iota
 	TransferStatusNew
 	TransferStatusStaging
-	TransferStatusTransferring
-	TransferStatusProcessing
+	TransferStatusInProgress
 	TransferStatusFinalizing
 	TransferStatusCanceled
 	TransferStatusSucceeded
@@ -97,7 +96,6 @@ const (
 
 type TransferStatus struct {
 	Code       TransferStatusCode
-	ManifestId uuid.NullUUID // manifest generation UUID (if any)
 	NumFiles   int
 }
 

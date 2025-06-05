@@ -73,37 +73,19 @@ Fields that must be non-`null` are marked **bold** below.
 
 #### Assembly (`assembly`)
 
-* `**staging_file_subdir_path**`: a string containing the path to the file, rooted in the directory
+* **`staging_file_subdir_path`**: a string containing the path to the file, rooted in the directory
   containing the manifest
-* `**assembly_name**`: the name of the assembly object
-* `type`: one of the following strings:
-    * `"draft isolate"`
-    * `"finished isolate"`
-    * `"mag"`
-    * `"sag"`
-    * `"virus"`
-    * `"plasmid"`
-    * `"construct"`
-    * `"metagenome"`
+* **`assembly_name`**: the name of the assembly object
+* `type`: one of the following strings: `"draft isolate"`, `"finished isolate"`, `"mag"`, `"sag"`, `"virus"`, `"plasmid"`, `"construct"`, `"metagenome"`
 * `min_contig_length`: an integer containing the minimum length of a contig within the assembly
 
 ### Genbank genome (`genback_genome`)
 
-* `**staging_file_subdir_path**`: a string containing the path to the file, rooted in the directory
+* **`staging_file_subdir_path`**: a string containing the path to the file, rooted in the directory
   containing the manifest
-* `**genome_name**`: the name of the genome object
-* `genome_type`: one of the following strings:
-    * `"draft isolate"`
-    * `"finished isolate"`
-    * `"mag"`
-    * `"sag"`
-    * `"virus"`
-    * `"plasmid"`
-    * `"construct"`
-* `source`: one of the following strings:
-    * `"RefSeq user"`
-    * `"Ensembl user"`
-    * `"Other"`
+* **`genome_name`**: the name of the genome object
+* `genome_type`: one of the following strings: `"draft isolate"`, `"finished isolate"`, `"mag"`, `"sag"`, `"virus"`, `"plasmid"`, `"construct"`
+* `source`: one of the following strings: `"RefSeq user"`, `"Ensembl user"`, `"Other"`
 * `release`: a string
 * `genetic_code`: an integer
 * `scientific_name`: the scientific name of the genome
@@ -112,28 +94,14 @@ Fields that must be non-`null` are marked **bold** below.
 
 ### GFF+FASTA genome (`gff_genome`)
 
-* `**fasta_file**`: a string containing the path to a FASTA file, rooted in the directory
+* **`fasta_file`**: a string containing the path to a FASTA file, rooted in the directory
   containing the manifest
-* `**gff_file**`: a string containing the path to a GFF file, rooted in the directory
+* **`gff_file`**: a string containing the path to a GFF file, rooted in the directory
   containing the manifest
-* `**genome_name**`: the name of the genome object
-* `genome_type`: one of the following strings:
-    * `"draft isolate"`
-    * `"finished isolate"`
-    * `"fungi"`
-    * `"mag"`
-    * `"other Eukaryote"`
-    * `"plant"`
-    * `"sag"`
-    * `"virus"`
-    * `"plasmid"`
-    * `"construct"`
+* **`genome_name`**: the name of the genome object
+* `genome_type`: one of the following strings: `"draft isolate"`, `"finished isolate"`, `"fungi"`, `"mag"`, `"other Eukaryote"`, `"plant"`, `"sag"`, `"virus"`, `"plasmid"`, `"construct"`
 * `scientific_name`: the scientic name of the genome
-* `source`: one of the following strings:
-    * `"RefSeq user"`
-    * `"Ensembl user"`
-    * `"JGI"`
-    * `"Other"`
+* `source`: one of the following strings: `"RefSeq user"`, `"Ensembl user"`, `"JGI"`, `"Other"`
 * `taxon_wsname`: a string
 * `release`: a string
 * `genetic_code`: an integer
@@ -141,34 +109,22 @@ Fields that must be non-`null` are marked **bold** below.
 
 ### GFF+FASTA metagenome (`gff_metagenome`)
 
-* `**fasta_file**`: a string containing the path to a FASTA file, rooted in the directory
+* **`fasta_file`**: a string containing the path to a FASTA file, rooted in the directory
   containing the manifest
-* `**gff_file**`: a string containing the path to a GFF file, rooted in the directory
+* **`gff_file`**: a string containing the path to a GFF file, rooted in the directory
   containing the manifest
-* `**genome_name**`: the name of the genome object
-* `source`: "str, ['EBI user', 'IMG user', 'JGI user', 'BGI user', 'Other']",
-* `source`: one of the following strings:
-    * `"EBI user"`
-    * `"IMG user"`
-    * `"JGI user"`
-    * `"BGI user"`
-    * `"Other"`
+* **`genome_name`**: the name of the genome object
+* `source`: one of the following strings: `"EBI user"`, `"IMG user"`, `"JGI user"`, `"BGI user"`, `"Other"`
 * `release`: a string
 * `genetic_code`: an integer
 * `generate_missing_genes`: a string
 
 ### Interleaved FASTQ reads (`fastq_reads_interleaved`)
 
-* `**fastq_fwd_staging_file_name**`: a string containing the path to the file, rooted in the directory
+* **`fastq_fwd_staging_file_name`**: a string containing the path to the file, rooted in the directory
   containing the manifest
-* `**name**`: the name of the interleaved FASTQ reads object
-* `sequencing_tech`: one of the following strings:
-    * `"Illumina"`
-    * `"PacBio CLR"`
-    * `"PacBio CCS"`
-    * `"IonTorrent"`
-    * `"NanoPore"`
-    * `"Unknown"`
+* **`name`**: the name of the interleaved FASTQ reads object
+* `sequencing_tech`: one of the following strings: `"Illumina"`, `"PacBio CLR"`, `"PacBio CCS"`, `"IonTorrent"`, `"NanoPore"`, `"Unknown"`
 * `single_genome`: a string
 * `read_orientation_outward`: a string
 * `insert_size_std_dev`: a float indicating the standard deviation of the insert size distribution
@@ -176,18 +132,12 @@ Fields that must be non-`null` are marked **bold** below.
 
 ### Noninterleaved FASTQ reads (`fastq_reads_noninterleaved`)
 
-* `**fastq_fwd_staging_file_name**`: a string containing the path to the forward reads file, rooted
+* **`fastq_fwd_staging_file_name`**: a string containing the path to the forward reads file, rooted
   in the directory containing the manifest
-* `**fastq_rev_staging_file_name**`: a string containing the path to the reverse reads file, rooted
+* **`fastq_rev_staging_file_name`**: a string containing the path to the reverse reads file, rooted
   in the directory containing the manifest
-* `**name**`: the name of the noninterleaved FASTQ reads object
-* `sequencing_tech`: one of the following strings:
-    * `"Illumina"`
-    * `"PacBio CLR"`
-    * `"PacBio CCS"`
-    * `"IonTorrent"`
-    * `"NanoPore"`
-    * `"Unknown"`
+* **`name`**: the name of the noninterleaved FASTQ reads object
+* `sequencing_tech`: one of the following strings: `"Illumina"`, `"PacBio CLR"`, `"PacBio CCS"`, `"IonTorrent"`, `"NanoPore"`, `"Unknown"`
 * `single_genome`: a string
 * `read_orientation_outward`: a string
 * `insert_size_std_dev`: a float indicating the standard deviation of the insert size distribution
@@ -195,16 +145,10 @@ Fields that must be non-`null` are marked **bold** below.
 
 ### SRA reads (`sra_reads`)
 
-* `**sra_staging_file_name**`: a string containing the path to the SRA staging file, rooted in the
+* **`sra_staging_file_name`**: a string containing the path to the SRA staging file, rooted in the
   directory containing the manifest
-* `**name**`: the name of the SRA reads object
-* `sequencing_tech`: one of the following strings:
-    * `"Illumina"`
-    * `"PacBio CLR"`
-    * `"PacBio CCS"`
-    * `"IonTorrent"`
-    * `"NanoPore"`
-    * `"Unknown"`
+* **`name`**: the name of the SRA reads object
+* `sequencing_tech`: one of the following strings: `"Illumina"`, `"PacBio CLR"`, `"PacBio CCS"`, `"IonTorrent"`, `"NanoPore"`, `"Unknown"`
 * `single_genome`: a string
 * `read_orientation_outward`: a string
 * `insert_size_std_dev`: a float indicating the standard deviation of the insert size distribution

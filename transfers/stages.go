@@ -23,6 +23,7 @@ package transfers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"path/filepath"
@@ -61,10 +62,17 @@ type IdAndSpecification struct {
 
 // channels used by pipeline stages for communication with the dispatch
 type StageChannels struct {
-	Cancel   chan uuid.UUID              // receives cancellation requests
-	Complete chan Task                   // for reporting task completion
-	Update   chan<- TransferStatusUpdate // for providing status updates
-	Error    chan<- error                // for reporting errors
+	Cancel     chan uuid.UUID              // receives cancellation requests
+	Complete   chan Task                   // for reporting task completion
+	Update     chan<- TransferStatusUpdate // for providing status updates
+	TaskUpdate chan TaskStatusUpdate       // status updates for individual transfer tasks
+	Error      chan<- error                // for reporting errors
+}
+
+// information about a specific transfer task status update (pipelint <- provider)
+type TaskStatusUpdate struct {
+	Index  int // task index within transfer
+	Status TaskStatus
 }
 
 // creates a new Transfer with the given ID from the given Specification
@@ -201,8 +209,10 @@ func CreateNewTransfer(channels StageChannels) pipeline.Processor[IdAndSpecifica
 		return transfer, nil
 	}
 	cancel := func(idAndSpec IdAndSpecification, err error) {
-		// send all errors to our error reporting channel
-		channels.Error <- err
+		if errors.Is(err, context.Canceled) {
+		} else {
+			channels.Error <- err
+		}
 	}
 	return pipeline.NewProcessor(process, cancel)
 }
@@ -233,7 +243,13 @@ func DispatchToProvider(providers map[string]ProviderSequence, channels StageCha
 				case transferId := <-channels.Cancel:
 					if transferId == transfer.Id {
 						slog.Info(fmt.Sprintf("Transfer %s cancelled.", transferId.String()))
-						stop() // FIXME: this doesn't actually cancel e.g. Globus transfers
+						stop()
+					}
+				case taskUpdate := <-channels.TaskUpdate:
+					transfer.Tasks[taskUpdate.Index].Status = taskUpdate.Status
+					channels.Update <- TransferStatusUpdate{
+						Id:     transfer.Id,
+						Status: transfer.Status,
 					}
 				}
 			}
@@ -245,8 +261,10 @@ func DispatchToProvider(providers map[string]ProviderSequence, channels StageCha
 		return transfer, nil
 	}
 	cancel := func(transfer Transfer, err error) {
-		// send all errors to our error reporting channel
-		channels.Error <- err
+		if errors.Is(err, context.Canceled) {
+		} else {
+			channels.Error <- err
+		}
 	}
 	return pipeline.NewProcessor(process, cancel)
 }
@@ -276,34 +294,38 @@ func StageFilesAtSource(channels StageChannels) pipeline.Processor[Task, Task] {
 				descriptor := d.(map[string]any)
 				fileIds[i] = descriptor["id"].(string)
 			}
-			taskId, err := source.StageFiles(task.User.Orcid, fileIds)
+			_, err = source.StageFiles(task.User.Orcid, fileIds)
 			if err != nil {
 				return Task{}, err
 			}
-			task.Status.StagingId = uuid.NullUUID{
-				UUID:  taskId,
-				Valid: true,
+			task.Status = TaskStatus{
+				Code: TaskStatusStaging,
+				Status: endpoints.TransferStatus{
+					Code:     endpoints.TransferStatusStaging,
+					NumFiles: len(task.Descriptors),
+				},
 			}
-			task.Status.TransferStatus = endpoints.TransferStatus{
-				Code:     endpoints.TransferStatusStaging,
-				NumFiles: len(task.Descriptors),
+			channels.TaskUpdate <- TaskStatusUpdate{
+				Index:  task.Index,
+				Status: task.Status,
 			}
-		}
-
-		// wait till the files are staged
-		for !staged {
-			time.Sleep(time.Duration(config.Service.PollInterval) * time.Millisecond)
-			staged, err = sourceEndpoint.FilesStaged(task.Descriptors)
-			if err != nil {
-				return Task{}, err
+			// wait till the files are staged
+			for !staged {
+				time.Sleep(time.Duration(config.Service.PollInterval) * time.Millisecond)
+				staged, err = sourceEndpoint.FilesStaged(task.Descriptors)
+				if err != nil {
+					return Task{}, err
+				}
 			}
 		}
 
 		return task, nil
 	}
 	cancel := func(task Task, err error) {
-		// send all errors to our error reporting channel
-		channels.Error <- err
+		if errors.Is(err, context.Canceled) {
+		} else {
+			channels.Error <- err
+		}
 	}
 	return pipeline.NewProcessor(process, cancel)
 }
@@ -340,15 +362,10 @@ func TransferToDestination(channels StageChannels) pipeline.Processor[Task, Task
 			channels.Error <- err
 			return Task{}, err
 		}
-		task.Status.TransferId = uuid.NullUUID{
-			UUID:  transferId,
-			Valid: true,
-		}
-		task.Status.TransferStatus = endpoints.TransferStatus{
+		task.Status.Status = endpoints.TransferStatus{
 			Code:     endpoints.TransferStatusActive,
 			NumFiles: len(task.Descriptors),
 		}
-		task.Status.StagingId = uuid.NullUUID{}
 
 		// wait for it to finish
 		for task.Status.Code != TaskStatusSucceeded && task.Status.Code != TaskStatusFailed {
@@ -358,17 +375,16 @@ func TransferToDestination(channels StageChannels) pipeline.Processor[Task, Task
 				return Task{}, err
 			}
 			// FIXME: need to be more careful about this info vvv
-			task.Status.TransferStatus = endpoints.TransferStatus{
-				Code:     status.Code,
-				NumFiles: status.NumFiles,
-			}
+			task.Status.Status = status
 		}
 
 		return task, err
 	}
 	cancel := func(task Task, err error) {
-		// send all errors to our error reporting channel
-		channels.Error <- err
+		if errors.Is(err, context.Canceled) {
+		} else {
+			channels.Error <- err
+		}
 	}
 	return pipeline.NewProcessor(process, cancel)
 }
@@ -436,25 +452,52 @@ func GenerateManifest(channels StageChannels) pipeline.Processor[Transfer, Trans
 			},
 		}
 
-		// begin transferring the manifest
 		// FIXME: how do we determine the database's destination endpoint?
 		destinationEndpointName := config.Databases[transfer.Specification.Destination].Endpoint
 		destinationEndpoint, err := endpoints.NewEndpoint(destinationEndpointName)
 		if err != nil {
 			return Transfer{}, err
 		}
-		transfer.Status.ManifestId.UUID, err = localEndpoint.Transfer(destinationEndpoint, fileXfers)
+
+		// begin transferring the manifest
+		manifestId, err := localEndpoint.Transfer(destinationEndpoint, fileXfers)
 		if err != nil {
 			return Transfer{}, fmt.Errorf("transferring manifest file: %s", err.Error())
 		}
-
 		transfer.Status.Code = TransferStatusFinalizing
-		transfer.Status.ManifestId.Valid = true
+		channels.Update <- TransferStatusUpdate{
+			Id:     transfer.Id,
+			Status: transfer.Status,
+		}
+
+		// wait for it to finish
+		status, err := localEndpoint.Status(manifestId)
+		for status.Code != endpoints.TransferStatusSucceeded && status.Code != endpoints.TransferStatusFailed {
+			time.Sleep(time.Duration(config.Service.PollInterval) * time.Millisecond)
+			status, err = localEndpoint.Status(manifestId)
+			if err != nil {
+				return Transfer{}, err
+			}
+		}
+
+		// send a status update to dispatch
+		if status.Code == endpoints.TransferStatusSucceeded {
+			transfer.Status.Code = TransferStatusSucceeded
+		} else {
+			transfer.Status.Code = TransferStatusFailed
+		}
+		channels.Update <- TransferStatusUpdate{
+			Id:     transfer.Id,
+			Status: transfer.Status,
+		}
+
 		return transfer, nil
 	}
 	cancel := func(transfer Transfer, err error) {
-		// send all errors to our error reporting channel
-		channels.Error <- err
+		if errors.Is(err, context.Canceled) {
+		} else {
+			channels.Error <- err
+		}
 	}
 	return pipeline.NewProcessor(process, cancel)
 }

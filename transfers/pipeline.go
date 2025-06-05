@@ -97,11 +97,13 @@ func CreatePipelineWithProviders(providerFuncs map[string]func(channels StageCha
 	errorReporting := make(chan error, 32)
 	taskComplete := make(chan Task, 32)
 	statusUpdate := make(chan TransferStatusUpdate, 32)
+	taskStatusUpdate := make(chan TaskStatusUpdate, 32)
 	stageChannels := StageChannels{
-		Cancel:   cancel,
-		Complete: taskComplete,
-		Update:   statusUpdate,
-		Error:    errorReporting,
+		Cancel:     cancel,
+		Complete:   taskComplete,
+		Update:     statusUpdate,
+		TaskUpdate: taskStatusUpdate,
+		Error:      errorReporting,
 	}
 	providers := make(map[string]ProviderSequence)
 	for name, f := range providerFuncs {

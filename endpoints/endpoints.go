@@ -51,16 +51,11 @@ const (
 
 // this type conveys various information about a file transfer's status
 type TransferStatus struct {
-	// status code (see above)
-	Code TransferStatusCode
-	// message describing a failure status
-	Message string
-	// total number of files being transferred
-	NumFiles int
-	// number of files that have been transferred
-	NumFilesTransferred int
-	// number of files that are skipped for whatever reason
-	NumFilesSkipped int
+	Code                TransferStatusCode // status code (see above)
+	Message             string             // message describing a failure status
+	NumFiles            int                // total number of files being transferred
+	NumFilesTransferred int                // number of files that have been transferred
+	NumFilesSkipped     int                // number of files that are skipped for whatever reason
 }
 
 // This type represents an endpoint for transferring files.

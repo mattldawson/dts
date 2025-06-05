@@ -81,6 +81,14 @@ type Transfer struct {
 	Tasks             []Task         // list of constituent tasks
 }
 
+type TransferStatus struct {
+	Code                TransferStatusCode // status code (see below)
+	Message             string             // message describing a failure status
+	NumFiles            int                // total number of files being transferred
+	NumFilesTransferred int                // number of files that have been transferred
+	NumFilesSkipped     int                // number of files that are skipped for whatever reason
+}
+
 type TransferStatusCode int
 
 const (
@@ -93,11 +101,6 @@ const (
 	TransferStatusSucceeded
 	TransferStatusFailed
 )
-
-type TransferStatus struct {
-	Code       TransferStatusCode
-	NumFiles   int
-}
 
 //------
 // Task
@@ -132,11 +135,8 @@ const (
 )
 
 type TaskStatus struct {
-	Code           TaskStatusCode
-	StagingId      uuid.NullUUID            // staging UUID (if any)
-	StagingStatus  databases.StagingStatus  // staging status
-	TransferId     uuid.NullUUID            // file transfer UUID (if any)
-	TransferStatus endpoints.TransferStatus // status of file transfer operation
+	Code   TaskStatusCode
+	Status endpoints.TransferStatus // status of file transfer operation
 }
 
 // singleton pipeline instance

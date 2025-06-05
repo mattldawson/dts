@@ -31,6 +31,8 @@ nav:
       - 'frictionless package': 'developer/frictionless.md'
       - 'services package': 'developer/services.md'
       - 'tasks package': 'developer/tasks.md'
+    - 'Special Topics':
+      - 'KBase Narrative import process': 'developer/kbase_import.md'
 
 edit_uri: ""
 

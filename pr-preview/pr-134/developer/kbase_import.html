@@ -1462,43 +1462,19 @@ current implementation of the KBase staging service.</p>
 <p>Fields that must be non-<code>null</code> are marked <strong>bold</strong> below.</p>
 <h4 id="assembly-assembly">Assembly (<code>assembly</code>)</h4>
 <ul>
-<li><code>**staging_file_subdir_path**</code>: a string containing the path to the file, rooted in the directory
+<li><strong><code>staging_file_subdir_path</code></strong>: a string containing the path to the file, rooted in the directory
   containing the manifest</li>
-<li><code>**assembly_name**</code>: the name of the assembly object</li>
-<li><code>type</code>: one of the following strings:<ul>
-<li><code>"draft isolate"</code></li>
-<li><code>"finished isolate"</code></li>
-<li><code>"mag"</code></li>
-<li><code>"sag"</code></li>
-<li><code>"virus"</code></li>
-<li><code>"plasmid"</code></li>
-<li><code>"construct"</code></li>
-<li><code>"metagenome"</code></li>
-</ul>
-</li>
+<li><strong><code>assembly_name</code></strong>: the name of the assembly object</li>
+<li><code>type</code>: one of the following strings: <code>"draft isolate"</code>, <code>"finished isolate"</code>, <code>"mag"</code>, <code>"sag"</code>, <code>"virus"</code>, <code>"plasmid"</code>, <code>"construct"</code>, <code>"metagenome"</code></li>
 <li><code>min_contig_length</code>: an integer containing the minimum length of a contig within the assembly</li>
 </ul>
 <h3 id="genbank-genome-genback_genome">Genbank genome (<code>genback_genome</code>)</h3>
 <ul>
-<li><code>**staging_file_subdir_path**</code>: a string containing the path to the file, rooted in the directory
+<li><strong><code>staging_file_subdir_path</code></strong>: a string containing the path to the file, rooted in the directory
   containing the manifest</li>
-<li><code>**genome_name**</code>: the name of the genome object</li>
-<li><code>genome_type</code>: one of the following strings:<ul>
-<li><code>"draft isolate"</code></li>
-<li><code>"finished isolate"</code></li>
-<li><code>"mag"</code></li>
-<li><code>"sag"</code></li>
-<li><code>"virus"</code></li>
-<li><code>"plasmid"</code></li>
-<li><code>"construct"</code></li>
-</ul>
-</li>
-<li><code>source</code>: one of the following strings:<ul>
-<li><code>"RefSeq user"</code></li>
-<li><code>"Ensembl user"</code></li>
-<li><code>"Other"</code></li>
-</ul>
-</li>
+<li><strong><code>genome_name</code></strong>: the name of the genome object</li>
+<li><code>genome_type</code>: one of the following strings: <code>"draft isolate"</code>, <code>"finished isolate"</code>, <code>"mag"</code>, <code>"sag"</code>, <code>"virus"</code>, <code>"plasmid"</code>, <code>"construct"</code></li>
+<li><code>source</code>: one of the following strings: <code>"RefSeq user"</code>, <code>"Ensembl user"</code>, <code>"Other"</code></li>
 <li><code>release</code>: a string</li>
 <li><code>genetic_code</code>: an integer</li>
 <li><code>scientific_name</code>: the scientific name of the genome</li>
@@ -1507,32 +1483,14 @@ current implementation of the KBase staging service.</p>
 </ul>
 <h3 id="gfffasta-genome-gff_genome">GFF+FASTA genome (<code>gff_genome</code>)</h3>
 <ul>
-<li><code>**fasta_file**</code>: a string containing the path to a FASTA file, rooted in the directory
+<li><strong><code>fasta_file</code></strong>: a string containing the path to a FASTA file, rooted in the directory
   containing the manifest</li>
-<li><code>**gff_file**</code>: a string containing the path to a GFF file, rooted in the directory
+<li><strong><code>gff_file</code></strong>: a string containing the path to a GFF file, rooted in the directory
   containing the manifest</li>
-<li><code>**genome_name**</code>: the name of the genome object</li>
-<li><code>genome_type</code>: one of the following strings:<ul>
-<li><code>"draft isolate"</code></li>
-<li><code>"finished isolate"</code></li>
-<li><code>"fungi"</code></li>
-<li><code>"mag"</code></li>
-<li><code>"other Eukaryote"</code></li>
-<li><code>"plant"</code></li>
-<li><code>"sag"</code></li>
-<li><code>"virus"</code></li>
-<li><code>"plasmid"</code></li>
-<li><code>"construct"</code></li>
-</ul>
-</li>
+<li><strong><code>genome_name</code></strong>: the name of the genome object</li>
+<li><code>genome_type</code>: one of the following strings: <code>"draft isolate"</code>, <code>"finished isolate"</code>, <code>"fungi"</code>, <code>"mag"</code>, <code>"other Eukaryote"</code>, <code>"plant"</code>, <code>"sag"</code>, <code>"virus"</code>, <code>"plasmid"</code>, <code>"construct"</code></li>
 <li><code>scientific_name</code>: the scientic name of the genome</li>
-<li><code>source</code>: one of the following strings:<ul>
-<li><code>"RefSeq user"</code></li>
-<li><code>"Ensembl user"</code></li>
-<li><code>"JGI"</code></li>
-<li><code>"Other"</code></li>
-</ul>
-</li>
+<li><code>source</code>: one of the following strings: <code>"RefSeq user"</code>, <code>"Ensembl user"</code>, <code>"JGI"</code>, <code>"Other"</code></li>
 <li><code>taxon_wsname</code>: a string</li>
 <li><code>release</code>: a string</li>
 <li><code>genetic_code</code>: an integer</li>
@@ -1540,38 +1498,22 @@ current implementation of the KBase staging service.</p>
 </ul>
 <h3 id="gfffasta-metagenome-gff_metagenome">GFF+FASTA metagenome (<code>gff_metagenome</code>)</h3>
 <ul>
-<li><code>**fasta_file**</code>: a string containing the path to a FASTA file, rooted in the directory
+<li><strong><code>fasta_file</code></strong>: a string containing the path to a FASTA file, rooted in the directory
   containing the manifest</li>
-<li><code>**gff_file**</code>: a string containing the path to a GFF file, rooted in the directory
+<li><strong><code>gff_file</code></strong>: a string containing the path to a GFF file, rooted in the directory
   containing the manifest</li>
-<li><code>**genome_name**</code>: the name of the genome object</li>
-<li><code>source</code>: "str, ['EBI user', 'IMG user', 'JGI user', 'BGI user', 'Other']",</li>
-<li><code>source</code>: one of the following strings:<ul>
-<li><code>"EBI user"</code></li>
-<li><code>"IMG user"</code></li>
-<li><code>"JGI user"</code></li>
-<li><code>"BGI user"</code></li>
-<li><code>"Other"</code></li>
-</ul>
-</li>
+<li><strong><code>genome_name</code></strong>: the name of the genome object</li>
+<li><code>source</code>: one of the following strings: <code>"EBI user"</code>, <code>"IMG user"</code>, <code>"JGI user"</code>, <code>"BGI user"</code>, <code>"Other"</code></li>
 <li><code>release</code>: a string</li>
 <li><code>genetic_code</code>: an integer</li>
 <li><code>generate_missing_genes</code>: a string</li>
 </ul>
 <h3 id="interleaved-fastq-reads-fastq_reads_interleaved">Interleaved FASTQ reads (<code>fastq_reads_interleaved</code>)</h3>
 <ul>
-<li><code>**fastq_fwd_staging_file_name**</code>: a string containing the path to the file, rooted in the directory
+<li><strong><code>fastq_fwd_staging_file_name</code></strong>: a string containing the path to the file, rooted in the directory
   containing the manifest</li>
-<li><code>**name**</code>: the name of the interleaved FASTQ reads object</li>
-<li><code>sequencing_tech</code>: one of the following strings:<ul>
-<li><code>"Illumina"</code></li>
-<li><code>"PacBio CLR"</code></li>
-<li><code>"PacBio CCS"</code></li>
-<li><code>"IonTorrent"</code></li>
-<li><code>"NanoPore"</code></li>
-<li><code>"Unknown"</code></li>
-</ul>
-</li>
+<li><strong><code>name</code></strong>: the name of the interleaved FASTQ reads object</li>
+<li><code>sequencing_tech</code>: one of the following strings: <code>"Illumina"</code>, <code>"PacBio CLR"</code>, <code>"PacBio CCS"</code>, <code>"IonTorrent"</code>, <code>"NanoPore"</code>, <code>"Unknown"</code></li>
 <li><code>single_genome</code>: a string</li>
 <li><code>read_orientation_outward</code>: a string</li>
 <li><code>insert_size_std_dev</code>: a float indicating the standard deviation of the insert size distribution</li>
@@ -1579,20 +1521,12 @@ current implementation of the KBase staging service.</p>
 </ul>
 <h3 id="noninterleaved-fastq-reads-fastq_reads_noninterleaved">Noninterleaved FASTQ reads (<code>fastq_reads_noninterleaved</code>)</h3>
 <ul>
-<li><code>**fastq_fwd_staging_file_name**</code>: a string containing the path to the forward reads file, rooted
+<li><strong><code>fastq_fwd_staging_file_name</code></strong>: a string containing the path to the forward reads file, rooted
   in the directory containing the manifest</li>
-<li><code>**fastq_rev_staging_file_name**</code>: a string containing the path to the reverse reads file, rooted
+<li><strong><code>fastq_rev_staging_file_name</code></strong>: a string containing the path to the reverse reads file, rooted
   in the directory containing the manifest</li>
-<li><code>**name**</code>: the name of the noninterleaved FASTQ reads object</li>
-<li><code>sequencing_tech</code>: one of the following strings:<ul>
-<li><code>"Illumina"</code></li>
-<li><code>"PacBio CLR"</code></li>
-<li><code>"PacBio CCS"</code></li>
-<li><code>"IonTorrent"</code></li>
-<li><code>"NanoPore"</code></li>
-<li><code>"Unknown"</code></li>
-</ul>
-</li>
+<li><strong><code>name</code></strong>: the name of the noninterleaved FASTQ reads object</li>
+<li><code>sequencing_tech</code>: one of the following strings: <code>"Illumina"</code>, <code>"PacBio CLR"</code>, <code>"PacBio CCS"</code>, <code>"IonTorrent"</code>, <code>"NanoPore"</code>, <code>"Unknown"</code></li>
 <li><code>single_genome</code>: a string</li>
 <li><code>read_orientation_outward</code>: a string</li>
 <li><code>insert_size_std_dev</code>: a float indicating the standard deviation of the insert size distribution</li>
@@ -1600,18 +1534,10 @@ current implementation of the KBase staging service.</p>
 </ul>
 <h3 id="sra-reads-sra_reads">SRA reads (<code>sra_reads</code>)</h3>
 <ul>
-<li><code>**sra_staging_file_name**</code>: a string containing the path to the SRA staging file, rooted in the
+<li><strong><code>sra_staging_file_name</code></strong>: a string containing the path to the SRA staging file, rooted in the
   directory containing the manifest</li>
-<li><code>**name**</code>: the name of the SRA reads object</li>
-<li><code>sequencing_tech</code>: one of the following strings:<ul>
-<li><code>"Illumina"</code></li>
-<li><code>"PacBio CLR"</code></li>
-<li><code>"PacBio CCS"</code></li>
-<li><code>"IonTorrent"</code></li>
-<li><code>"NanoPore"</code></li>
-<li><code>"Unknown"</code></li>
-</ul>
-</li>
+<li><strong><code>name</code></strong>: the name of the SRA reads object</li>
+<li><code>sequencing_tech</code>: one of the following strings: <code>"Illumina"</code>, <code>"PacBio CLR"</code>, <code>"PacBio CCS"</code>, <code>"IonTorrent"</code>, <code>"NanoPore"</code>, <code>"Unknown"</code></li>
 <li><code>single_genome</code>: a string</li>
 <li><code>read_orientation_outward</code>: a string</li>
 <li><code>insert_size_std_dev</code>: a float indicating the standard deviation of the insert size distribution</li>

@@ -69,7 +69,7 @@ type StageChannels struct {
 	Error      chan<- error                // for reporting errors
 }
 
-// information about a specific transfer task status update (pipelint <- provider)
+// information about a specific transfer task status update (pipeline <- provider)
 type TaskStatusUpdate struct {
 	Index  int // task index within transfer
 	Status TaskStatus

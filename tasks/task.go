@@ -263,7 +263,10 @@ func (task *transferTask) Update() error {
 			}
 
 			// generate a manifest for the transfer
-			manifest := task.createManifest()
+			manifest, err := task.createManifest()
+			if err != nil {
+				return fmt.Errorf("generating manifest file content: %s", err.Error())
+			}
 
 			// write the manifest to disk and begin transferring it to the
 			// destination endpoint
@@ -331,7 +334,7 @@ func (task transferTask) Completed() bool {
 }
 
 // creates a DataPackage that serves as the transfer manifest
-func (task *transferTask) createManifest() *datapackage.Package {
+func (task *transferTask) createManifest() (*datapackage.Package, error) {
 	// gather all file and data descriptors
 	descriptors := make([]any, 0)
 	for _, subtask := range task.Subtasks {
@@ -352,6 +355,17 @@ func (task *transferTask) createManifest() *datapackage.Package {
 		taskUser["email"] = task.User.Email
 	}
 
+	// NOTE: we embed the local username for the destination database in this record
+	// NOTE: in case it's useful (e.g. for the KBase staging service)
+	destination, err := databases.NewDatabase(task.Destination)
+	if err != nil {
+		return nil, err
+	}
+	username, err := destination.LocalUser(task.User.Orcid)
+	if err != nil {
+		return nil, err
+	}
+
 	descriptor := map[string]any{
 		"name":      "manifest",
 		"resources": descriptors,
@@ -363,6 +377,7 @@ func (task *transferTask) createManifest() *datapackage.Package {
 		},
 		"description":  task.Description,
 		"instructions": task.Instructions,
+		"username":     username,
 	}
 
 	manifest, err := datapackage.New(descriptor, ".")
@@ -370,7 +385,7 @@ func (task *transferTask) createManifest() *datapackage.Package {
 		slog.Error(err.Error())
 	}
 
-	return manifest
+	return manifest, nil
 }
 
 // checks whether the file manifest for a task has been generated and, if so,

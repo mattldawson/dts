@@ -385,7 +385,7 @@ func (task *transferTask) createManifest() (*datapackage.Package, error) {
 		slog.Error(err.Error())
 	}
 
-	return manifest
+	return manifest, nil
 }
 
 // checks whether the file manifest for a task has been generated and, if so,

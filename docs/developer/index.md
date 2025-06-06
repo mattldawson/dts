@@ -30,3 +30,7 @@ the Data Transfer Service.
   provided by the DTS
 * [tasks](tasks.md): implements the "heart" of the DTS, which creates and
   manages transfer tasks through their entire lifecycle
+
+## Special Topics
+
+* [KBase Narrative import process](kbase_import.md)

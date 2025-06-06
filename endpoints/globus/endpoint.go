@@ -394,7 +394,25 @@ func (ep *Endpoint) authenticate() error {
 		return err
 	}
 	if resp.StatusCode != 200 {
-		return fmt.Errorf("Couldn't authenticate via Globus Auth API (%d)", resp.StatusCode)
+		// fish specifics out of the response
+		type AuthError struct {
+			Error       string `json:"error"`
+			Description string `json:"error_description"`
+			URI         string `json:"error_uri"`
+		}
+		body, err := io.ReadAll(resp.Body)
+		var authError AuthError
+		err = json.Unmarshal(body, &authError)
+		if err != nil {
+			// report the authentication error without details
+			return fmt.Errorf("Couldn't authenticate via Globus Auth API (%d)", resp.StatusCode)
+		}
+		if len(authError.Description) > 0 {
+			return fmt.Errorf("Couldn't authenticate via Globus Auth API: %s (%d)",
+				authError.Error, resp.StatusCode)
+		}
+		return fmt.Errorf("Couldn't authenticate via Globus Auth API: %s; %s (%d)",
+			authError.Error, authError.Description, resp.StatusCode)
 	}
 
 	// read and unmarshal the response

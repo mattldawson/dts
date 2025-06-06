@@ -435,6 +435,17 @@ func GenerateManifest(channels StageChannels) pipeline.Processor[Transfer, Trans
 			transferUser["email"] = transfer.Specification.User.Email
 		}
 
+		// NOTE: we embed the local username for the destination database in this record
+		// NOTE: in case it's useful (e.g. for the KBase staging service)
+		destination, err := databases.NewDatabase(transfer.Specification.Destination)
+		if err != nil {
+			return Transfer{}, err
+		}
+		username, err := destination.LocalUser(transfer.Specification.User.Orcid)
+		if err != nil {
+			return Transfer{}, err
+		}
+
 		descriptor := map[string]any{
 			"name":      "manifest",
 			"resources": descriptors,
@@ -446,6 +457,7 @@ func GenerateManifest(channels StageChannels) pipeline.Processor[Transfer, Trans
 			},
 			"description":  transfer.Specification.Description,
 			"instructions": transfer.Specification.Instructions,
+			"username":     username,
 		}
 
 		manifest, err := datapackage.New(descriptor, ".")

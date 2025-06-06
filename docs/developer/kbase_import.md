@@ -79,7 +79,7 @@ Fields that must be non-`null` are marked **bold** below.
 * `type`: one of the following strings: `"draft isolate"`, `"finished isolate"`, `"mag"`, `"sag"`, `"virus"`, `"plasmid"`, `"construct"`, `"metagenome"`
 * `min_contig_length`: an integer containing the minimum length of a contig within the assembly
 
-### Genbank genome (`genback_genome`)
+### Genbank genome (`genbank_genome`)
 
 * **`staging_file_subdir_path`**: a string containing the path to the file, rooted in the directory
   containing the manifest

@@ -9,10 +9,8 @@
       
       
       
-        <link rel="prev" href="installation.html">
+        <link rel="prev" href="tasks.html">
       
-      
-        <link rel="next" href="config.html">
       
       
       <link rel="icon" href="../assets/images/favicon.png">
@@ -20,7 +18,7 @@
     
     
       
-        <title>Deploying the DTS via Docker - DTS: A Data Transfer System</title>
+        <title>KBase Narrative import process - DTS: A Data Transfer System</title>
       
     
     
@@ -72,7 +70,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#deploying-the-dts-via-docker" class="md-skip">
+        <a href="#kbase-narrative-import-process" class="md-skip">
           Skip to content
         </a>
       
@@ -108,7 +106,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Deploying the DTS via Docker
+              KBase Narrative import process
             
           </span>
         </div>
@@ -273,8 +271,6 @@
       
   
   
-    
-  
   
   
     
@@ -287,11 +283,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
         
           
           <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
@@ -307,7 +303,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_2">
             <span class="md-nav__icon md-icon"></span>
             Administrator Guide
@@ -321,7 +317,7 @@
   
   
     <li class="md-nav__item">
-      <a href="index.html" class="md-nav__link">
+      <a href="../admin/index.html" class="md-nav__link">
         
   
   
@@ -344,7 +340,7 @@
   
   
     <li class="md-nav__item">
-      <a href="installation.html" class="md-nav__link">
+      <a href="../admin/installation.html" class="md-nav__link">
         
   
   
@@ -364,32 +360,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    Deploying the DTS via Docker
-    
-  </span>
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="deployment.html" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../admin/deployment.html" class="md-nav__link">
         
   
   
@@ -400,68 +374,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#deploying-to-nerscs-spin-environment" class="md-nav__link">
-    <span class="md-ellipsis">
-      Deploying to NERSC's Spin Environment
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Deploying to NERSC&#39;s Spin Environment">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#1-update-and-push-a-new-docker-image-to-spin" class="md-nav__link">
-    <span class="md-ellipsis">
-      1. Update and Push a New Docker Image to Spin
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#2-edit-the-deployment-in-rancher-2-and-restart-the-service" class="md-nav__link">
-    <span class="md-ellipsis">
-      2. Edit the Deployment in Rancher 2 and Restart the Service
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#maintaining-the-dts-data-directory" class="md-nav__link">
-    <span class="md-ellipsis">
-      Maintaining the DTS Data Directory
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -474,7 +386,7 @@
   
   
     <li class="md-nav__item">
-      <a href="config.html" class="md-nav__link">
+      <a href="../admin/config.html" class="md-nav__link">
         
   
   
@@ -497,7 +409,7 @@
   
   
     <li class="md-nav__item">
-      <a href="globus.html" class="md-nav__link">
+      <a href="../admin/globus.html" class="md-nav__link">
         
   
   
@@ -758,8 +670,10 @@
       
   
   
+    
   
   
+  
     
     
     
@@ -770,11 +684,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
         
           
           <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
@@ -790,7 +704,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_4">
             <span class="md-nav__icon md-icon"></span>
             Developer Guide
@@ -804,7 +718,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../developer/index.html" class="md-nav__link">
+      <a href="index.html" class="md-nav__link">
         
   
   
@@ -867,7 +781,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../developer/adrs/index.html" class="md-nav__link">
+      <a href="adrs/index.html" class="md-nav__link">
         
   
   
@@ -890,7 +804,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../developer/adrs/transmit-metadata.html" class="md-nav__link">
+      <a href="adrs/transmit-metadata.html" class="md-nav__link">
         
   
   
@@ -961,7 +875,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../developer/auth.html" class="md-nav__link">
+      <a href="auth.html" class="md-nav__link">
         
   
   
@@ -984,7 +898,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../developer/config.html" class="md-nav__link">
+      <a href="config.html" class="md-nav__link">
         
   
   
@@ -1007,7 +921,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../developer/credit.html" class="md-nav__link">
+      <a href="credit.html" class="md-nav__link">
         
   
   
@@ -1030,7 +944,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../developer/databases.html" class="md-nav__link">
+      <a href="databases.html" class="md-nav__link">
         
   
   
@@ -1053,7 +967,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../developer/endpoints.html" class="md-nav__link">
+      <a href="endpoints.html" class="md-nav__link">
         
   
   
@@ -1076,7 +990,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../developer/frictionless.html" class="md-nav__link">
+      <a href="frictionless.html" class="md-nav__link">
         
   
   
@@ -1099,7 +1013,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../developer/services.html" class="md-nav__link">
+      <a href="services.html" class="md-nav__link">
         
   
   
@@ -1122,7 +1036,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../developer/tasks.html" class="md-nav__link">
+      <a href="tasks.html" class="md-nav__link">
         
   
   
@@ -1150,6 +1064,8 @@
                 
   
   
+    
+  
   
   
     
@@ -1159,11 +1075,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_4" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_4" checked>
         
           
           <label class="md-nav__link" for="__nav_4_4" id="__nav_4_4_label" tabindex="0">
@@ -1179,7 +1095,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_4_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_4_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_4_4">
             <span class="md-nav__icon md-icon"></span>
             Special Topics
@@ -1190,10 +1106,32 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../developer/kbase_import.html" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    KBase Narrative import process
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="kbase_import.html" class="md-nav__link md-nav__link--active">
         
   
   
@@ -1204,6 +1142,113 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#json-object-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      JSON Object Structure
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#supported-kbase-data-types" class="md-nav__link">
+    <span class="md-ellipsis">
+      Supported KBase Data Types
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Supported KBase Data Types">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#assembly-assembly" class="md-nav__link">
+    <span class="md-ellipsis">
+      Assembly (assembly)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#genbank-genome-genbank_genome" class="md-nav__link">
+    <span class="md-ellipsis">
+      Genbank genome (genbank_genome)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gfffasta-genome-gff_genome" class="md-nav__link">
+    <span class="md-ellipsis">
+      GFF+FASTA genome (gff_genome)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gfffasta-metagenome-gff_metagenome" class="md-nav__link">
+    <span class="md-ellipsis">
+      GFF+FASTA metagenome (gff_metagenome)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#interleaved-fastq-reads-fastq_reads_interleaved" class="md-nav__link">
+    <span class="md-ellipsis">
+      Interleaved FASTQ reads (fastq_reads_interleaved)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#noninterleaved-fastq-reads-fastq_reads_noninterleaved" class="md-nav__link">
+    <span class="md-ellipsis">
+      Noninterleaved FASTQ reads (fastq_reads_noninterleaved)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sra-reads-sra_reads" class="md-nav__link">
+    <span class="md-ellipsis">
+      SRA reads (sra_reads)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1251,28 +1296,82 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#deploying-to-nerscs-spin-environment" class="md-nav__link">
+  <a href="#json-object-structure" class="md-nav__link">
     <span class="md-ellipsis">
-      Deploying to NERSC's Spin Environment
+      JSON Object Structure
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Deploying to NERSC&#39;s Spin Environment">
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#supported-kbase-data-types" class="md-nav__link">
+    <span class="md-ellipsis">
+      Supported KBase Data Types
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Supported KBase Data Types">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#1-update-and-push-a-new-docker-image-to-spin" class="md-nav__link">
+  <a href="#assembly-assembly" class="md-nav__link">
     <span class="md-ellipsis">
-      1. Update and Push a New Docker Image to Spin
+      Assembly (assembly)
     </span>
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#2-edit-the-deployment-in-rancher-2-and-restart-the-service" class="md-nav__link">
+  <a href="#genbank-genome-genbank_genome" class="md-nav__link">
     <span class="md-ellipsis">
-      2. Edit the Deployment in Rancher 2 and Restart the Service
+      Genbank genome (genbank_genome)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gfffasta-genome-gff_genome" class="md-nav__link">
+    <span class="md-ellipsis">
+      GFF+FASTA genome (gff_genome)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gfffasta-metagenome-gff_metagenome" class="md-nav__link">
+    <span class="md-ellipsis">
+      GFF+FASTA metagenome (gff_metagenome)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#interleaved-fastq-reads-fastq_reads_interleaved" class="md-nav__link">
+    <span class="md-ellipsis">
+      Interleaved FASTQ reads (fastq_reads_interleaved)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#noninterleaved-fastq-reads-fastq_reads_noninterleaved" class="md-nav__link">
+    <span class="md-ellipsis">
+      Noninterleaved FASTQ reads (fastq_reads_noninterleaved)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sra-reads-sra_reads" class="md-nav__link">
+    <span class="md-ellipsis">
+      SRA reads (sra_reads)
     </span>
   </a>
   
@@ -1280,15 +1379,6 @@
         
       </ul>
     </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#maintaining-the-dts-data-directory" class="md-nav__link">
-    <span class="md-ellipsis">
-      Maintaining the DTS Data Directory
-    </span>
-  </a>
   
 </li>
       
@@ -1308,112 +1398,150 @@
 
 
 
-<h1 id="deploying-the-dts-via-docker">Deploying the DTS via Docker</h1>
-<p>You can use the <code>Dockerfile</code> and <code>dts.yaml</code> files in the <code>deployment</code> folder to
-build a Docker image for the Data Transfer System (DTS). The Docker image
-contains two files:</p>
-<ol>
-<li><code>/bin/dts</code>: the statically-linked <code>dts</code> executable</li>
-<li><code>/etc/dts.yaml</code>: a <a href="config.html">DTS configuration file</a> with embedded
-   environment variables that control parameters of interest</li>
-</ol>
-<p>This image can be deployed in any Docker-friendly environment. The use of
-environment variables in the configuration file allows you to configure the
-DTS without regenerating the image.</p>
-<h2 id="deploying-to-nerscs-spin-environment">Deploying to NERSC's Spin Environment</h2>
-<p>The "primary instance" of the DTS is hosted in NERSC's <a href="https://www.nersc.gov/systems/spin/">Spin</a>
-environment under <a href="https://rancher2.spin.nersc.gov/login">Rancher 2</a>.
-It runs in the <code>Production</code> environment under the <code>kbase</code> organization.
-You can read about Spin in NERSC's documentation, and Rancher 2
-<a href="https://rancher.com/docs/rancher/v2.x/en/">here</a>. The documentation
-isn't great, but fortunately there's not a lot to know--most of the
-materials you'll need are right here in the <code>deployment</code> folder.</p>
-<p>Deploying the DTS to Spin involves</p>
-<ol>
-<li>updating and pushing a new Docker image with any code changes and
-   documentation updates</li>
-<li>editing the <code>dts</code> Spin deployment via NERSC's
-   <a href="https://rancher2.spin.nersc.gov/login">Rancher 2</a> console</li>
-</ol>
-<p>Each of these steps are fairly simple.</p>
-<p>Before you perform an update, take some time to familiarize yourself
-with the Rancher 2 console and the <code>dts</code> production deployment.
-The most important details are:</p>
+<h1 id="kbase-narrative-import-process">KBase Narrative Import Process</h1>
+<p><a href="https://kbase.us">KBase</a> offers useful tools for analyzing genomics data within <a href="https://docs.kbase.us/getting-started/quick-start">Narratives</a>.
+By adding some metadata to your DTS transfer request, you can easily import your data into a KBase
+narrative.</p>
+<p>Here we describe a schema for the <code>instructions</code> field of a <a href="https://dts.kbase.us/docs#/operations/post-api-v1-transfers">DTS transfer POST request</a>.
+This field is embedded in the <code>manifest.json</code> file written to the root of the destination folder for
+a payload, and holds a JSON object that tells KBase's staging service how to import the contents of
+the payload into a KBase narrative. This schema was originally proposed <a href="https://github.com/kbase/dts/issues/79">in a GitHub issue</a>.</p>
+<p>What we describe here is relevant only to KBase Narrative imports--the structure of the <code>instructions</code>
+field is specific to the destination of a transfer to allow the DTS to interact reasonably with
+specific systems and organizations.</p>
+<h2 id="json-object-structure">JSON Object Structure</h2>
+<p>The <code>instructions</code> field included in the transfer POST request has the following fields:</p>
 <ul>
-<li>The service and its supporting executables and configuration data are
-  supplied by its Docker image</li>
-<li>Configurable settings for the service are stored in environment variables
-  that can be set in the Rancher 2 console</li>
-<li>The DTS data directory (used for keeping track of ongoing tasks and for
-  generating transfer manifests) resides on the NERSC Community File System
-  (CFS) under <code>/global/cfs/cdirs/kbase/dts/</code>. This volume is visible to the
-  service as <code>/data</code>, so the <code>DATA_DIRECTORY</code> environment variable should be
-  set to <code>/data</code>.</li>
-<li>The DTS manifest directory (used for writing transfer manifest files that
-  get transferred to destination endpoints) also resides on the NERSC
-  Community File System (CFS), but under <code>/global/cfs/cdirs/kbase/gsharing/dts/manifests</code>
-  so that it is accessible via a Globus endpoint. This volume is visible to
-  the service as <code>/manifests</code>, so the <code>MANIFEST_DIRECTORY</code> environment variable
-  should be set to <code>/manifests</code>. <strong>NOTE: the directory must be the same when
-  viewed by the service and the Globus Collection! If there is a mismatch,
-  the service will not be able to write the manifest OR Globus will not be
-  able to transfer it.</strong></li>
+<li><code>protocol</code>: contains the string <code>"KBase narrative import"</code></li>
+<li><code>objects</code>: contains an object interpreted as a dictionary whose <strong>keys are supported KBase data
+  types</strong> and whose <strong>values are lists of JSON objects</strong>, each with fields specific to that data
+  type. Each data types is described in the following section.</li>
 </ul>
-<p>Let's walk through the process of updating and redeploying the DTS in Spin.</p>
-<h3 id="1-update-and-push-a-new-docker-image-to-spin">1. Update and Push a New Docker Image to Spin</h3>
-<p>From within a clone of the <a href="https://github.com/kbase/dts">DTS GitHub repo</a>, make
-sure the repo is up to date by typing <code>git pull</code> in the <code>main</code> branch.</p>
-<p>Then, sitting in the top-level <code>dts</code> source folder of your <code>dts</code>, execute
-the <code>deploy-to-spin.sh</code> script, passing as arguments</p>
-<ol>
-<li>the name of a tag to identify the new Docker image</li>
-<li>the name of the NERSC user whose permissions are used for CFS</li>
-<li>the UID of the NERSC user</li>
-<li>the group used to determine the user's group permissions</li>
-<li>the GID of the above group</li>
-</ol>
-<p>For example,</p>
-<div class="highlight"><pre><span></span><code>./deployment/deploy-to-spin.sh v1.1 johnson 52710 kbase 54643
+<p>Here's a brief example of such a JSON object that annotates two Genbank genome files:</p>
+<div class="highlight"><pre><span></span><code>{
+    &quot;instructions&quot;: {
+        &quot;protocol&quot;: &quot;KBase narrative import&quot;,
+        &quot;objects&quot;: {
+            &quot;genbank_genome&quot;: [
+                {
+                    &quot;staging_file_subdir_path&quot;: &quot;path/to/some_genome.gbk&quot;,
+                    &quot;genome_name&quot;: &quot;some_genome&quot;
+                    &quot;genome_type&quot;: null,
+                    &quot;source&quot;: null,
+                    &quot;release&quot;: null,
+                    &quot;genetic_code&quot;: null,
+                    &quot;scientific_name&quot;: null,
+                    &quot;generate_ids_if_needed&quot;: null,
+                    &quot;generate_missing_genes&quot;: null
+                }, 
+                {
+                    &quot;staging_file_subdir_path&quot;: &quot;path/to/some_other_genome.gbk&quot;,
+                    &quot;genome_name&quot;: &quot;some_other_genome&quot;
+                    &quot;genome_type&quot;: null,
+                    &quot;source&quot;: null,
+                    &quot;release&quot;: null,
+                    &quot;genetic_code&quot;: null,
+                    &quot;scientific_name&quot;: null,
+                    &quot;generate_ids_if_needed&quot;: null,
+                    &quot;generate_missing_genes&quot;: null
+                }
+            ]
+        }
+    }
+}
 </code></pre></div>
-<p>builds a new DTS Docker image for to be run as the user <code>johnson</code>,
-with the tag <code>v1.1</code>. The script pushes the Docker image to <a href="https://registry.nersc.gov">Harbor, the
-NERSC Docker registry</a>. Make sure the tag
-indicates the current version of <code>dts</code> (e.g. <code>v1.1</code>) for clarity.</p>
-<p>After building the Docker image and tagging it, the script prompts you for the
-NERSC password for the user you specified. This allows it to push the image to
-Harbor so it can be accessed via the Rancher 2 console.</p>
-<h3 id="2-edit-the-deployment-in-rancher-2-and-restart-the-service">2. Edit the Deployment in Rancher 2 and Restart the Service</h3>
-<p>Now log in to <a href="https://rancher2.spin.nersc.gov/login">Rancher 2</a> and
-navigate to the <code>dts</code> deployment.</p>
-<ol>
-<li>Click on the <code>dts</code> pod to view its status and information</li>
-<li>Click on the three dots near the right side of the screen and select
-   <code>Edit</code> to update its configuration.</li>
-<li>If needed, navigate to the <code>Volumes</code> section and edit the CFS directory for
-   the volume mounted at <code>/data</code>. Usually, this is set to <code>/global/cfs/cdirs/kbase/dts/</code>,
-   so you usually don't need to edit this. Similarly, check the volume mounted
-   at <code>/manifests</code> (usually set to <code>/global/cfs/cdirs/kbase/gsharing/dts/manifests/</code>).</li>
-<li>Edit the Docker image for the deployment, changing the tag after the colon
-   to match the tag of the Docker image pushed by <code>deploy-to-spin.sh</code> above.</li>
-<li>Make sure that the Scaling/Upgrade Policy on the Deployment is set to
-   <code>Recreate: KILL ALL pods, then start new pods.</code> This ensures that the
-   service in the existing pod can save a record of its ongoing tasks before a
-   service in a new pod tries to restore them.</li>
-<li>Click <code>Save</code> to restart the deployment with this new information.</li>
-</ol>
-<p>That's it! You've now updated the service with new features and bugfixes.</p>
-<h2 id="maintaining-the-dts-data-directory">Maintaining the DTS Data Directory</h2>
-<p>The DTS uses its data directory to manage its own state, as well as its
-interactions with other services. Currently, the data directory contains the
-following files:</p>
+<h2 id="supported-kbase-data-types">Supported KBase Data Types</h2>
+<p>The data types supported by the KBase staging service are listed below with their fields. These data
+types are based on the <a href="https://github.com/kbase/staging_service/tree/master/import_specifications/templates">KBase staging service's import specification templates</a>.</p>
+<div class="admonition note">
+<p class="admonition-title">All fields required!</p>
+<p>Every object of a given data type must have all of its fields specified, with <code>null</code> values
+indicating empty fields. While inconvenient, this complete specification is required by the
+current implementation of the KBase staging service.</p>
+</div>
+<p>Fields that must be non-<code>null</code> are marked <strong>bold</strong> below.</p>
+<h4 id="assembly-assembly">Assembly (<code>assembly</code>)</h4>
 <ul>
-<li><code>dts.gob</code> - a file containing information about pending and recently finished
-  file transfers, along with any related database-specific state information</li>
-<li><code>kbase_user_orcids.csv</code> - a comma-separated variable file associating ORCID
-  identifiers with KBase users. This file is a temporary mechanism that allows
-  the DTS to obtain the username of a KBase user given their ORCID. It is
-  re-read at the top of the hour, making it easy to replace without restarting
-  a deployment.</li>
+<li><strong><code>staging_file_subdir_path</code></strong>: a string containing the path to the file, rooted in the directory
+  containing the manifest</li>
+<li><strong><code>assembly_name</code></strong>: the name of the assembly object</li>
+<li><code>type</code>: one of the following strings: <code>"draft isolate"</code>, <code>"finished isolate"</code>, <code>"mag"</code>, <code>"sag"</code>, <code>"virus"</code>, <code>"plasmid"</code>, <code>"construct"</code>, <code>"metagenome"</code></li>
+<li><code>min_contig_length</code>: an integer containing the minimum length of a contig within the assembly</li>
+</ul>
+<h3 id="genbank-genome-genbank_genome">Genbank genome (<code>genbank_genome</code>)</h3>
+<ul>
+<li><strong><code>staging_file_subdir_path</code></strong>: a string containing the path to the file, rooted in the directory
+  containing the manifest</li>
+<li><strong><code>genome_name</code></strong>: the name of the genome object</li>
+<li><code>genome_type</code>: one of the following strings: <code>"draft isolate"</code>, <code>"finished isolate"</code>, <code>"mag"</code>, <code>"sag"</code>, <code>"virus"</code>, <code>"plasmid"</code>, <code>"construct"</code></li>
+<li><code>source</code>: one of the following strings: <code>"RefSeq user"</code>, <code>"Ensembl user"</code>, <code>"Other"</code></li>
+<li><code>release</code>: a string</li>
+<li><code>genetic_code</code>: an integer</li>
+<li><code>scientific_name</code>: the scientific name of the genome</li>
+<li><code>generate_ids_if_needed</code>: a string</li>
+<li><code>generate_missing_genes</code>: a string</li>
+</ul>
+<h3 id="gfffasta-genome-gff_genome">GFF+FASTA genome (<code>gff_genome</code>)</h3>
+<ul>
+<li><strong><code>fasta_file</code></strong>: a string containing the path to a FASTA file, rooted in the directory
+  containing the manifest</li>
+<li><strong><code>gff_file</code></strong>: a string containing the path to a GFF file, rooted in the directory
+  containing the manifest</li>
+<li><strong><code>genome_name</code></strong>: the name of the genome object</li>
+<li><code>genome_type</code>: one of the following strings: <code>"draft isolate"</code>, <code>"finished isolate"</code>, <code>"fungi"</code>, <code>"mag"</code>, <code>"other Eukaryote"</code>, <code>"plant"</code>, <code>"sag"</code>, <code>"virus"</code>, <code>"plasmid"</code>, <code>"construct"</code></li>
+<li><code>scientific_name</code>: the scientic name of the genome</li>
+<li><code>source</code>: one of the following strings: <code>"RefSeq user"</code>, <code>"Ensembl user"</code>, <code>"JGI"</code>, <code>"Other"</code></li>
+<li><code>taxon_wsname</code>: a string</li>
+<li><code>release</code>: a string</li>
+<li><code>genetic_code</code>: an integer</li>
+<li><code>generate_missing_genes</code>: a string</li>
+</ul>
+<h3 id="gfffasta-metagenome-gff_metagenome">GFF+FASTA metagenome (<code>gff_metagenome</code>)</h3>
+<ul>
+<li><strong><code>fasta_file</code></strong>: a string containing the path to a FASTA file, rooted in the directory
+  containing the manifest</li>
+<li><strong><code>gff_file</code></strong>: a string containing the path to a GFF file, rooted in the directory
+  containing the manifest</li>
+<li><strong><code>genome_name</code></strong>: the name of the genome object</li>
+<li><code>source</code>: one of the following strings: <code>"EBI user"</code>, <code>"IMG user"</code>, <code>"JGI user"</code>, <code>"BGI user"</code>, <code>"Other"</code></li>
+<li><code>release</code>: a string</li>
+<li><code>genetic_code</code>: an integer</li>
+<li><code>generate_missing_genes</code>: a string</li>
+</ul>
+<h3 id="interleaved-fastq-reads-fastq_reads_interleaved">Interleaved FASTQ reads (<code>fastq_reads_interleaved</code>)</h3>
+<ul>
+<li><strong><code>fastq_fwd_staging_file_name</code></strong>: a string containing the path to the file, rooted in the directory
+  containing the manifest</li>
+<li><strong><code>name</code></strong>: the name of the interleaved FASTQ reads object</li>
+<li><code>sequencing_tech</code>: one of the following strings: <code>"Illumina"</code>, <code>"PacBio CLR"</code>, <code>"PacBio CCS"</code>, <code>"IonTorrent"</code>, <code>"NanoPore"</code>, <code>"Unknown"</code></li>
+<li><code>single_genome</code>: a string</li>
+<li><code>read_orientation_outward</code>: a string</li>
+<li><code>insert_size_std_dev</code>: a float indicating the standard deviation of the insert size distribution</li>
+<li><code>insert_size_mean</code>: a float indicating the mean of the insert size distribution</li>
+</ul>
+<h3 id="noninterleaved-fastq-reads-fastq_reads_noninterleaved">Noninterleaved FASTQ reads (<code>fastq_reads_noninterleaved</code>)</h3>
+<ul>
+<li><strong><code>fastq_fwd_staging_file_name</code></strong>: a string containing the path to the forward reads file, rooted
+  in the directory containing the manifest</li>
+<li><strong><code>fastq_rev_staging_file_name</code></strong>: a string containing the path to the reverse reads file, rooted
+  in the directory containing the manifest</li>
+<li><strong><code>name</code></strong>: the name of the noninterleaved FASTQ reads object</li>
+<li><code>sequencing_tech</code>: one of the following strings: <code>"Illumina"</code>, <code>"PacBio CLR"</code>, <code>"PacBio CCS"</code>, <code>"IonTorrent"</code>, <code>"NanoPore"</code>, <code>"Unknown"</code></li>
+<li><code>single_genome</code>: a string</li>
+<li><code>read_orientation_outward</code>: a string</li>
+<li><code>insert_size_std_dev</code>: a float indicating the standard deviation of the insert size distribution</li>
+<li><code>insert_size_mean</code>: a float indicating the mean of the insert size distribution</li>
+</ul>
+<h3 id="sra-reads-sra_reads">SRA reads (<code>sra_reads</code>)</h3>
+<ul>
+<li><strong><code>sra_staging_file_name</code></strong>: a string containing the path to the SRA staging file, rooted in the
+  directory containing the manifest</li>
+<li><strong><code>name</code></strong>: the name of the SRA reads object</li>
+<li><code>sequencing_tech</code>: one of the following strings: <code>"Illumina"</code>, <code>"PacBio CLR"</code>, <code>"PacBio CCS"</code>, <code>"IonTorrent"</code>, <code>"NanoPore"</code>, <code>"Unknown"</code></li>
+<li><code>single_genome</code>: a string</li>
+<li><code>read_orientation_outward</code>: a string</li>
+<li><code>insert_size_std_dev</code>: a float indicating the standard deviation of the insert size distribution</li>
+<li><code>insert_size_mean</code>: a float indicating the mean of the insert size distribution</li>
 </ul>
 
 

@@ -22,6 +22,10 @@
 package transfers
 
 import (
+	"bytes"
+	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/google/uuid"
@@ -135,8 +139,9 @@ const (
 )
 
 type TaskStatus struct {
-	Code   TaskStatusCode
-	Status endpoints.TransferStatus // status of file transfer operation
+	Code     TaskStatusCode
+	Staging  databases.StagingStatus
+	Transfer endpoints.TransferStatus
 }
 
 // singleton pipeline instance
@@ -147,40 +152,45 @@ var pipeline_ *Pipeline
 func Start() error {
 	if pipeline_ == nil {
 		// register our built-in endpoint and database providers
-		if err := endpoints.RegisterEndpointProvider("globus", globus.NewEndpoint); err != nil {
-			return err
+		endpointProviders := map[string]func(name string) (Endpoint, error){
+			"globus": globus.NewEndpoint,
+			"local":  local.NewEndpoint,
 		}
-		if err := endpoints.RegisterEndpointProvider("local", local.NewEndpoint); err != nil {
-			return err
-		}
-		if _, found := config.Databases["jdp"]; found {
-			if err := databases.RegisterDatabase("jdp", jdp.NewDatabase); err != nil {
-				return err
-			}
-		}
-		if _, found := config.Databases["kbase"]; found {
-			if err := databases.RegisterDatabase("kbase", kbase.NewDatabase); err != nil {
-				return err
-			}
-		}
-		if _, found := config.Databases["nmdc"]; found {
-			if err := databases.RegisterDatabase("nmdc", nmdc.NewDatabase); err != nil {
+		for provider, regFunc := range endpointProviders {
+			if err := endpoints.RegisterEndpointProvider(provider, regFunc); err != nil {
 				return err
 			}
 		}
 
-		// do the necessary directories exist, and are they writable/readable?
-		if err := validateDirectory("data", config.Service.DataDirectory); err != nil {
-			return err
+		databaseProviders := map[string]func() (Database, error){
+			"jdp":   jdp.NewDatabase,
+			"kbase": kbase.NewDatabase,
+			"nmdc":  nmdc.NewDatabase,
 		}
-		if err := validateDirectory("manifest", config.Service.ManifestDirectory); err != nil {
-			return err
+		for provider, regFunc := range databaseProviders {
+			if _, found := config.Databases[provider]; found {
+				if err := databases.RegisterDatabase(provider, regFunc); err != nil {
+					return err
+				}
+			}
+		}
+
+		// do the necessary directories exist, and are they writable/readable?
+		directories := map[string]string{
+			"data":     config.Service.DataDirectory,
+			"manifest": config.Service.ManifestDirectory,
+		}
+		for dirType, path := range directories {
+			if err := validateDirectory(dirType, path); err != nil {
+				return err
+			}
 		}
 
 		// can we access the local endpoint?
 		if _, err := endpoints.NewEndpoint(config.Service.Endpoint); err != nil {
 			return err
 		}
+
 		var err error
 		pipeline_, err = CreatePipeline()
 		if err != nil {
@@ -234,4 +244,48 @@ func Cancel(taskId uuid.UUID) error {
 		return pipeline_.Cancel(taskId)
 	}
 	return &NotRunningError{}
+}
+
+// this function checks for the existence of the data directory and whether it
+// is readable/writeable, returning a non-nil error if any of these conditions
+// are not met
+func validateDirectory(dirType, dir string) error {
+	if dir == "" {
+		return fmt.Errorf("no %s directory was specified!", dirType)
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return &os.PathError{
+			Op:   "validateDirectory",
+			Path: dir,
+			Err:  fmt.Errorf("%s is not a valid %s directory!", dir, dirType),
+		}
+	}
+
+	// can we write a file and read it?
+	testFile := filepath.Join(dir, "test.txt")
+	writtenTestData := []byte("test")
+	err = os.WriteFile(testFile, writtenTestData, 0644)
+	if err != nil {
+		return &os.PathError{
+			Op:   "validateDirectory",
+			Path: dir,
+			Err:  fmt.Errorf("Could not write to %s directory %s!", dirType, dir),
+		}
+	}
+	readTestData, err := os.ReadFile(testFile)
+	if err == nil {
+		os.Remove(testFile)
+	}
+	if err != nil || !bytes.Equal(readTestData, writtenTestData) {
+		return &os.PathError{
+			Op:   "validateDirectory",
+			Path: dir,
+			Err:  fmt.Errorf("Could not read from %s directory %s!", dirType, dir),
+		}
+	}
+	return nil
 }

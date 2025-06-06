@@ -22,7 +22,6 @@
 package transfers
 
 import (
-	"bytes"
 	"context"
 	"encoding/gob"
 	"errors"
@@ -446,49 +445,5 @@ func saveTransfers(transfers map[uuid.UUID]Transfer, saveFile string) error {
 		return fmt.Errorf("Writing save file %s: %s", saveFile, err.Error())
 	}
 	slog.Debug(fmt.Sprintf("Saved transfers to %s", saveFile))
-	return nil
-}
-
-// this function checks for the existence of the data directory and whether it
-// is readable/writeable, returning a non-nil error if any of these conditions
-// are not met
-func validateDirectory(dirType, dir string) error {
-	if dir == "" {
-		return fmt.Errorf("no %s directory was specified!", dirType)
-	}
-	info, err := os.Stat(dir)
-	if err != nil {
-		return err
-	}
-	if !info.IsDir() {
-		return &os.PathError{
-			Op:   "validateDirectory",
-			Path: dir,
-			Err:  fmt.Errorf("%s is not a valid %s directory!", dir, dirType),
-		}
-	}
-
-	// can we write a file and read it?
-	testFile := filepath.Join(dir, "test.txt")
-	writtenTestData := []byte("test")
-	err = os.WriteFile(testFile, writtenTestData, 0644)
-	if err != nil {
-		return &os.PathError{
-			Op:   "validateDirectory",
-			Path: dir,
-			Err:  fmt.Errorf("Could not write to %s directory %s!", dirType, dir),
-		}
-	}
-	readTestData, err := os.ReadFile(testFile)
-	if err == nil {
-		os.Remove(testFile)
-	}
-	if err != nil || !bytes.Equal(readTestData, writtenTestData) {
-		return &os.PathError{
-			Op:   "validateDirectory",
-			Path: dir,
-			Err:  fmt.Errorf("Could not read from %s directory %s!", dirType, dir),
-		}
-	}
 	return nil
 }

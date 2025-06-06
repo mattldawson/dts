@@ -294,13 +294,13 @@ func StageFilesAtSource(channels StageChannels) pipeline.Processor[Task, Task] {
 				descriptor := d.(map[string]any)
 				fileIds[i] = descriptor["id"].(string)
 			}
-			_, err = source.StageFiles(task.User.Orcid, fileIds)
+			stagingId, err := source.StageFiles(task.User.Orcid, fileIds)
 			if err != nil {
 				return Task{}, err
 			}
 			task.Status = TaskStatus{
 				Code: TaskStatusStaging,
-				Status: endpoints.TransferStatus{
+				Transfer: endpoints.TransferStatus{
 					Code:     endpoints.TransferStatusStaging,
 					NumFiles: len(task.Descriptors),
 				},
@@ -309,12 +309,20 @@ func StageFilesAtSource(channels StageChannels) pipeline.Processor[Task, Task] {
 				Index:  task.Index,
 				Status: task.Status,
 			}
-			// wait till the files are staged
-			for !staged {
+
+			// wait till the files are staged and update the status
+			for task.Status.Staging != databases.StagingStatusSucceeded && task.Status.Staging != databases.StagingStatusFailed {
 				time.Sleep(time.Duration(config.Service.PollInterval) * time.Millisecond)
-				staged, err = sourceEndpoint.FilesStaged(task.Descriptors)
+				status, err := source.StagingStatus(stagingId)
 				if err != nil {
 					return Task{}, err
+				}
+				if task.Status.Staging != status {
+					task.Status.Staging = status
+					channels.TaskUpdate <- TaskStatusUpdate{
+						Index:  task.Index,
+						Status: task.Status,
+					}
 				}
 			}
 		}
@@ -362,9 +370,13 @@ func TransferToDestination(channels StageChannels) pipeline.Processor[Task, Task
 			channels.Error <- err
 			return Task{}, err
 		}
-		task.Status.Status = endpoints.TransferStatus{
+		task.Status.Transfer = endpoints.TransferStatus{
 			Code:     endpoints.TransferStatusActive,
 			NumFiles: len(task.Descriptors),
+		}
+		channels.TaskUpdate <- TaskStatusUpdate{
+			Index:  task.Index,
+			Status: task.Status,
 		}
 
 		// wait for it to finish
@@ -374,8 +386,13 @@ func TransferToDestination(channels StageChannels) pipeline.Processor[Task, Task
 			if err != nil {
 				return Task{}, err
 			}
-			// FIXME: need to be more careful about this info vvv
-			task.Status.Status = status
+			if task.Status.Transfer != status {
+				task.Status.Transfer = status
+				channels.TaskUpdate <- TaskStatusUpdate{
+					Index:  task.Index,
+					Status: task.Status,
+				}
+			}
 		}
 
 		return task, err

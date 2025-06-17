@@ -232,7 +232,6 @@ func (service *prototype) getDatabases(ctx context.Context,
 	output := &DatabasesOutput{
 		Body: make([]DatabaseResponse, 0),
 	}
-	slog.Info(fmt.Sprintf("Rockin %d databases\n", len(config.Databases)))
 	for dbName, db := range config.Databases {
 		output.Body = append(output.Body, DatabaseResponse{
 			Id:           dbName,

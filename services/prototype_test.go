@@ -139,7 +139,7 @@ func setup() {
 		id := fmt.Sprintf("%d", i)
 		name := fmt.Sprintf("file%d", i)
 		path := name + ".txt"
-		data := []byte(fmt.Sprintf("This is the content of file %d.", i))
+		data := fmt.Appendf(nil, "This is the content of file %d.", i)
 		hash := fmt.Sprintf("%x", md5.Sum(data))
 		err = os.WriteFile(filepath.Join(sourceRoot, path), data, 0600)
 		if err != nil {
@@ -190,7 +190,7 @@ func setup() {
 	os.Mkdir(config.Service.ManifestDirectory, 0755)
 
 	// Start the service.
-	log.Print("Starting test mapping service...\n")
+	log.Print("Starting test DTS service...\n")
 	go func() {
 		service, err = NewDTSPrototype()
 		if err != nil {
@@ -428,6 +428,35 @@ func TestSearchDatabase(t *testing.T) {
 	assert.Equal("1", results.Query)
 	assert.Equal(1, len(results.Descriptors))
 	assert.Equal("file1", results.Descriptors[0]["name"])
+}
+
+// searches a specific database with some database-specific parameters
+func TestSearchJdpDatabaseWithSpecificParams(t *testing.T) {
+	assert := assert.New(t)
+
+	// our source test database returns all requested source files
+	reqBody, err := json.Marshal(map[string]any{
+		"database": "jdp",
+		"query":    "prochlorococcus",
+		"specific": map[string]any{
+			"s":                    "name",
+			"include_private_data": 0,
+		},
+	})
+	assert.Nil(err)
+	resp, err := post(baseUrl+apiPrefix+"files", bytes.NewReader(reqBody))
+	assert.Nil(err)
+
+	respBody, err := io.ReadAll(resp.Body)
+	assert.Nil(err)
+	assert.Equal(http.StatusOK, resp.StatusCode)
+	defer resp.Body.Close()
+
+	var results SearchResultsResponse
+	err = json.Unmarshal(respBody, &results)
+	assert.Nil(err)
+	assert.Equal("jdp", results.Database)
+	assert.Equal("prochlorococcus", results.Query)
 }
 
 // fetches file metadata from the JDP for some specific files

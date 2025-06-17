@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math"
 	"net"
 	"net/http"
 	"slices"
@@ -231,12 +232,14 @@ func (service *prototype) getDatabases(ctx context.Context,
 	output := &DatabasesOutput{
 		Body: make([]DatabaseResponse, 0),
 	}
+	slog.Info(fmt.Sprintf("Rockin %d databases\n", len(config.Databases)))
 	for dbName, db := range config.Databases {
 		output.Body = append(output.Body, DatabaseResponse{
 			Id:           dbName,
 			Name:         db.Name,
 			Organization: db.Organization,
 		})
+		slog.Info(fmt.Sprintf("Oh yeah: %s\n", dbName))
 	}
 	slices.SortFunc(output.Body, func(db1, db2 DatabaseResponse) int { // sort by name
 		return cmp.Compare(db1.Name, db2.Name)
@@ -420,7 +423,7 @@ func databaseError(err error) error {
 // implements database search for both GET and POST requests
 func searchDatabase(_ context.Context,
 	input *SearchDatabaseInput,
-	specific map[string]any) (*SearchResultsOutput, error) {
+	specific map[string]json.RawMessage) (*SearchResultsOutput, error) {
 
 	client, err := authorize(input.Authorization)
 	if err != nil {
@@ -446,6 +449,33 @@ func searchDatabase(_ context.Context,
 		return nil, fmt.Errorf("Invalid status parameter: %s", input.Status)
 	}
 
+	// unmarshal database-specific parameters
+	dbSpecific := make(map[string]any)
+	for key, jsonValue := range specific {
+		var value any
+		err := json.Unmarshal(jsonValue, &value)
+		if err != nil {
+			return nil, &databases.InvalidSearchParameter{
+				Database: "JDP",
+				Message:  "Invalid JDP sort order given (must be string)",
+			}
+		}
+		switch v := value.(type) {
+		case string:
+			dbSpecific[key] = v
+		case float64: // JSON number -- can be float or integer
+			if v-math.Floor(v) > 0.0 {
+				dbSpecific[key] = v
+			} else {
+				dbSpecific[key] = int(v)
+			}
+		case bool:
+			dbSpecific[key] = v
+		default:
+			return nil, fmt.Errorf("Invalid database-specific parameter: %s", key)
+		}
+	}
+
 	// FIXME: for now, if a user ORCID is not specified, use the client's ORCID
 	orcid := input.Orcid
 	if orcid == "" {
@@ -465,7 +495,7 @@ func searchDatabase(_ context.Context,
 			Offset: input.Offset,
 			MaxNum: input.Limit,
 		},
-		Specific: specific,
+		Specific: dbSpecific,
 	})
 	if err != nil {
 		return nil, databaseError(err)
@@ -504,7 +534,7 @@ func (service *prototype) searchDatabaseWithSpecificParams(ctx context.Context,
 	}) (*SearchResultsOutput, error) {
 	var body struct {
 		SearchDatabaseInputWithoutHeader
-		Specific map[string]any `json:"specific" doc:"database-specific search parameters in a JSON object"`
+		Specific map[string]json.RawMessage `json:"specific" doc:"database-specific search parameters in a JSON object"`
 	}
 	err := json.Unmarshal(input.Body, &body)
 	if err != nil {

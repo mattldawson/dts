@@ -115,6 +115,7 @@ func (db *Database) Search(orcid string, params databases.SearchParameters) (dat
 	}
 	p.Add("p", strconv.Itoa(pageNumber))
 	p.Add("x", strconv.Itoa(pageSize))
+	p.Add("orcid", orcid) // stash to indicate that ORCID-specific auth header is added
 
 	if params.Specific != nil {
 		err := db.addSpecificSearchParameters(params.Specific, &p)
@@ -554,6 +555,9 @@ func (db *Database) get(resource string, values url.Values) ([]byte, error) {
 	req, err := http.NewRequest(http.MethodGet, res, http.NoBody)
 	if err != nil {
 		return nil, err
+	}
+	if values.Has("orcid") { // orcid stashed in URL parameters
+		db.addAuthHeader(values.Get("orcid"), req)
 	}
 	resp, err := db.Client.Do(req)
 	if err != nil {

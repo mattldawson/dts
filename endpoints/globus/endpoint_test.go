@@ -56,28 +56,25 @@ var sourceFilesById = map[string]string{
 }
 
 var globusConfig string = fmt.Sprintf(`
+credentials:
+  globus:
+    id: ${DTS_GLOBUS_CLIENT_ID}
+    secret: ${DTS_GLOBUS_CLIENT_SECRET}
 endpoints:
   source:
     name: %s
     id: %s
     provider: globus
-    auth:
-      client_id: ${DTS_GLOBUS_CLIENT_ID}
-      client_secret: ${DTS_GLOBUS_CLIENT_SECRET}
+    credential: globus
   destination:
     name: DTS Globus Test Endpoint
     id: ${DTS_GLOBUS_TEST_ENDPOINT}
     provider: globus
-    auth:
-      client_id: ${DTS_GLOBUS_CLIENT_ID}
-      client_secret: ${DTS_GLOBUS_CLIENT_SECRET}
+    credential: globus
   not-globus-jdp:
     name: lalala
     id: aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
     provider: not-globus
-    auth:
-      client_id: ${DTS_GLOBUS_CLIENT_ID}
-      client_secret: ${DTS_GLOBUS_CLIENT_SECRET}
 `, sourceEndpointName, sourceEndpointId)
 
 // this function gets called at the begіnning of a test session

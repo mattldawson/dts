@@ -89,14 +89,22 @@ func NewEndpoint(endpointName string) (endpoints.Endpoint, error) {
 	if epConfig.Provider != "globus" {
 		return nil, fmt.Errorf("'%s' is not a Globus endpoint", endpointName)
 	}
+	credential, found := config.Credentials[epConfig.Credential]
+	if !found {
+		return nil, fmt.Errorf("Invalid credential for endpoint '%s': %s", endpointName, epConfig.Credential)
+	}
+	clientId, err := uuid.Parse(credential.Id)
+	if err != nil {
+		return nil, fmt.Errorf("Invalid Globus client ID for credential '%s': %s (must be UUID)", epConfig.Credential, credential.Id)
+	}
 
 	defaultScopes := []string{"urn:globus:auth:scope:transfer.api.globus.org:all"}
 	ep := &Endpoint{
 		Name:         epConfig.Name,
 		Id:           epConfig.Id,
 		Scopes:       defaultScopes,
-		ClientId:     epConfig.Auth.ClientId,
-		ClientSecret: epConfig.Auth.ClientSecret,
+		ClientId:     clientId,
+		ClientSecret: credential.Secret,
 	}
 
 	// if needed, authenticate to obtain a Globus Transfer API access token

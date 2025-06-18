@@ -67,21 +67,23 @@ type serviceConfig struct {
 
 // global config variables
 var Service serviceConfig
+var Credentials map[string]credentialConfig
 var Endpoints map[string]endpointConfig
 var Databases map[string]databaseConfig
 
 // This struct performs the unmarshalling from the YAML config file and then
 // copies its fields to the globals above.
 type configFile struct {
-	Service   serviceConfig             `yaml:"service"`
-	Databases map[string]databaseConfig `yaml:"databases"`
-	Endpoints map[string]endpointConfig `yaml:"endpoints"`
+	Service     serviceConfig               `yaml:"service"`
+	Credentials map[string]credentialConfig `yaml:"credentials"`
+	Databases   map[string]databaseConfig   `yaml:"databases"`
+	Endpoints   map[string]endpointConfig   `yaml:"endpoints"`
 }
 
 // This helper locates and reads the selected sections in a configuration file,
 // returning an error indicating success or failure. All environment variables
 // of the form ${ENV_VAR} are expanded.
-func readConfig(bytes []byte, service, databases, endpoints bool) error {
+func readConfig(bytes []byte, service, credentials, databases, endpoints bool) error {
 	// before we do anything else, expand any provided environment variables
 	bytes = []byte(os.ExpandEnv(string(bytes)))
 
@@ -101,6 +103,10 @@ func readConfig(bytes []byte, service, databases, endpoints bool) error {
 	if service {
 		// copy the config data into place, performing any needed conversions
 		Service = conf.Service
+	}
+
+	if credentials {
+		Credentials = conf.Credentials
 	}
 
 	if endpoints {
@@ -153,6 +159,18 @@ func validateServiceParameters(params serviceConfig) error {
 		return &InvalidServiceConfigError{
 			Message: fmt.Sprintf("Non-positive task deletion period specified: (%d h)",
 				params.DeleteAfter),
+		}
+	}
+	return nil
+}
+
+func validateCredentials(credentials map[string]credentialConfig) error {
+	for name, credential := range credentials {
+		if credential.Id == "" {
+			return &InvalidCredentialConfigError{
+				Credential: name,
+				Message:    "Invalid credential ID",
+			}
 		}
 	}
 	return nil
@@ -223,10 +241,17 @@ func validateDatabases(databases map[string]databaseConfig) error {
 
 // This helper validates the given sections in the configuration, returning an
 // error that indicates success or failure.
-func validateConfig(service, databases, endpoints bool) error {
+func validateConfig(service, credentials, databases, endpoints bool) error {
 	var err error
 	if service {
 		err = validateServiceParameters(Service)
+		if err != nil {
+			return err
+		}
+	}
+
+	if credentials {
+		err = validateCredentials(Credentials)
 		if err != nil {
 			return err
 		}
@@ -247,16 +272,16 @@ func validateConfig(service, databases, endpoints bool) error {
 
 // Initializes the entire service configuration using the given YAML byte data.
 func Init(yamlData []byte) error {
-	return InitSelected(yamlData, true, true, true)
+	return InitSelected(yamlData, true, true, true, true)
 }
 
 // Initializes the selected sections in the service configuration using the
 // given YAML byte data.
-func InitSelected(yamlData []byte, service, databases, endpoints bool) error {
-	err := readConfig(yamlData, service, databases, endpoints)
+func InitSelected(yamlData []byte, service, credentials, databases, endpoints bool) error {
+	err := readConfig(yamlData, service, credentials, databases, endpoints)
 	if err != nil {
 		return err
 	}
-	err = validateConfig(service, databases, endpoints)
+	err = validateConfig(service, credentials, databases, endpoints)
 	return err
 }

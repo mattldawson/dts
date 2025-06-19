@@ -79,9 +79,42 @@ type Endpoint struct {
 	ClientSecret string
 }
 
+// creates a new Globus endpoint using the given information
+func NewEndpoint(name string, shareId uuid.UUID, rootPath string, clientId uuid.UUID, clientSecret string) (endpoints.Endpoint, error) {
+	defaultScopes := []string{"urn:globus:auth:scope:transfer.api.globus.org:all"}
+	ep := &Endpoint{
+		Name:         name,
+		Id:           shareId,
+		Scopes:       defaultScopes,
+		ClientId:     clientId,
+		ClientSecret: clientSecret,
+	}
+
+	// if needed, authenticate to obtain a Globus Transfer API access token
+	var zeroId uuid.UUID
+	if ep.ClientId != zeroId {
+		err := ep.authenticate()
+		if err != nil {
+			return ep, err
+		}
+	}
+
+	// if present, the root entry overrides the endpoint's root, and is expressed
+	// as a path relative to it
+	if rootPath != "" {
+		ep.RootDir = rootPath
+	} else {
+		ep.RootDir = "/"
+	}
+	slog.Debug(fmt.Sprintf("Endpoint %s: root directory is %s",
+		name, rootPath))
+
+	return ep, nil
+}
+
 // creates a new Globus endpoint using the information supplied in the
 // DTS configuration file under the given endpoint name
-func NewEndpoint(endpointName string) (endpoints.Endpoint, error) {
+func NewEndpointFromConfig(endpointName string) (endpoints.Endpoint, error) {
 	epConfig, found := config.Endpoints[endpointName]
 	if !found {
 		return nil, fmt.Errorf("'%s' is not an endpoint", endpointName)
@@ -97,36 +130,7 @@ func NewEndpoint(endpointName string) (endpoints.Endpoint, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Invalid Globus client ID for credential '%s': %s (must be UUID)", epConfig.Credential, credential.Id)
 	}
-
-	defaultScopes := []string{"urn:globus:auth:scope:transfer.api.globus.org:all"}
-	ep := &Endpoint{
-		Name:         epConfig.Name,
-		Id:           epConfig.Id,
-		Scopes:       defaultScopes,
-		ClientId:     clientId,
-		ClientSecret: credential.Secret,
-	}
-
-	// if needed, authenticate to obtain a Globus Transfer API access token
-	var zeroId uuid.UUID
-	if ep.ClientId != zeroId {
-		err := ep.authenticate()
-		if err != nil {
-			return ep, err
-		}
-	}
-
-	// if present, the root entry overrides the endpoint's root, and is expressed
-	// as a path relative to it
-	if epConfig.Root != "" {
-		ep.RootDir = epConfig.Root
-	} else {
-		ep.RootDir = "/"
-	}
-	slog.Debug(fmt.Sprintf("Endpoint %s: root directory is %s",
-		endpointName, epConfig.Root))
-
-	return ep, nil
+	return NewEndpoint(epConfig.Name, epConfig.Id, epConfig.Root, clientId, credential.Secret)
 }
 
 func (ep *Endpoint) Root() string {

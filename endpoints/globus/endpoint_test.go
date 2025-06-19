@@ -95,7 +95,7 @@ func breakdown() {
 func TestGlobusConstructor(t *testing.T) {
 	assert := assert.New(t)
 
-	endpoint, err := NewEndpoint("source")
+	endpoint, err := NewEndpointFromConfig("source")
 	assert.NotNil(endpoint)
 	assert.Nil(err)
 }
@@ -103,14 +103,14 @@ func TestGlobusConstructor(t *testing.T) {
 func TestBadGlobusConstructor(t *testing.T) {
 	assert := assert.New(t)
 
-	endpoint, err := NewEndpoint("not-globus-jdp")
+	endpoint, err := NewEndpointFromConfig("not-globus-jdp")
 	assert.Nil(endpoint)
 	assert.NotNil(err)
 }
 
 func TestGlobusTransfers(t *testing.T) {
 	assert := assert.New(t)
-	endpoint, _ := NewEndpoint("source")
+	endpoint, _ := NewEndpointFromConfig("source")
 	// this is just a smoke test--we don't check the contents of the result
 	xfers, err := endpoint.Transfers()
 	assert.NotNil(xfers) // empty or non-empty slice
@@ -119,7 +119,7 @@ func TestGlobusTransfers(t *testing.T) {
 
 func TestGlobusFilesStaged(t *testing.T) {
 	assert := assert.New(t)
-	endpoint, _ := NewEndpoint("source")
+	endpoint, _ := NewEndpointFromConfig("source")
 
 	// provide an empty slice of filenames, which should return true
 	staged, err := endpoint.FilesStaged([]any{})
@@ -167,8 +167,8 @@ func destDirName(n int) string {
 
 func TestGlobusTransfer(t *testing.T) {
 	assert := assert.New(t)
-	source, _ := NewEndpoint("source")
-	destination, _ := NewEndpoint("destination")
+	source, _ := NewEndpointFromConfig("source")
+	destination, _ := NewEndpointFromConfig("destination")
 
 	fileXfers := make([]endpoints.FileTransfer, 0)
 	for i := 1; i <= 3; i++ {
@@ -210,7 +210,7 @@ func TestGlobusTransfer(t *testing.T) {
 
 func TestUnknownGlobusStatus(t *testing.T) {
 	assert := assert.New(t)
-	endpoint, _ := NewEndpoint("source")
+	endpoint, _ := NewEndpointFromConfig("source")
 
 	// make up a bogus transfer UUID and check its status
 	taskId := uuid.New()
@@ -221,8 +221,8 @@ func TestUnknownGlobusStatus(t *testing.T) {
 
 func TestGlobusTransferCancellation(t *testing.T) {
 	assert := assert.New(t)
-	source, _ := NewEndpoint("source")
-	destination, _ := NewEndpoint("destination")
+	source, _ := NewEndpointFromConfig("source")
+	destination, _ := NewEndpointFromConfig("destination")
 
 	fileXfers := make([]endpoints.FileTransfer, 0)
 	for i := 1; i <= 3; i++ {

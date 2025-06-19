@@ -57,7 +57,7 @@ func setup() {
 	dtstest.EnableDebugLogging()
 	config.Init([]byte(nmdcConfig))
 	databases.RegisterDatabase("nmdc", NewDatabase)
-	endpoints.RegisterEndpointProvider("globus", globus.NewEndpoint)
+	endpoints.RegisterEndpointProvider("globus", globus.NewEndpointFromConfig)
 
 	// construct NMDC-specific search parameters for a study
 	nmdcSearchParams = make(map[string]any)

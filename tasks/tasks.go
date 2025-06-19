@@ -74,7 +74,7 @@ func Start() error {
 	if firstCall {
 		// NOTE: it's okay if these endpoint providers have already been registered,
 		// NOTE: as they can be used in testing
-		err := endpoints.RegisterEndpointProvider("globus", globus.NewEndpoint)
+		err := endpoints.RegisterEndpointProvider("globus", globus.NewEndpointFromConfig)
 		if err == nil {
 			err = endpoints.RegisterEndpointProvider("local", local.NewEndpoint)
 		}
@@ -361,7 +361,8 @@ func processTasks() {
 	deleteAfter := time.Duration(config.Service.DeleteAfter) * time.Second
 
 	// start scurrying around
-	for {
+	running := true
+	for running {
 		select {
 		case newTask := <-createTaskChan: // Create() called
 			newTask.Id = uuid.New()
@@ -435,7 +436,7 @@ func processTasks() {
 		case <-stopChan: // Stop() called
 			err := saveTasks(tasks, dataStore) // don't forget to save our state!
 			errorChan <- err
-			break
+			running = false
 		}
 	}
 }

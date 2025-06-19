@@ -138,12 +138,13 @@ var patchVersion = 1
 // Version string
 var version = fmt.Sprintf("%d.%d.%d", majorVersion, minorVersion, patchVersion)
 
-// authorize clients for the DTS, returning information about the user
+// Authorize clients for the DTS, returning information about the user
 // corresponding to the token in the header (or an error describing any issue
-// encountered)
-func authorize(authorizationHeader string) (auth.Client, error) {
+// encountered). This returns either an auth.User (if authorized via the DTS Authenticator) or
+// an auth.Client (if authorized via the KBase auth2 server).
+func authorize(authorizationHeader string) (any, error) {
 	if !strings.Contains(authorizationHeader, "Bearer") {
-		return auth.Client{}, fmt.Errorf("Invalid authorization header")
+		return auth.User{}, fmt.Errorf("Invalid authorization header")
 	}
 	b64Token := authorizationHeader[len("Bearer "):]
 	accessTokenBytes, err := base64.StdEncoding.DecodeString(b64Token)
@@ -160,12 +161,7 @@ func authorize(authorizationHeader string) (auth.Client, error) {
 		var user auth.User
 		user, err = authenticator.GetUser(accessToken)
 		if err == nil {
-			client = auth.Client{
-				Name:         user.Name,
-				Email:        user.Email,
-				Orcid:        user.Orcid,
-				Organization: user.Organization,
-			}
+			return user, nil
 		}
 	}
 	if err != nil {
@@ -424,7 +420,7 @@ func searchDatabase(_ context.Context,
 	input *SearchDatabaseInput,
 	specific map[string]json.RawMessage) (*SearchResultsOutput, error) {
 
-	client, err := authorize(input.Authorization)
+	userOrClient, err := authorize(input.Authorization)
 	if err != nil {
 		return nil, err
 	}
@@ -475,10 +471,15 @@ func searchDatabase(_ context.Context,
 		}
 	}
 
-	// FIXME: for now, if a user ORCID is not specified, use the client's ORCID
+	// FIXME: for now, if a user ORCID is not specified, use the user/client's ORCID
 	orcid := input.Orcid
 	if orcid == "" {
-		orcid = client.Orcid
+		switch u := userOrClient.(type) {
+		case auth.User:
+			orcid = u.Orcid
+		case auth.Client:
+			orcid = u.Orcid
+		}
 	}
 
 	slog.Info(fmt.Sprintf("Searching database %s for files...", input.Database))
@@ -568,7 +569,7 @@ func (service *prototype) fetchFileMetadata(ctx context.Context,
 		Limit         int    `json:"limit" query:"limit" example:"50" doc:"Limits the number of metadata records returned"`
 	}) (*FileMetadataOutput, error) {
 
-	client, err := authorize(input.Authorization)
+	userOrClient, err := authorize(input.Authorization)
 	if err != nil {
 		return nil, err
 	}
@@ -595,7 +596,12 @@ func (service *prototype) fetchFileMetadata(ctx context.Context,
 	// FIXME: for now, if a user ORCID is not specified, use the client's ORCID
 	orcid := input.Orcid
 	if orcid == "" {
-		orcid = client.Orcid
+		switch u := userOrClient.(type) {
+		case auth.User:
+			orcid = u.Orcid
+		case auth.Client:
+			orcid = u.Orcid
+		}
 	}
 
 	descriptors, err := db.Descriptors(orcid, ids)
@@ -633,19 +639,50 @@ func (service *prototype) createTransfer(ctx context.Context,
 		ContentType   string          `header:"Content-Type" doc:"Content-Type header (must be application/json)"`
 	}) (*TransferOutput, error) {
 
-	_, err := authorize(input.Authorization)
+	userOrClient, err := authorize(input.Authorization)
 	if err != nil {
 		return nil, err
 	}
 
 	// fetch information about the requesting user
-	var user auth.User
+	user, isUser := userOrClient.(auth.User)
+	if !isUser {
+		client := userOrClient.(auth.Client)
+		user = auth.User{
+			Name:         client.Name,
+			Email:        client.Email,
+			Orcid:        client.Orcid,
+			Organization: client.Organization,
+		}
+	}
+
 	if input.Body.Orcid == "" {
 		return nil, huma.Error401Unauthorized("No user ORCID was provided")
 	}
-	// FIXME: we just extract the ORCID at the moment
-	// FIXME: we should get the other stuff from the ORCID public API
-	user.Orcid = input.Body.Orcid
+	if !isUser {
+		// Override the client's ORCID
+		user.Orcid = input.Body.Orcid
+	} else {
+		// a user is requesting a transfer on behalf of another user
+		// FIXME: for now, we only extract the ORCID and keep everything else the same, but at length
+		// FIXME: we should fill in the other fields with the ORCID public record
+		user.Orcid = input.Body.Orcid
+	}
+
+	// Check whether the destination is a "custom transfer", available only to Special People.
+	// Such a destination is encoded as "<provider>:<id>:<credential>", where
+	// * provider is the name of a tranport service (e.g. "globus") as in the config file
+	// * id is a corresponding identifier for the destination (e.g. a UUID for a Globus share)
+	// * credential is the name of a credential stored in the config file
+	if strings.Contains(input.Body.Destination, ":") {
+		terms := strings.Split(input.Body.Destination, ":")
+		if len(terms) != 3 {
+			return nil, huma.Error400BadRequest(fmt.Sprintf("Invalid destination: %s", input.Body.Destination))
+		}
+		if !user.IsSuper { // not allowed to do custom transfers
+			return nil, huma.Error400BadRequest(fmt.Sprintf("Invalid destination: %s", input.Body.Destination))
+		}
+	}
 
 	taskId, err := tasks.Create(tasks.Specification{
 		User:         user,

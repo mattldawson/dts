@@ -41,12 +41,14 @@ type Client struct {
 // (but should have a KBase account if they are requesting files be transferred
 // to KBase).
 type User struct {
-	// client name (human-readable and display-friendly)
+	// name (human-readable and display-friendly)
 	Name string
-	// client email address
+	// email address
 	Email string
 	// ORCID identifier associated with this user
 	Orcid string
 	// organization with which this user is affiliated
 	Organization string
+	// true if this user is a Superuser
+	IsSuper bool
 }

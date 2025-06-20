@@ -63,3 +63,14 @@ type AlreadyRegisteredError struct {
 func (e AlreadyRegisteredError) Error() string {
 	return fmt.Sprintf("Cannot register endpoint provider '%s': already registered", e.Provider)
 }
+
+// indicates that a source endpoint has been asked to transfer files to an incompatible destination
+type IncompatibleDestinationError struct {
+	Source, SourceProvider           string
+	Destination, DestinationProvider string
+}
+
+func (e IncompatibleDestinationError) Error() string {
+	return fmt.Sprintf("The source endpoint '%s' (%s) cannot transfer files to the destination endpoint '%s' (%s)",
+		e.Source, e.SourceProvider, e.Destination, e.DestinationProvider)
+}

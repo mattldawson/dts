@@ -65,6 +65,8 @@ type TransferStatus struct {
 
 // This type represents an endpoint for transferring files.
 type Endpoint interface {
+	// returns a string indicating the service provider for the endpoint
+	Provider() string
 	// returns the path on the file system that serves as the endpoint's root
 	Root() string
 	// returns true if the files associated with the given Frictionless

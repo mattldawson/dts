@@ -25,7 +25,6 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
-	"strings"
 
 	"github.com/google/uuid"
 
@@ -33,7 +32,6 @@ import (
 	"github.com/kbase/dts/config"
 	"github.com/kbase/dts/databases"
 	"github.com/kbase/dts/endpoints"
-	"github.com/kbase/dts/endpoints/globus"
 )
 
 // This type tracks subtasks within a transfer (e.g. files transferred from
@@ -41,17 +39,16 @@ import (
 // It holds multiple (possibly null) UUIDs corresponding to different
 // states in the file transfer lifecycle
 type transferSubtask struct {
-	//Destination         string                  // name of destination database (in config) OR custom spec
-	DestinationEndpoint string                  // name of destination database (in config)
-	DestinationFolder   string                  // folder path to which files are transferred
-	Descriptors         []any                   // Frictionless file descriptors
-	Source              string                  // name of source database (in config)
-	SourceEndpoint      string                  // name of source endpoint (in config)
-	Staging             uuid.NullUUID           // staging UUID (if any)
-	StagingStatus       databases.StagingStatus // staging status
-	Transfer            uuid.NullUUID           // file transfer UUID (if any)
-	TransferStatus      TransferStatus          // status of file transfer operation
-	User                auth.User               // info about user requesting transfer
+	Destination       string                  // name of destination database (in config) OR custom spec
+	DestinationFolder string                  // folder path to which files are transferred
+	Descriptors       []any                   // Frictionless file descriptors
+	Source            string                  // name of source database (in config)
+	SourceEndpoint    string                  // name of source endpoint (in config)
+	Staging           uuid.NullUUID           // staging UUID (if any)
+	StagingStatus     databases.StagingStatus // staging status
+	Transfer          uuid.NullUUID           // file transfer UUID (if any)
+	TransferStatus    TransferStatus          // status of file transfer operation
+	User              auth.User               // info about user requesting transfer
 }
 
 func (subtask *transferSubtask) start() error {
@@ -195,7 +192,7 @@ func (subtask *transferSubtask) checkCancellation() error {
 // initiates a file transfer on a set of staged files
 func (subtask *transferSubtask) beginTransfer() error {
 	slog.Debug(fmt.Sprintf("Transferring %d file(s) from %s to %s",
-		len(subtask.Descriptors), subtask.SourceEndpoint, subtask.DestinationEndpoint))
+		len(subtask.Descriptors), subtask.SourceEndpoint, subtask.Destination))
 	// assemble a list of file transfers
 	fileXfers := make([]FileTransfer, len(subtask.Descriptors))
 	for i, d := range subtask.Descriptors {
@@ -215,20 +212,7 @@ func (subtask *transferSubtask) beginTransfer() error {
 	}
 
 	// figure out the destination endpoint
-	var destinationEndpoint endpoints.Endpoint
-	if strings.Contains(subtask.DestinationEndpoint, ":") { // custom transfer spec
-		// the custom spec has been validated at this point, so we can assume everything's good
-		customSpec, _ := endpoints.ParseCustomSpec(subtask.DestinationEndpoint)
-		endpointId, _ := uuid.Parse(customSpec.Id)
-		credential := config.Credentials[customSpec.Credential]
-		clientId, _ := uuid.Parse(credential.Id)
-		destinationEndpoint, err = globus.NewEndpoint("Custom endpoint", endpointId, "/", clientId, credential.Secret)
-	} else {
-		destinationEndpoint, err = endpoints.NewEndpoint(subtask.DestinationEndpoint)
-		if err != nil {
-			return err
-		}
-	}
+	destinationEndpoint, err := resolveDestinationEndpoint(subtask.Destination)
 
 	// initiate the transfer
 	transferId, err := sourceEndpoint.Transfer(destinationEndpoint, fileXfers)

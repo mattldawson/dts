@@ -92,8 +92,8 @@ func setup() {
 
 	// write an access TSV file and encrypt it with a secret
 	// (fictitious orcid record: https://orcid.org/0000-0002-1825-0097)
-	plaintext := fmt.Sprintf("# Name | Email | Orcid | Organization | Token\n"+
-		"%s\t%s\t%s\t%s\t%s\n",
+	plaintext := fmt.Sprintf("# Name | Email | Orcid | Organization | Token | Superuser\n"+
+		"%s\t%s\t%s\t%s\t%s\tfalse\n",
 		TestUser.Name, TestUser.Email, TestUser.Orcid,
 		TestUser.Organization, TestAccessToken)
 	token, err := fernet.EncryptAndSign([]byte(plaintext), &TestKey)

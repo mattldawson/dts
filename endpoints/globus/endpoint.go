@@ -133,6 +133,10 @@ func NewEndpointFromConfig(endpointName string) (endpoints.Endpoint, error) {
 	return NewEndpoint(epConfig.Name, epConfig.Id, epConfig.Root, clientId, credential.Secret)
 }
 
+func (ep *Endpoint) Provider() string {
+	return "globus"
+}
+
 func (ep *Endpoint) Root() string {
 	return ep.RootDir
 }

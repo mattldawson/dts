@@ -529,7 +529,7 @@ func TestCreateTransfer(t *testing.T) {
 
 	status, err := queryTransfer()
 	assert.Nil(err)
-	assert.True(status.Status != "failed")
+	assert.NotEqual("failed", status.Status)
 
 	// wait a bit for the task to finish (shouldn't take long)
 	time.Sleep(600 * time.Millisecond)
@@ -537,7 +537,7 @@ func TestCreateTransfer(t *testing.T) {
 	// query the transfer again
 	status, err = queryTransfer()
 	assert.Nil(err)
-	assert.True(status.Status == "succeeded")
+	assert.Equal("succeeded", status.Status)
 
 	// check for the files in the payload
 	username := testUser
@@ -601,7 +601,7 @@ func TestCreateAndCancelTransfer(t *testing.T) {
 	// get the transfer status
 	status, err := queryTransfer()
 	assert.Nil(err)
-	assert.True(status.Status != "failed")
+	assert.NotEqual("failed", status.Status)
 
 	// cancel the transfer
 	err = cancelTransfer()

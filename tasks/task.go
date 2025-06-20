@@ -26,6 +26,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/frictionlessdata/datapackage-go/datapackage"
@@ -35,6 +36,7 @@ import (
 	"github.com/kbase/dts/config"
 	"github.com/kbase/dts/databases"
 	"github.com/kbase/dts/endpoints"
+	"github.com/kbase/dts/endpoints/globus"
 )
 
 // This type tracks the lifecycle of a file transfer task that copies files from
@@ -130,8 +132,7 @@ func (task *transferTask) start() error {
 
 	// determine the destination endpoint and folder
 	// FIXME: this conflicts with our redesign!!
-	var destinationEndpoint string
-	destinationEndpoint, task.DestinationFolder, err = determineDestination(*task)
+	task.DestinationFolder, err = determineDestinationFolder(*task)
 	if err != nil {
 		return err
 	}
@@ -158,12 +159,12 @@ func (task *transferTask) start() error {
 
 		// set up a subtask for the endpoint
 		task.Subtasks = append(task.Subtasks, transferSubtask{
-			DestinationEndpoint: destinationEndpoint,
-			DestinationFolder:   task.DestinationFolder,
-			Descriptors:         descriptorsForEndpoint,
-			Source:              task.Source,
-			SourceEndpoint:      sourceEndpoint,
-			User:                task.User,
+			Destination:       task.Destination,
+			DestinationFolder: task.DestinationFolder,
+			Descriptors:       descriptorsForEndpoint,
+			Source:            task.Source,
+			SourceEndpoint:    sourceEndpoint,
+			User:              task.User,
 		})
 	}
 
@@ -277,9 +278,7 @@ func (task *transferTask) Update() error {
 			}
 
 			// begin transferring the manifest
-			// FIXME: how do we determine the database's destination endpoint?
-			destinationEndpointName := config.Databases[task.Destination].Endpoint
-			destinationEndpoint, err := endpoints.NewEndpoint(destinationEndpointName)
+			destinationEndpoint, err := resolveDestinationEndpoint(task.Destination)
 			if err != nil {
 				return err
 			}
@@ -397,13 +396,16 @@ func (task *transferTask) checkManifest() error {
 		task.Manifest = uuid.NullUUID{}
 		os.Remove(task.ManifestFile)
 
-		destination, err := databases.NewDatabase(task.Destination)
-		if err != nil {
-			return err
-		}
-		err = destination.Finalize(task.User.Orcid, task.Id)
-		if err != nil {
-			return err
+		// finalize any non-custom transfers
+		if !strings.Contains(task.Destination, ":") {
+			destination, err := databases.NewDatabase(task.Destination)
+			if err != nil {
+				return err
+			}
+			err = destination.Finalize(task.User.Orcid, task.Id)
+			if err != nil {
+				return err
+			}
 		}
 
 		task.ManifestFile = ""
@@ -414,19 +416,31 @@ func (task *transferTask) checkManifest() error {
 	return nil
 }
 
-func determineDestination(task transferTask) (string, string, error) {
+func determineDestinationFolder(task transferTask) (string, error) {
 	// construct a destination folder name
 	if _, err := endpoints.ParseCustomSpec(task.Destination); err == nil { // is this a custom transfer?
-		return task.Destination, "dts-" + task.Id.String(), nil
+		return "dts-" + task.Id.String(), nil
 	}
 	destination, err := databases.NewDatabase(task.Destination)
 	if err != nil {
-		return "", "", err
+		return "", err
 	}
 	username, err := destination.LocalUser(task.User.Orcid)
 	if err != nil {
-		return "", "", err
+		return "", err
 	}
-	destinationEndpoint := config.Databases[task.Destination].Endpoint
-	return destinationEndpoint, filepath.Join(username, "dts-"+task.Id.String()), nil
+	return filepath.Join(username, "dts-"+task.Id.String()), nil
+}
+
+func resolveDestinationEndpoint(destination string) (endpoints.Endpoint, error) {
+	// everything's been validated at this point, so no need to check for errors
+	if strings.Contains(destination, ":") { // custom transfer spec
+		customSpec, _ := endpoints.ParseCustomSpec(destination)
+		endpointId, _ := uuid.Parse(customSpec.Id)
+		credential := config.Credentials[customSpec.Credential]
+		clientId, _ := uuid.Parse(credential.Id)
+		return globus.NewEndpoint("Custom endpoint", endpointId, "/", clientId, credential.Secret)
+	} else {
+		return endpoints.NewEndpoint(config.Databases[destination].Endpoint)
+	}
 }

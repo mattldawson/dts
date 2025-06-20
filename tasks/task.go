@@ -45,7 +45,7 @@ type transferTask struct {
 	CompletionTime    time.Time         // time at which the transfer completed
 	DataDescriptors   []any             // in-line data descriptors
 	Description       string            // Markdown description of the task
-	Destination       string            // name of destination database (in config)
+	Destination       string            // name of destination database (in config) OR custom spec
 	DestinationFolder string            // folder path to which files are transferred
 	FileIds           []string          // IDs of all files being transferred
 	Id                uuid.UUID         // task identifier
@@ -128,20 +128,13 @@ func (task *transferTask) start() error {
 		return &PayloadTooLargeError{Size: task.PayloadSize}
 	}
 
-	// determine the destination endpoint
+	// determine the destination endpoint and folder
 	// FIXME: this conflicts with our redesign!!
-	destinationEndpoint := config.Databases[task.Destination].Endpoint
-
-	// construct a destination folder name
-	destination, err := databases.NewDatabase(task.Destination)
+	var destinationEndpoint string
+	destinationEndpoint, task.DestinationFolder, err = determineDestination(*task)
 	if err != nil {
 		return err
 	}
-	username, err := destination.LocalUser(task.User.Orcid)
-	if err != nil {
-		return err
-	}
-	task.DestinationFolder = filepath.Join(username, "dts-"+task.Id.String())
 
 	// assemble distinct endpoints and create a subtask for each
 	distinctEndpoints := make(map[string]any)
@@ -165,7 +158,6 @@ func (task *transferTask) start() error {
 
 		// set up a subtask for the endpoint
 		task.Subtasks = append(task.Subtasks, transferSubtask{
-			Destination:         task.Destination,
 			DestinationEndpoint: destinationEndpoint,
 			DestinationFolder:   task.DestinationFolder,
 			Descriptors:         descriptorsForEndpoint,
@@ -420,4 +412,21 @@ func (task *transferTask) checkManifest() error {
 		task.CompletionTime = time.Now()
 	}
 	return nil
+}
+
+func determineDestination(task transferTask) (string, string, error) {
+	// construct a destination folder name
+	if _, err := endpoints.ParseCustomSpec(task.Destination); err == nil { // is this a custom transfer?
+		return task.Destination, "dts-" + task.Id.String(), nil
+	}
+	destination, err := databases.NewDatabase(task.Destination)
+	if err != nil {
+		return "", "", err
+	}
+	username, err := destination.LocalUser(task.User.Orcid)
+	if err != nil {
+		return "", "", err
+	}
+	destinationEndpoint := config.Databases[task.Destination].Endpoint
+	return destinationEndpoint, filepath.Join(username, "dts-"+task.Id.String()), nil
 }

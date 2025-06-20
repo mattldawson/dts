@@ -670,13 +670,9 @@ func (service *prototype) createTransfer(ctx context.Context,
 	}
 
 	// Check whether the destination is a "custom transfer", available only to Special People.
-	// Such a destination is encoded as "<provider>:<id>:<credential>", where
-	// * provider is the name of a tranport service (e.g. "globus") as in the config file
-	// * id is a corresponding identifier for the destination (e.g. a UUID for a Globus share)
-	// * credential is the name of a credential stored in the config file
 	if strings.Contains(input.Body.Destination, ":") {
-		terms := strings.Split(input.Body.Destination, ":")
-		if len(terms) != 3 {
+		_, err := endpoints.ParseCustomSpec(input.Body.Destination)
+		if err != nil {
 			return nil, huma.Error400BadRequest(fmt.Sprintf("Invalid destination: %s", input.Body.Destination))
 		}
 		if !user.IsSuper { // not allowed to do custom transfers

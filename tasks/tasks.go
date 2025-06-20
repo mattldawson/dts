@@ -171,12 +171,11 @@ type Specification struct {
 	// a Markdown description of the transfer task
 	Description string
 	// the name of destination database to which files are transferred (as
-	// specified in the DTS config file)
+	// specified in the DTS config file) OR a custom destination spec (<provider>:<id>:<credential>)
 	Destination string
 	// machine-readable instructions for processing the payload at its destination
 	Instructions map[string]any
-	// an array of identifiers for files to be transferred from Source to
-	// Destination
+	// an array of identifiers for files to be transferred from Source to Destination
 	FileIds []string
 	// the name of source database from which files are transferred (as specified
 	// in the DTS config file)
@@ -197,15 +196,17 @@ func Create(spec Specification) (uuid.UUID, error) {
 		return taskId, &NoFilesRequestedError{}
 	}
 
-	// verify that we can fetch the task's source and destination databases
-	// without incident
-	_, err := databases.NewDatabase(spec.Source)
+	// verify the source and destination strings
+	_, err := databases.NewDatabase(spec.Source) // source must refer to a database
 	if err != nil {
 		return taskId, err
 	}
-	_, err = databases.NewDatabase(spec.Destination)
-	if err != nil {
-		return taskId, err
+
+	// destination can be a database OR a custom location
+	if _, err = databases.NewDatabase(spec.Destination); err != nil {
+		if _, err = endpoints.ParseCustomSpec(spec.Destination); err != nil {
+			return taskId, err
+		}
 	}
 
 	// create a new task and send it along for processing

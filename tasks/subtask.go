@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -32,6 +33,7 @@ import (
 	"github.com/kbase/dts/config"
 	"github.com/kbase/dts/databases"
 	"github.com/kbase/dts/endpoints"
+	"github.com/kbase/dts/endpoints/globus"
 )
 
 // This type tracks subtasks within a transfer (e.g. files transferred from
@@ -39,7 +41,7 @@ import (
 // It holds multiple (possibly null) UUIDs corresponding to different
 // states in the file transfer lifecycle
 type transferSubtask struct {
-	Destination         string                  // name of destination database (in config)
+	//Destination         string                  // name of destination database (in config) OR custom spec
 	DestinationEndpoint string                  // name of destination database (in config)
 	DestinationFolder   string                  // folder path to which files are transferred
 	Descriptors         []any                   // Frictionless file descriptors
@@ -207,15 +209,28 @@ func (subtask *transferSubtask) beginTransfer() error {
 		}
 	}
 
-	// initiate the transfer
 	sourceEndpoint, err := endpoints.NewEndpoint(subtask.SourceEndpoint)
 	if err != nil {
 		return err
 	}
-	destinationEndpoint, err := endpoints.NewEndpoint(subtask.DestinationEndpoint)
-	if err != nil {
-		return err
+
+	// figure out the destination endpoint
+	var destinationEndpoint endpoints.Endpoint
+	if strings.Contains(subtask.DestinationEndpoint, ":") { // custom transfer spec
+		// the custom spec has been validated at this point, so we can assume everything's good
+		customSpec, _ := endpoints.ParseCustomSpec(subtask.DestinationEndpoint)
+		endpointId, _ := uuid.Parse(customSpec.Id)
+		credential := config.Credentials[customSpec.Credential]
+		clientId, _ := uuid.Parse(credential.Id)
+		destinationEndpoint, err = globus.NewEndpoint("Custom endpoint", endpointId, "/", clientId, credential.Secret)
+	} else {
+		destinationEndpoint, err = endpoints.NewEndpoint(subtask.DestinationEndpoint)
+		if err != nil {
+			return err
+		}
 	}
+
+	// initiate the transfer
 	transferId, err := sourceEndpoint.Transfer(destinationEndpoint, fileXfers)
 	if err != nil {
 		return err

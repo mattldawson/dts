@@ -44,6 +44,16 @@ func (e InvalidProviderError) Error() string {
 		e.Name, e.Provider)
 }
 
+// indicates that a custom endpoint (string) specification is invalid
+type InvalidCustomSpecError struct {
+	String, Message string
+}
+
+func (e InvalidCustomSpecError) Error() string {
+	return fmt.Sprintf("The custom endpoint specification '%s' is invalid: '%s'.",
+		e.String, e.Message)
+}
+
 // indicates that an endpoint provider is already registered and an attempt has
 // been made to register it again
 type AlreadyRegisteredError struct {

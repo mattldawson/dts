@@ -27,6 +27,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/fernet/fernet-go"
@@ -96,7 +97,7 @@ func (a *Authenticator) readAccessTokenFile() error {
 	reader := csv.NewReader(bytes.NewReader(plaintext))
 	reader.Comma = '\t'
 	reader.Comment = '#'
-	reader.FieldsPerRecord = 5
+	reader.FieldsPerRecord = 6
 
 	records, err := reader.ReadAll()
 	if err != nil {
@@ -106,11 +107,20 @@ func (a *Authenticator) readAccessTokenFile() error {
 	userRecords := make(map[string]User)
 	for _, record := range records {
 		token := record[4]
+
+		// superuser column: interpret "truthy" and "falsey" values as booleans
+		var isSuper bool
+		switch strings.ToLower(record[5]) {
+		case "1", "true":
+			isSuper = true
+		}
+
 		userRecords[token] = User{
 			Name:         record[0],
 			Email:        record[1],
 			Orcid:        record[2],
 			Organization: record[3],
+			IsSuper:      isSuper,
 		}
 	}
 

@@ -36,22 +36,23 @@ import (
 // * id is a corresponding identifier for the destination (e.g. a UUID for a Globus share)
 // * credential is the name of a credential stored in the config file
 type CustomSpec struct {
-	Provider, Id, Credential string
+	Provider, Id, Path, Credential string
 }
 
 // parses the string into a CustomSpec, returning an error if the spec is invalid
 func ParseCustomSpec(s string) (CustomSpec, error) {
 	terms := strings.Split(s, ":")
-	if len(terms) != 3 {
+	if len(terms) != 4 {
 		return CustomSpec{}, &InvalidCustomSpecError{
 			String:  s,
-			Message: "does not match form <provider>:<id>:<credential>",
+			Message: "does not match form <provider>:<id>:<path>:<credential>",
 		}
 	}
 	customSpec := CustomSpec{
 		Provider:   terms[0],
 		Id:         terms[1],
-		Credential: terms[2],
+		Path:       terms[2],
+		Credential: terms[3],
 	}
 
 	// for now, custom destinations must be Globus shares

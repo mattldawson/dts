@@ -346,15 +346,19 @@ func (task *transferTask) createManifest() (*datapackage.Package, error) {
 		taskUser["email"] = task.User.Email
 	}
 
-	// NOTE: we embed the local username for the destination database in this record
-	// NOTE: in case it's useful (e.g. for the KBase staging service)
-	destination, err := databases.NewDatabase(task.Destination)
-	if err != nil {
-		return nil, err
-	}
-	username, err := destination.LocalUser(task.User.Orcid)
-	if err != nil {
-		return nil, err
+	// NOTE: for non-custom transfers, we embed the local username for the destination database in
+	// NOTE: this record NOTE: in case it's useful (e.g. for the KBase staging service)
+	var err error
+	var username string
+	if _, err := endpoints.ParseCustomSpec(task.Destination); err != nil { // custom transfer?
+		destination, err := databases.NewDatabase(task.Destination)
+		if err != nil {
+			return nil, err
+		}
+		username, err = destination.LocalUser(task.User.Orcid)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	descriptor := map[string]any{
@@ -418,8 +422,8 @@ func (task *transferTask) checkManifest() error {
 
 func determineDestinationFolder(task transferTask) (string, error) {
 	// construct a destination folder name
-	if _, err := endpoints.ParseCustomSpec(task.Destination); err == nil { // is this a custom transfer?
-		return "dts-" + task.Id.String(), nil
+	if customSpec, err := endpoints.ParseCustomSpec(task.Destination); err == nil { // custom transfer?
+		return filepath.Join(customSpec.Path, "dts-"+task.Id.String()), nil
 	}
 	destination, err := databases.NewDatabase(task.Destination)
 	if err != nil {
@@ -439,7 +443,7 @@ func resolveDestinationEndpoint(destination string) (endpoints.Endpoint, error) 
 		endpointId, _ := uuid.Parse(customSpec.Id)
 		credential := config.Credentials[customSpec.Credential]
 		clientId, _ := uuid.Parse(credential.Id)
-		return globus.NewEndpoint("Custom endpoint", endpointId, "/", clientId, credential.Secret)
+		return globus.NewEndpoint("Custom endpoint", endpointId, customSpec.Path, clientId, credential.Secret)
 	} else {
 		return endpoints.NewEndpoint(config.Databases[destination].Endpoint)
 	}

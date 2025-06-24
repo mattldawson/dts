@@ -77,6 +77,9 @@ type Endpoint struct {
 	// authentication stuff
 	ClientId     uuid.UUID
 	ClientSecret string
+
+	// endpoint configuration
+	Info EndpointInfo
 }
 
 // creates a new Globus endpoint using the given information
@@ -109,7 +112,11 @@ func NewEndpoint(name string, shareId uuid.UUID, rootPath string, clientId uuid.
 	slog.Debug(fmt.Sprintf("Endpoint %s: root directory is %s",
 		name, rootPath))
 
-	return ep, nil
+	// query the endpoint for its capabilities
+	var err error
+	ep.Info, err = ep.getEndpointInfo(ep.Id)
+
+	return ep, err
 }
 
 // creates a new Globus endpoint using the information supplied in the
@@ -567,11 +574,32 @@ func (ep *Endpoint) getSubmissionId() (uuid.UUID, error) {
 	return response.Value, err
 }
 
+// https://docs.globus.org/api/transfer/endpoints_and_collections/#get_endpoint_or_collection_by_id
 // https://docs.globus.org/api/transfer/task_submit/#submit_transfer_task
 // https://docs.globus.org/api/transfer/task_submit/#transfer_item_fields
 func (ep *Endpoint) submitTransfer(destination endpoints.Endpoint,
 	submissionId uuid.UUID, files []endpoints.FileTransfer) (uuid.UUID, error) {
 	var xferId uuid.UUID
+
+	// are the source and destination endpoints configured in a conflicting way?
+	globusDestination := destination.(*Endpoint)
+	if ep.Info.ForceVerify && globusDestination.Info.DisableVerify { // not allowed!
+		return xferId, &endpoints.IncompatibleDestinationError{
+			Source:              ep.Name,
+			SourceProvider:      "globus",
+			Destination:         globusDestination.Name,
+			DestinationProvider: "globus",
+			Message:             "Source endpoint forces checksum verification, but destination disables it.",
+		}
+	}
+
+	// configure checksum settings based on destination endpoint info
+	var verifyChecksum bool = true
+	var syncLevel int = 3                     // transfer only if checksums don't match
+	if globusDestination.Info.DisableVerify { // checksum verification disabled on endpoint
+		verifyChecksum = false
+		syncLevel = 2 // transfer if source file is newer than destination file
+	}
 
 	type TransferItem struct {
 		DataType          string `json:"DATA_TYPE"` // "transfer_item"
@@ -580,6 +608,29 @@ func (ep *Endpoint) submitTransfer(destination endpoints.Endpoint,
 		ExternalChecksum  string `json:"external_checksum,omitempty"`
 		ChecksumAlgorithm string `json:"checksum_algorithm,omitempty"`
 	}
+	xferItems := make([]TransferItem, len(files))
+	for i, file := range files {
+		var checksum, checksumAlgorithm string
+		if verifyChecksum {
+			checksum = file.Hash
+			checksumAlgorithm = file.HashAlgorithm
+		}
+		xferItems[i] = TransferItem{
+			DataType:          "transfer_item",
+			SourcePath:        filepath.Join(ep.RootDir, file.SourcePath),
+			DestinationPath:   file.DestinationPath,
+			ExternalChecksum:  checksum,
+			ChecksumAlgorithm: checksumAlgorithm,
+		}
+	}
+
+	// the destination is a Globus endpoint, right?
+	gDestination, ok := destination.(*Endpoint)
+	if !ok {
+		return xferId, fmt.Errorf("The destination is not a Globus endpoint.")
+	}
+
+	// submit the transfer request
 	type SubmissionRequest struct {
 		DataType            string         `json:"DATA_TYPE"` // "transfer"
 		Id                  string         `json:"submission_id"`
@@ -591,23 +642,6 @@ func (ep *Endpoint) submitTransfer(destination endpoints.Endpoint,
 		VerifyChecksum      bool           `json:"verify_checksum"`
 		FailOnQuotaErrors   bool           `json:"fail_on_quota_errors"`
 	}
-	xferItems := make([]TransferItem, len(files))
-	for i, file := range files {
-		xferItems[i] = TransferItem{
-			DataType:          "transfer_item",
-			SourcePath:        filepath.Join(ep.RootDir, file.SourcePath),
-			DestinationPath:   file.DestinationPath,
-			ExternalChecksum:  file.Hash,
-			ChecksumAlgorithm: file.HashAlgorithm,
-		}
-	}
-
-	// the destination is a Globus endpoint, right?
-	gDestination, ok := destination.(*Endpoint)
-	if !ok {
-		return xferId, fmt.Errorf("The destination is not a Globus endpoint.")
-	}
-
 	data, err := json.Marshal(SubmissionRequest{
 		DataType:            "transfer",
 		Id:                  submissionId.String(),
@@ -615,8 +649,8 @@ func (ep *Endpoint) submitTransfer(destination endpoints.Endpoint,
 		Data:                xferItems,
 		DestinationEndpoint: gDestination.Id.String(),
 		SourceEndpoint:      ep.Id.String(),
-		SyncLevel:           3, // transfer only if checksums don't match
-		VerifyChecksum:      true,
+		SyncLevel:           syncLevel,
+		VerifyChecksum:      verifyChecksum,
 		FailOnQuotaErrors:   true,
 	})
 	if err != nil {
@@ -647,4 +681,28 @@ func (ep *Endpoint) submitTransfer(destination endpoints.Endpoint,
 	slog.Debug(fmt.Sprintf("Initiated Globus transfer task %s (%d files)",
 		xferId.String(), len(files)))
 	return xferId, nil
+}
+
+type EndpointInfo struct {
+	DisableVerify bool `json:"disable_verify"` // true if checksums are not available
+	ForceVerify   bool `json:"force_verify"`   // true if checksums must be available
+}
+
+func (ep *Endpoint) getEndpointInfo(id uuid.UUID) (EndpointInfo, error) {
+	// query the endpoint for its capabilities
+	body, err := ep.get(fmt.Sprintf("endpoint/%s", id), url.Values{})
+	if err != nil {
+		return EndpointInfo{}, err
+	}
+	if responseIsError(body) {
+		var globusErr GlobusError
+		err = json.Unmarshal(body, &globusErr)
+		if err == nil {
+			err = &globusErr
+		}
+		return EndpointInfo{}, err
+	}
+	var endpointInfo EndpointInfo
+	err = json.Unmarshal(body, &endpointInfo)
+	return endpointInfo, err
 }

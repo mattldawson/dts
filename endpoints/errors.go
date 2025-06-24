@@ -68,9 +68,14 @@ func (e AlreadyRegisteredError) Error() string {
 type IncompatibleDestinationError struct {
 	Source, SourceProvider           string
 	Destination, DestinationProvider string
+	Message                          string
 }
 
 func (e IncompatibleDestinationError) Error() string {
+	if e.Message != "" {
+		return fmt.Sprintf("The source endpoint '%s' (%s) cannot transfer files to the destination endpoint '%s' (%s): %s",
+			e.Source, e.SourceProvider, e.Destination, e.DestinationProvider, e.Message)
+	}
 	return fmt.Sprintf("The source endpoint '%s' (%s) cannot transfer files to the destination endpoint '%s' (%s)",
 		e.Source, e.SourceProvider, e.Destination, e.DestinationProvider)
 }

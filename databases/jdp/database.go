@@ -471,7 +471,7 @@ func descriptorFromOrganismAndFile(organism Organism, file File) map[string]any 
 		"path":      filePath,
 		"format":    format,
 		"mediatype": mimetypeForFile(file.Name),
-		"bytes":     file.Size,
+		"bytes":     int(file.Size),
 		"hash":      file.MD5Sum,
 		"credit": credit.CreditMetadata{
 			Identifier:   id,

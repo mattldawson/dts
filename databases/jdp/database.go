@@ -175,13 +175,29 @@ func (db *Database) Descriptors(orcid string, fileIds []string) ([]map[string]an
 		return nil, err
 	}
 
-	// reorder the descriptors to match that of the requested file IDs
+	// reorder the descriptors to match that of the requested file IDs, and track file IDs that aren't
+	// matched to descriptors
 	descriptorsByFileId := make(map[string]map[string]any)
+	fileIdsFound := make(map[string]bool)
 	for _, descriptor := range descriptors {
 		descriptorsByFileId[descriptor["id"].(string)] = descriptor
+		fileIdsFound[descriptor["id"].(string)] = true
 	}
-	for i, fileId := range fileIds {
-		descriptors[i] = descriptorsByFileId[fileId]
+
+	// if any file IDs don't have corresponding descriptors, find out which ones and issue an error
+	if len(descriptors) < len(fileIds) {
+		for _, fileId := range fileIds {
+			if _, found := fileIdsFound[fileId]; !found {
+				return nil, databases.ResourceNotFoundError{
+					Database:   "JDP",
+					ResourceId: fileId,
+				}
+			}
+		}
+	}
+
+	for i := range descriptors {
+		descriptors[i] = descriptorsByFileId[fileIds[i]]
 	}
 	return descriptors, nil
 }

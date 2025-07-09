@@ -30,8 +30,8 @@ import (
 	"github.com/kbase/dts/config"
 )
 
-// A custom endpoint specification encoded in a string of the form "<provider>:<id>:<credential>",
-// where
+// A custom endpoint specification encoded in a string of the form
+// "<provider>:<id>:<path>:<credential>", where
 // * provider is the name of a tranport service (e.g. "globus") as in the config file
 // * id is a corresponding identifier for the destination (e.g. a UUID for a Globus share)
 // * credential is the name of a credential stored in the config file

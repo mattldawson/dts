@@ -132,8 +132,8 @@ func (service *prototype) Close() {
 
 // Version numbers
 var majorVersion = 0
-var minorVersion = 7
-var patchVersion = 1
+var minorVersion = 8
+var patchVersion = 0
 
 // Version string
 var version = fmt.Sprintf("%d.%d.%d", majorVersion, minorVersion, patchVersion)

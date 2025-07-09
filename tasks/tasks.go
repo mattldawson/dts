@@ -104,9 +104,6 @@ func Start() error {
 			}
 		}
 
-		// fire up the transfer journal
-		journal.Init()
-
 		firstCall = false
 	}
 
@@ -122,6 +119,12 @@ func Start() error {
 
 	// can we access the local endpoint?
 	_, err = endpoints.NewEndpoint(config.Service.Endpoint)
+	if err != nil {
+		return err
+	}
+
+	// fire up the transfer journal
+	err = journal.Init()
 	if err != nil {
 		return err
 	}
@@ -160,7 +163,13 @@ func Stop() error {
 	if running {
 		taskChannels.Stop <- struct{}{}
 		err = <-taskChannels.Error
-		journal.Finalize()
+		if err != nil {
+			return err
+		}
+		err = journal.Finalize()
+		if err != nil {
+			return err
+		}
 		running = false
 	} else {
 		err = &NotRunningError{}

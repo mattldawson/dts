@@ -167,7 +167,7 @@ type Record struct {
 // id: the unique identifier for the transfer
 func TransferRecord(id uuid.UUID) (Record, error) {
 	if !IsOpen() {
-		return Record{}, NotOpenError{}
+		return Record{}, &NotOpenError{}
 	}
 	var record Record
 	err := sqlitex.Execute(conn_, "SELECT source, destination, orcid, start_time, stop_time, status, payload_size, num_files FROM transfers WHERE id = ?;",

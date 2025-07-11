@@ -19,36 +19,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package auth
+package config
 
-// A record containing information about a DTS client. A DTS client is a KBase
-// user whose KBase developer token is used to authorize with the DTS.
-type Client struct {
-	// client name (human-readable and display-friendly)
-	Name string
-	// KBase username (if any) used by client to access DTS
-	Username string
-	// client email address
-	Email string
-	// ORCID identifier associated with this client
-	Orcid string
-	// organization with which this client is affiliated
-	Organization string
-}
-
-// A record containing information about a DTS user using a DTS client to
-// request file transfers. A DTS user need not have a KBase developer token
-// (but should have a KBase account if they are requesting files be transferred
-// to KBase).
-type User struct {
-	// name (human-readable and display-friendly)
-	Name string
-	// email address
-	Email string
-	// ORCID identifier associated with this user
-	Orcid string
-	// organization with which this user is affiliated
-	Organization string
-	// true if this user is a Superuser
-	IsSuper bool
+type credentialConfig struct {
+	// the ID used for authentication (username or UUID)
+	Id string `yaml:"id"`
+	// the secret used for authentication (e.g. password)
+	// DO NOT STORE THIS IN A CONFIG FILE! Use an environment variable instead
+	Secret string `yaml:"secret"`
 }

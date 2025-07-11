@@ -15,28 +15,27 @@ service:
                              # is deleted (seconds)
   debug: true                # set to enable debug-level logging and other tools
 
+credentials:
+  globus:
+    id: <credential ID (username, UUID, etc)>
+    secret: <secret/password>
+
 endpoints: # file transfer endpoints
   globus-local:
     name: name-of-endpoint                   # usually Globus display name
     id: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx # Unique globus endpoint ID
     provider: globus                         # endpoint provider (globus, ???)
-    auth:
-      client_id: <ID of client with authentication secret>
-      client_secret: <secret>
+    credential: globus
   globus-jdp:
     name: name-of-endpoint                   # usually Globus display name
     id: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx # Unique globus endpoint ID
     provider: globus                         # endpoint provider (globus, ???)
-    auth:
-      client_id: <ID of client with authentication secret>
-      client_secret: <secret>
+    credential: globus
   globus-kbase:
     name: name-of-endpoint                   # usually Globus display name
     id: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx # Unique globus endpoint ID
     provider: globus                         # endpoint provider (globus, ???)
-    auth:
-      client_id: <ID of client with authentication secret>
-      client_secret: <secret>
+    credential: globus
 
 databases: # databases between which files can be transferred
   jdp:                                   # JGI data portal configuration

@@ -38,8 +38,8 @@ type File struct {
 	Name string `json:"file_name"`
 	// directory in which the file sits
 	Path string `json:"file_path"`
-	// file size (bytes)
-	Size int `json:"file_size"`
+	// file size (bytes) -- perversely, can be an integer or float value, so we store as float
+	Size float64 `json:"file_size"`
 	// file metadata
 	Metadata Metadata `json:"metadata"`
 	// name of the user that owns the file

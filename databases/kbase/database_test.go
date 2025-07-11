@@ -200,7 +200,7 @@ func setup() {
 	copyDataFile("good_user_table_0.csv", kbaseUserTableFile)
 
 	databases.RegisterDatabase("kbase", NewDatabase)
-	endpoints.RegisterEndpointProvider("globus", globus.NewEndpoint)
+	endpoints.RegisterEndpointProvider("globus", globus.NewEndpointFromConfig)
 }
 
 // copies a file from a source to a destination file within the DTS data directory

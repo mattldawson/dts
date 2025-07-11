@@ -44,6 +44,16 @@ func (e InvalidProviderError) Error() string {
 		e.Name, e.Provider)
 }
 
+// indicates that a custom endpoint (string) specification is invalid
+type InvalidCustomSpecError struct {
+	String, Message string
+}
+
+func (e InvalidCustomSpecError) Error() string {
+	return fmt.Sprintf("The custom endpoint specification '%s' is invalid: '%s'.",
+		e.String, e.Message)
+}
+
 // indicates that an endpoint provider is already registered and an attempt has
 // been made to register it again
 type AlreadyRegisteredError struct {
@@ -52,4 +62,20 @@ type AlreadyRegisteredError struct {
 
 func (e AlreadyRegisteredError) Error() string {
 	return fmt.Sprintf("Cannot register endpoint provider '%s': already registered", e.Provider)
+}
+
+// indicates that a source endpoint has been asked to transfer files to an incompatible destination
+type IncompatibleDestinationError struct {
+	Source, SourceProvider           string
+	Destination, DestinationProvider string
+	Message                          string
+}
+
+func (e IncompatibleDestinationError) Error() string {
+	if e.Message != "" {
+		return fmt.Sprintf("The source endpoint '%s' (%s) cannot transfer files to the destination endpoint '%s' (%s): %s",
+			e.Source, e.SourceProvider, e.Destination, e.DestinationProvider, e.Message)
+	}
+	return fmt.Sprintf("The source endpoint '%s' (%s) cannot transfer files to the destination endpoint '%s' (%s)",
+		e.Source, e.SourceProvider, e.Destination, e.DestinationProvider)
 }

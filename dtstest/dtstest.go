@@ -121,6 +121,10 @@ func RegisterEndpoint(endpointName string, options EndpointOptions) error {
 	return endpoints.RegisterEndpointProvider(provider, newEndpointFunc)
 }
 
+func (ep *Endpoint) Provider() string {
+	return "dtstest"
+}
+
 func (ep *Endpoint) Root() string {
 	return ep.RootPath
 }

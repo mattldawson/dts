@@ -34,6 +34,15 @@ func (e InvalidServiceConfigError) Error() string {
 	return fmt.Sprintf("Invalid service configuration: %s", e.Message)
 }
 
+// indicates that a credential is not configured properly
+type InvalidCredentialConfigError struct {
+	Credential, Message string
+}
+
+func (e InvalidCredentialConfigError) Error() string {
+	return fmt.Sprintf("Credential %s is not properly configured: %s", e.Credential, e.Message)
+}
+
 // indicates that an endpoint is not configured properly
 type InvalidEndpointConfigError struct {
 	Endpoint, Message string

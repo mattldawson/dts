@@ -85,6 +85,10 @@ func (ep *Endpoint) setRoot(dir string) error {
 	return err
 }
 
+func (ep *Endpoint) Provider() string {
+	return "local"
+}
+
 func (ep *Endpoint) Root() string {
 	return ep.root
 }
@@ -175,9 +179,15 @@ func (ep *Endpoint) transferFiles(xferId uuid.UUID, dest endpoints.Endpoint) {
 
 func (ep *Endpoint) Transfer(dst endpoints.Endpoint, files []endpoints.FileTransfer) (uuid.UUID, error) {
 	var xferId uuid.UUID
+
 	_, ok := dst.(*Endpoint)
 	if !ok {
-		return xferId, fmt.Errorf("Cannot transfer files between a local endpoint and another type of endpoint!")
+		return xferId, &endpoints.IncompatibleDestinationError{
+			Source:              ep.Name,
+			SourceProvider:      "local",
+			Destination:         ep.Name,
+			DestinationProvider: ep.Provider(),
+		}
 	}
 
 	// first, we check that all requested files are staged on this endpoint

@@ -108,9 +108,10 @@ func (db *Database) Search(orcid string, params databases.SearchParameters) (dat
 
 	p := url.Values{}
 	p.Add("q", params.Query)
-	if params.Status == databases.SearchFileStatusStaged {
+	switch params.Status {
+	case databases.SearchFileStatusStaged:
 		p.Add(`ff[file_status]`, "RESTORED")
-	} else if params.Status == databases.SearchFileStatusUnstaged {
+	case databases.SearchFileStatusUnstaged:
 		p.Add(`ff[file_status]`, "PURGED")
 	}
 	p.Add("p", strconv.Itoa(pageNumber))
@@ -175,13 +176,31 @@ func (db *Database) Descriptors(orcid string, fileIds []string) ([]map[string]an
 		return nil, err
 	}
 
-	// reorder the descriptors to match that of the requested file IDs
+	// reorder the descriptors to match that of the requested file IDs, and track file IDs that aren't
+	// matched to descriptors
 	descriptorsByFileId := make(map[string]map[string]any)
+	fileIdsFound := make(map[string]bool)
 	for _, descriptor := range descriptors {
 		descriptorsByFileId[descriptor["id"].(string)] = descriptor
+		fileIdsFound[descriptor["id"].(string)] = true
 	}
-	for i, fileId := range fileIds {
-		descriptors[i] = descriptorsByFileId[fileId]
+
+	// if any file IDs don't have corresponding descriptors, find out which ones and issue an error
+	if len(descriptors) < len(fileIds) {
+		missingResources := make([]string, 0)
+		for _, fileId := range fileIds {
+			if _, found := fileIdsFound[fileId]; !found {
+				missingResources = append(missingResources, fileId)
+			}
+		}
+		return nil, databases.ResourcesNotFoundError{
+			Database:    "JDP",
+			ResourceIds: missingResources,
+		}
+	}
+
+	for i := range descriptors {
+		descriptors[i] = descriptorsByFileId[fileIds[i]]
 	}
 	return descriptors, nil
 }
@@ -220,8 +239,8 @@ func (db *Database) StageFiles(orcid string, fileIds []string) (uuid.UUID, error
 	body, err := db.post("request_archived_files/", orcid, bytes.NewReader(data))
 	if err != nil {
 		switch e := err.(type) {
-		case *databases.ResourceNotFoundError:
-			e.ResourceId = strings.Join(fileIds, ",")
+		case *databases.ResourcesNotFoundError:
+			e.ResourceIds = fileIds
 		}
 		return xferId, err
 	}
@@ -471,7 +490,7 @@ func descriptorFromOrganismAndFile(organism Organism, file File) map[string]any 
 		"path":      filePath,
 		"format":    format,
 		"mediatype": mimetypeForFile(file.Name),
-		"bytes":     file.Size,
+		"bytes":     int(file.Size),
 		"hash":      file.MD5Sum,
 		"credit": credit.CreditMetadata{
 			Identifier:   id,
@@ -602,7 +621,7 @@ func (db *Database) post(resource, orcid string, body io.Reader) ([]byte, error)
 		defer resp.Body.Close()
 		return io.ReadAll(resp.Body)
 	case 404:
-		return nil, &databases.ResourceNotFoundError{
+		return nil, &databases.ResourcesNotFoundError{
 			Database: "JDP",
 		}
 	case 503:

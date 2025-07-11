@@ -26,6 +26,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/frictionlessdata/datapackage-go/datapackage"
@@ -35,6 +36,7 @@ import (
 	"github.com/kbase/dts/config"
 	"github.com/kbase/dts/databases"
 	"github.com/kbase/dts/endpoints"
+	"github.com/kbase/dts/endpoints/globus"
 )
 
 // This type tracks the lifecycle of a file transfer task that copies files from
@@ -45,7 +47,7 @@ type transferTask struct {
 	CompletionTime    time.Time         // time at which the transfer completed
 	DataDescriptors   []any             // in-line data descriptors
 	Description       string            // Markdown description of the task
-	Destination       string            // name of destination database (in config)
+	Destination       string            // name of destination database (in config) OR custom spec
 	DestinationFolder string            // folder path to which files are transferred
 	FileIds           []string          // IDs of all files being transferred
 	Id                uuid.UUID         // task identifier
@@ -128,20 +130,12 @@ func (task *transferTask) start() error {
 		return &PayloadTooLargeError{Size: task.PayloadSize}
 	}
 
-	// determine the destination endpoint
+	// determine the destination endpoint and folder
 	// FIXME: this conflicts with our redesign!!
-	destinationEndpoint := config.Databases[task.Destination].Endpoint
-
-	// construct a destination folder name
-	destination, err := databases.NewDatabase(task.Destination)
+	task.DestinationFolder, err = determineDestinationFolder(*task)
 	if err != nil {
 		return err
 	}
-	username, err := destination.LocalUser(task.User.Orcid)
-	if err != nil {
-		return err
-	}
-	task.DestinationFolder = filepath.Join(username, "dts-"+task.Id.String())
 
 	// assemble distinct endpoints and create a subtask for each
 	distinctEndpoints := make(map[string]any)
@@ -165,13 +159,12 @@ func (task *transferTask) start() error {
 
 		// set up a subtask for the endpoint
 		task.Subtasks = append(task.Subtasks, transferSubtask{
-			Destination:         task.Destination,
-			DestinationEndpoint: destinationEndpoint,
-			DestinationFolder:   task.DestinationFolder,
-			Descriptors:         descriptorsForEndpoint,
-			Source:              task.Source,
-			SourceEndpoint:      sourceEndpoint,
-			User:                task.User,
+			Destination:       task.Destination,
+			DestinationFolder: task.DestinationFolder,
+			Descriptors:       descriptorsForEndpoint,
+			Source:            task.Source,
+			SourceEndpoint:    sourceEndpoint,
+			User:              task.User,
 		})
 	}
 
@@ -285,9 +278,7 @@ func (task *transferTask) Update() error {
 			}
 
 			// begin transferring the manifest
-			// FIXME: how do we determine the database's destination endpoint?
-			destinationEndpointName := config.Databases[task.Destination].Endpoint
-			destinationEndpoint, err := endpoints.NewEndpoint(destinationEndpointName)
+			destinationEndpoint, err := resolveDestinationEndpoint(task.Destination)
 			if err != nil {
 				return err
 			}
@@ -355,15 +346,19 @@ func (task *transferTask) createManifest() (*datapackage.Package, error) {
 		taskUser["email"] = task.User.Email
 	}
 
-	// NOTE: we embed the local username for the destination database in this record
-	// NOTE: in case it's useful (e.g. for the KBase staging service)
-	destination, err := databases.NewDatabase(task.Destination)
-	if err != nil {
-		return nil, err
-	}
-	username, err := destination.LocalUser(task.User.Orcid)
-	if err != nil {
-		return nil, err
+	// NOTE: for non-custom transfers, we embed the local username for the destination database in
+	// NOTE: this record NOTE: in case it's useful (e.g. for the KBase staging service)
+	var err error
+	var username string
+	if _, err := endpoints.ParseCustomSpec(task.Destination); err != nil { // custom transfer?
+		destination, err := databases.NewDatabase(task.Destination)
+		if err != nil {
+			return nil, err
+		}
+		username, err = destination.LocalUser(task.User.Orcid)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	descriptor := map[string]any{
@@ -405,13 +400,16 @@ func (task *transferTask) checkManifest() error {
 		task.Manifest = uuid.NullUUID{}
 		os.Remove(task.ManifestFile)
 
-		destination, err := databases.NewDatabase(task.Destination)
-		if err != nil {
-			return err
-		}
-		err = destination.Finalize(task.User.Orcid, task.Id)
-		if err != nil {
-			return err
+		// finalize any non-custom transfers
+		if !strings.Contains(task.Destination, ":") {
+			destination, err := databases.NewDatabase(task.Destination)
+			if err != nil {
+				return err
+			}
+			err = destination.Finalize(task.User.Orcid, task.Id)
+			if err != nil {
+				return err
+			}
 		}
 
 		task.ManifestFile = ""
@@ -420,4 +418,32 @@ func (task *transferTask) checkManifest() error {
 		task.CompletionTime = time.Now()
 	}
 	return nil
+}
+
+func determineDestinationFolder(task transferTask) (string, error) {
+	// construct a destination folder name
+	if customSpec, err := endpoints.ParseCustomSpec(task.Destination); err == nil { // custom transfer?
+		return filepath.Join(customSpec.Path, "dts-"+task.Id.String()), nil
+	}
+	destination, err := databases.NewDatabase(task.Destination)
+	if err != nil {
+		return "", err
+	}
+	username, err := destination.LocalUser(task.User.Orcid)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(username, "dts-"+task.Id.String()), nil
+}
+
+func resolveDestinationEndpoint(destination string) (endpoints.Endpoint, error) {
+	// everything's been validated at this point, so no need to check for errors
+	if strings.Contains(destination, ":") { // custom transfer spec
+		customSpec, _ := endpoints.ParseCustomSpec(destination)
+		endpointId, _ := uuid.Parse(customSpec.Id)
+		credential := config.Credentials[customSpec.Credential]
+		clientId, _ := uuid.Parse(credential.Id)
+		return globus.NewEndpoint("Custom endpoint", endpointId, customSpec.Path, clientId, credential.Secret)
+	}
+	return endpoints.NewEndpoint(config.Databases[destination].Endpoint)
 }

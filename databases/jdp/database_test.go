@@ -35,7 +35,7 @@ func setup() {
 	dtstest.EnableDebugLogging()
 	config.Init([]byte(jdpConfig))
 	databases.RegisterDatabase("jdp", NewDatabase)
-	endpoints.RegisterEndpointProvider("globus", globus.NewEndpoint)
+	endpoints.RegisterEndpointProvider("globus", globus.NewEndpointFromConfig)
 }
 
 // this function gets called after all tests have been run

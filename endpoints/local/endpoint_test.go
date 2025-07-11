@@ -92,7 +92,7 @@ func setup() {
 	// create source files
 	for i := 1; i <= 3; i++ {
 		err = os.WriteFile(filepath.Join(sourceRoot, fmt.Sprintf("file%d.txt", i)),
-			[]byte(fmt.Sprintf("This is the content of file %d.", i)), 0600)
+			fmt.Appendf(nil, "This is the content of file %d.", i), 0600)
 		if err != nil {
 			panic(err)
 		}
@@ -103,7 +103,7 @@ func setup() {
 	myConfig = strings.ReplaceAll(myConfig, "DESTINATION_ROOT", destinationRoot)
 	myConfig = strings.ReplaceAll(myConfig, "DESTINATION_CANCEL", destinationRootCancel)
 	fmt.Printf(myConfig)
-	err = config.InitSelected([]byte(myConfig), false, false, true)
+	err = config.InitSelected([]byte(myConfig), false, false, false, true)
 	if err != nil {
 		panic(err)
 	}

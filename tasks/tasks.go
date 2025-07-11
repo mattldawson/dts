@@ -43,6 +43,7 @@ import (
 	"github.com/kbase/dts/endpoints"
 	"github.com/kbase/dts/endpoints/globus"
 	"github.com/kbase/dts/endpoints/local"
+	"github.com/kbase/dts/journal"
 )
 
 // useful type aliases
@@ -72,6 +73,7 @@ func Start() error {
 	// if this is the first call to Start(), register our built-in endpoint
 	// and database providers
 	if firstCall {
+
 		// NOTE: it's okay if these endpoint providers have already been registered,
 		// NOTE: as they can be used in testing
 		err := endpoints.RegisterEndpointProvider("globus", globus.NewEndpointFromConfig)
@@ -101,6 +103,7 @@ func Start() error {
 				return err
 			}
 		}
+
 		firstCall = false
 	}
 
@@ -116,6 +119,12 @@ func Start() error {
 
 	// can we access the local endpoint?
 	_, err = endpoints.NewEndpoint(config.Service.Endpoint)
+	if err != nil {
+		return err
+	}
+
+	// fire up the transfer journal
+	err = journal.Init()
 	if err != nil {
 		return err
 	}
@@ -154,6 +163,13 @@ func Stop() error {
 	if running {
 		taskChannels.Stop <- struct{}{}
 		err = <-taskChannels.Error
+		if err != nil {
+			return err
+		}
+		err = journal.Finalize()
+		if err != nil {
+			return err
+		}
 		running = false
 	} else {
 		err = &NotRunningError{}
@@ -222,6 +238,7 @@ func Create(spec Specification) (uuid.UUID, error) {
 	case taskId = <-taskChannels.ReturnTaskId:
 	case err = <-taskChannels.Error:
 	}
+
 	return taskId, err
 }
 
@@ -422,6 +439,7 @@ func processTasks() {
 							slog.Info(fmt.Sprintf("Task %s: completed successfully", task.Id.String()))
 						case TransferStatusFailed:
 							slog.Info(fmt.Sprintf("Task %s: failed", task.Id.String()))
+							journal.LogFailedTransfer(task.Id)
 						}
 					}
 				}

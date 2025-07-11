@@ -108,9 +108,10 @@ func (db *Database) Search(orcid string, params databases.SearchParameters) (dat
 
 	p := url.Values{}
 	p.Add("q", params.Query)
-	if params.Status == databases.SearchFileStatusStaged {
+	switch params.Status {
+	case databases.SearchFileStatusStaged:
 		p.Add(`ff[file_status]`, "RESTORED")
-	} else if params.Status == databases.SearchFileStatusUnstaged {
+	case databases.SearchFileStatusUnstaged:
 		p.Add(`ff[file_status]`, "PURGED")
 	}
 	p.Add("p", strconv.Itoa(pageNumber))
@@ -186,13 +187,15 @@ func (db *Database) Descriptors(orcid string, fileIds []string) ([]map[string]an
 
 	// if any file IDs don't have corresponding descriptors, find out which ones and issue an error
 	if len(descriptors) < len(fileIds) {
+		missingResources := make([]string, 0)
 		for _, fileId := range fileIds {
 			if _, found := fileIdsFound[fileId]; !found {
-				return nil, databases.ResourceNotFoundError{
-					Database:   "JDP",
-					ResourceId: fileId,
-				}
+				missingResources = append(missingResources, fileId)
 			}
+		}
+		return nil, databases.ResourcesNotFoundError{
+			Database:    "JDP",
+			ResourceIds: missingResources,
 		}
 	}
 
@@ -236,8 +239,8 @@ func (db *Database) StageFiles(orcid string, fileIds []string) (uuid.UUID, error
 	body, err := db.post("request_archived_files/", orcid, bytes.NewReader(data))
 	if err != nil {
 		switch e := err.(type) {
-		case *databases.ResourceNotFoundError:
-			e.ResourceId = strings.Join(fileIds, ",")
+		case *databases.ResourcesNotFoundError:
+			e.ResourceIds = fileIds
 		}
 		return xferId, err
 	}
@@ -618,7 +621,7 @@ func (db *Database) post(resource, orcid string, body io.Reader) ([]byte, error)
 		defer resp.Body.Close()
 		return io.ReadAll(resp.Body)
 	case 404:
-		return nil, &databases.ResourceNotFoundError{
+		return nil, &databases.ResourcesNotFoundError{
 			Database: "JDP",
 		}
 	case 503:

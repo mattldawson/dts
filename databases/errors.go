@@ -23,6 +23,7 @@ package databases
 
 import (
 	"fmt"
+	"strings"
 )
 
 // This error type is returned when a database is sought but not found.
@@ -117,13 +118,14 @@ func (e PermissionDeniedError) Error() string {
 		e.ResourceId, e.Database)
 }
 
-// this error type is returned when a resource is requested and is not found
-type ResourceNotFoundError struct {
-	Database, ResourceId string
+// this error type is returned when one or more resources are requested and is not found
+type ResourcesNotFoundError struct {
+	Database    string
+	ResourceIds []string
 }
 
-func (e ResourceNotFoundError) Error() string {
-	return fmt.Sprintf("Can't access file '%s' in database '%s': not found", e.ResourceId, e.Database)
+func (e ResourcesNotFoundError) Error() string {
+	return fmt.Sprintf("Some resources in database '%s' were not found: %s", e.Database, strings.Join(e.ResourceIds, ","))
 }
 
 // this error type is returned when an endpoint cannot be found for a file ID

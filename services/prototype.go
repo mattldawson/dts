@@ -406,7 +406,7 @@ func databaseError(err error) error {
 			return huma.Error503ServiceUnavailable(err.Error(), err)
 		case *databases.PermissionDeniedError, *databases.UnauthorizedError:
 			return huma.Error401Unauthorized(err.Error(), err)
-		case *databases.NotFoundError, *databases.ResourceNotFoundError, *databases.ResourceEndpointNotFoundError:
+		case *databases.NotFoundError, *databases.ResourcesNotFoundError, *databases.ResourceEndpointNotFoundError:
 			return huma.Error404NotFound(err.Error(), err)
 		default:
 			return huma.Error500InternalServerError(err.Error(), err)

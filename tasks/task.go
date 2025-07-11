@@ -444,7 +444,6 @@ func resolveDestinationEndpoint(destination string) (endpoints.Endpoint, error) 
 		credential := config.Credentials[customSpec.Credential]
 		clientId, _ := uuid.Parse(credential.Id)
 		return globus.NewEndpoint("Custom endpoint", endpointId, customSpec.Path, clientId, credential.Secret)
-	} else {
-		return endpoints.NewEndpoint(config.Databases[destination].Endpoint)
 	}
+	return endpoints.NewEndpoint(config.Databases[destination].Endpoint)
 }

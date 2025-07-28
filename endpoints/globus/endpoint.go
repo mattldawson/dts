@@ -242,11 +242,9 @@ func (ep *Endpoint) Transfers() ([]uuid.UUID, error) {
 }
 
 func (ep *Endpoint) Transfer(destination endpoints.Endpoint, files []endpoints.FileTransfer) (uuid.UUID, error) {
-	// NOTE: We don't check whether files are staged here, because the endpoint
-	// NOTE: itself doesn't always have a reliable staging check (e.g. JDP's
-	// NOTE: private data is invisible to Globus directory listings).
-	// NOTE: Consequently, we assume that files are staged by the time this
-	// NOTE: function is called.
+	// NOTE: We don't check whether files are staged here, because the endpoint itself doesn't always
+	// have a reliable staging check (e.g. JDP's private data is invisible to Globus directory
+	// listings). Consequently, we assume that files are staged by the time this function is called.
 
 	// obtain a submission ID
 	submissionId, err := ep.getSubmissionId()

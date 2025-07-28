@@ -400,7 +400,7 @@ func responseIsError(body []byte) bool {
 func (ep *Endpoint) authenticate() error {
 	authUrl := "https://auth.globus.org/v2/oauth2/token"
 	data := url.Values{}
-	data.Set("scope", strings.Join(ep.Scopes, "+"))
+	data.Set("scope", strings.Join(ep.Scopes, " "))
 	data.Set("grant_type", "client_credentials")
 	req, err := http.NewRequest(http.MethodPost, authUrl, strings.NewReader(data.Encode()))
 	if err != nil {

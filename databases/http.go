@@ -31,9 +31,9 @@ import (
 
 // Here's a secure HTTP client that can be used to connect to databases. It
 // sets a reasonable timeout and enables HTTP Strict Transport Security (HSTS).
-func SecureHttpClient() http.Client {
+func SecureHttpClient(timeout time.Duration) http.Client {
 	client := http.Client{
-		Timeout: time.Second * 10,
+		Timeout: timeout,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if req.URL.Scheme == "http" {
 				return &DowngradedRedirectError{

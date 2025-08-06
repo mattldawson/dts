@@ -61,7 +61,7 @@ func setup() {
 
 	// construct NMDC-specific search parameters for a study
 	nmdcSearchParams = make(map[string]any)
-	nmdcSearchParams["study_id"] = "nmdc:sty-11-5tgfr349"
+	nmdcSearchParams["study_id"] = "nmdc:sty-11-r2h77870"
 }
 
 // this function gets called after all tests have been run

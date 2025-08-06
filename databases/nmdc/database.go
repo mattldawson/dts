@@ -96,7 +96,7 @@ func NewDatabase() (databases.Database, error) {
 
 	// NOTE: we prevent redirects from HTTPS -> HTTP!
 	db := &Database{
-		Client: databases.SecureHttpClient(),
+		Client: databases.SecureHttpClient(time.Second * 20),
 		EndpointForHost: map[string]string{
 			"https://data.microbiomedata.org/data/": nerscEndpoint,
 			"https://nmdcdemo.emsl.pnnl.gov/":       emslEndpoint,

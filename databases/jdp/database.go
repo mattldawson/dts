@@ -155,7 +155,7 @@ func (db *Database) Descriptors(orcid string, fileIds []string) ([]map[string]an
 	type MetadataRequest struct {
 		Ids                []string `json:"ids"`
 		Aggregations       bool     `json:"aggregations"`
-		IncludePrivateData int     `json:"include_private_data"`
+		IncludePrivateData int      `json:"include_private_data"`
 	}
 	data, err := json.Marshal(MetadataRequest{
 		Ids:                strippedFileIds,

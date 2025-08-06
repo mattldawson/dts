@@ -4,11 +4,13 @@
 By adding some metadata to your DTS transfer request, you can easily import your data into a KBase
 narrative.
 
-Here we describe a schema for the `instructions` field of a [DTS transfer POST request](https://dts.kbase.us/docs#/operations/post-api-v1-transfers).
-This field is embedded in the `manifest.json` file written to the root of the destination folder for
-a payload, and holds a JSON object that tells KBase's staging service how to import the contents of
-the payload into a KBase narrative. The schema is described in detail
-[here](https://github.com/kbase/staging_service/blob/develop/import_specifications/schema/dts_manifest_schema.json).
+Here we describe a structure for the `instructions` field of a [DTS transfer POST request](https://dts.kbase.us/docs#/operations/post-api-v1-transfers)
+suitable for importing content to a KBase narrative. The `instructions` field is embedded in the
+`manifest.json` file written to the root of the destination folder for a payload. In general, this
+field holds a JSON object that conveys information to a destination database that can be used for
+processing data after a transfer. In the case of KBase, the `instructions` field is interpreted by
+a file staging service to import the contents of the payload into a KBase narrative. This particular
+structure is described in detail [here](https://github.com/kbase/staging_service/blob/develop/import_specifications/schema/dts_manifest_schema.json).
 
 What we describe here is relevant only to KBase Narrative imports--the structure of the `instructions`
 field is specific to the destination of a transfer to allow the DTS to interact reasonably with

@@ -84,11 +84,10 @@ type Endpoint struct {
 
 // creates a new Globus endpoint using the given information
 func NewEndpoint(name string, shareId uuid.UUID, rootPath string, clientId uuid.UUID, clientSecret string) (endpoints.Endpoint, error) {
-	defaultScopes := []string{"urn:globus:auth:scope:transfer.api.globus.org:all"}
 	ep := &Endpoint{
 		Name:         name,
 		Id:           shareId,
-		Scopes:       defaultScopes,
+		Scopes:       defaultScopes_,
 		ClientId:     clientId,
 		ClientSecret: clientSecret,
 	}
@@ -386,6 +385,9 @@ func (ep *Endpoint) Cancel(id uuid.UUID) error {
 // Internals
 //-----------
 
+// default client credentials grant scopes
+var defaultScopes_ = []string{"urn:globus:auth:scope:transfer.api.globus.org:all"}
+
 // returns true if a Globus response body matches an error
 func responseIsError(body []byte) bool {
 	bodyStr := string(body)
@@ -435,6 +437,9 @@ func (ep *Endpoint) authenticate() error {
 		return fmt.Errorf("Couldn't authenticate via Globus Auth API: %s (%d)",
 			authError.Error, resp.StatusCode)
 	}
+
+	// reset to the default scopes
+	ep.Scopes = defaultScopes_
 
 	// read and unmarshal the response
 	body, err := io.ReadAll(resp.Body)

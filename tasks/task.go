@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/frictionlessdata/datapackage-go/datapackage"
+	"github.com/frictionlessdata/datapackage-go/validator"
 	"github.com/google/uuid"
 
 	"github.com/kbase/dts/auth"
@@ -45,6 +46,7 @@ import (
 // more subtasks, depending on how many transfer endpoints are involved.
 type transferTask struct {
 	Canceled          bool              // set if a cancellation request has been made
+	StartTime         time.Time         // time at which the transfer was requested
 	CompletionTime    time.Time         // time at which the transfer completed
 	DataDescriptors   []any             // in-line data descriptors
 	Description       string            // Markdown description of the task
@@ -180,14 +182,6 @@ func (task *transferTask) start() error {
 		return err
 	}
 
-	// log the new transfer
-	payloadSizeBytes := int64(1024 * 1024 * 1024 * task.PayloadSize)
-	numFiles := 0
-	for _, subTask := range task.Subtasks {
-		numFiles += subTask.TransferStatus.NumFiles
-	}
-	err = journal.LogNewTransfer(task.Id, task.Source, task.Destination, task.User.Orcid, payloadSizeBytes, numFiles)
-
 	// provisionally, we set the tasks's status to "staging"
 	task.Status.Code = TransferStatusStaging
 	return err
@@ -308,11 +302,25 @@ func (task *transferTask) Update() error {
 
 // requests that the task be canceled
 func (task *transferTask) Cancel() error {
-	task.Canceled = true           // mark as canceled
+	// mark the task as canceled
+	task.Canceled = true
+
+	// cancel each subtask and record the canceled task
+	payloadSizeBytes := int64(1024 * 1024 * 1024 * task.PayloadSize)
+	numFiles := 0
 	for i := range task.Subtasks { // cancel subtasks
+		numFiles += task.Subtasks[i].TransferStatus.NumFiles
 		task.Subtasks[i].cancel()
 	}
-	return journal.LogCanceledTransfer(task.Id)
+	return journal.RecordTransfer(journal.Record{
+		Id:          task.Id,
+		Source:      task.Source,
+		Destination: task.Destination,
+		Orcid:       task.User.Orcid,
+		Status:      "canceled",
+		PayloadSize: payloadSizeBytes,
+		NumFiles:    numFiles,
+	})
 }
 
 // returns the duration since the task completed (successfully or otherwise),
@@ -408,27 +416,50 @@ func (task *transferTask) checkManifest() error {
 		return err
 	}
 	if xferStatus.Code == TransferStatusSucceeded ||
-		xferStatus.Code == TransferStatusFailed { // manifest transferred
-		journal.LogCompletedTransfer(task.Id, task.ManifestFile)
+		xferStatus.Code == TransferStatusFailed {
+		task.CompletionTime = time.Now()
+
+		var manifest *datapackage.Package
+		var statusString string
+		if xferStatus.Code == TransferStatusSucceeded {
+			manifest, _ = datapackage.Load(task.ManifestFile, validator.InMemoryLoader())
+			statusString = "succeeded"
+
+			// finalize any non-custom transfers
+			if !strings.Contains(task.Destination, ":") {
+				destination, err := databases.NewDatabase(task.Destination)
+				if err != nil {
+					return err
+				}
+				err = destination.Finalize(task.User.Orcid, task.Id)
+				if err != nil {
+					return err
+				}
+			}
+		} else {
+			statusString = "failed"
+		}
+		err := journal.RecordTransfer(journal.Record{
+			Id:          task.Id,
+			Source:      task.Source,
+			Destination: task.Destination,
+			Orcid:       task.User.Orcid,
+			StartTime:   task.StartTime,
+			StopTime:    task.CompletionTime,
+			Status:      statusString,
+			PayloadSize: int64(1024 * 1024 * 1024 * task.PayloadSize), // GB -> B
+			NumFiles:    len(task.FileIds),
+			Manifest:    manifest,
+		})
+		if err != nil {
+			slog.Error(err.Error())
+		}
 		task.Manifest = uuid.NullUUID{}
 		os.Remove(task.ManifestFile)
-
-		// finalize any non-custom transfers
-		if !strings.Contains(task.Destination, ":") {
-			destination, err := databases.NewDatabase(task.Destination)
-			if err != nil {
-				return err
-			}
-			err = destination.Finalize(task.User.Orcid, task.Id)
-			if err != nil {
-				return err
-			}
-		}
 
 		task.ManifestFile = ""
 		task.Status.Code = xferStatus.Code
 		task.Status.Message = ""
-		task.CompletionTime = time.Now()
 	}
 	return nil
 }

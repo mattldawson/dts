@@ -35,16 +35,25 @@ func (e NotOpenError) Error() string {
 	return "The transfer journal is not open for reading or writing."
 }
 
-// indicates that the transfer with the given ID has no record in the journal
-type RecordNotFoundError struct {
-	Id uuid.UUID
+// indicates that the journal cannot be opened
+type CantOpenError struct {
+	Message string
 }
 
-func (e RecordNotFoundError) Error() string {
-	return fmt.Sprintf("No transfer record was found with ID %s", e.Id.String())
+func (e CantOpenError) Error() string {
+	return fmt.Sprintf("Can't open transfer journal: %s", e.Message)
 }
 
-// indicates that a new transfer record could not be created
+// indicates that the journal cannot be closed
+type CantCloseError struct {
+	Message string
+}
+
+func (e CantCloseError) Error() string {
+	return fmt.Sprintf("Can't close transfer journal: %s", e.Message)
+}
+
+// indicates that a transfer could not be recorded
 type NewRecordError struct {
 	Id      uuid.UUID
 	Message string
@@ -54,12 +63,21 @@ func (e NewRecordError) Error() string {
 	return fmt.Sprintf("Could not create a new transfer record with ID %s: %s", e.Id.String(), e.Message)
 }
 
-// indicates that an existing transfer record could not be updated
-type RecordUpdateError struct {
+// indicates that the transfer with the given ID has no record in the journal
+type RecordNotFoundError struct {
+	Id uuid.UUID
+}
+
+func (e RecordNotFoundError) Error() string {
+	return fmt.Sprintf("No transfer record was found with ID %s", e.Id.String())
+}
+
+// indicates that the transfer record with the given ID has invalid data
+type InvalidRecordError struct {
 	Id      uuid.UUID
 	Message string
 }
 
-func (e RecordUpdateError) Error() string {
-	return fmt.Sprintf("Could not update the record for transfer with ID %s: %s", e.Id.String(), e.Message)
+func (e InvalidRecordError) Error() string {
+	return fmt.Sprintf("Invalid transfer record for ID %s: %s!", e.Id.String(), e.Message)
 }

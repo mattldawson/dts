@@ -39,6 +39,26 @@ import (
 // This is the DTS transfer journal, which logs all transfer activity. The journal is a table of
 // transfer records (one per transfer).
 
+// a record storing all information relevant to a transfer
+type Record struct {
+	// UUID associated with the transfer
+	Id uuid.UUID
+	// the source and destination associated with the transfer
+	Source, Destination string
+	// the ORCID associated with the transfer
+	Orcid string
+	// times at which the transfer was requested and at which it completed
+	StartTime, StopTime time.Time
+	// status of the transfer ("succeeded", "failed", or "canceled")
+	Status string
+	// size of the transfer's payload in bytes
+	PayloadSize int64
+	// number of files in the transfer's payload
+	NumFiles int
+	// manifest containing metadata for the transfer's payload
+	Manifest *datapackage.Package
+}
+
 // initialize the DTS transfer journal
 func Init() error {
 	if !IsOpen() {
@@ -46,7 +66,9 @@ func Init() error {
 		dbPath := filepath.Join(config.Service.DataDirectory, fmt.Sprintf("%s-journal.db", config.Service.Name))
 		conn_, err = sqlite.OpenConn(dbPath)
 		if err != nil {
-			return err
+			return &CantOpenError{
+				Message: err.Error(),
+			}
 		}
 		return createSchema()
 	}
@@ -58,7 +80,11 @@ func Finalize() error {
 	if conn_ != nil {
 		err := conn_.Close()
 		conn_ = nil
-		return err
+		if err != nil {
+			return &CantCloseError{
+				Message: err.Error(),
+			}
+		}
 	}
 	return nil
 }
@@ -68,99 +94,50 @@ func IsOpen() bool {
 	return conn_ != nil
 }
 
-// records a newly requested transfer with the given information
-// id: the unique identifier for the transfer
-// source: the name of the database from which files are transfered
-// destination: the name of the database to which files are transfered
-// orcid: the ORCID for the user requesting the transfer
-// payloadSize: the size of the transfer's payload in bytes, excluding the manifest
-// numFiles: the number of files in the transfer's payload, excluding the manifest
-func LogNewTransfer(id uuid.UUID, source, destination, orcid string, payloadSize int64, numFiles int) error {
-	if !IsOpen() {
-		return &NotOpenError{}
-	}
-	formattedStartTime := time.Now().Format(time.DateTime)
-	return sqlitex.Execute(conn_, "INSERT INTO transfers (id, source, destination, orcid, start_time, payload_size, num_files) VALUES (?, ?, ?, ?, ?, ?, ?);",
-		&sqlitex.ExecOptions{
-			Args: []any{id.String(), source, destination, orcid, formattedStartTime, payloadSize, numFiles},
-		})
-}
-
-// records the successful completion of an existing transfer
-// id: the unique identifier for the transfer
+// records a completed transfer
+// record: the record containing all transfer information
 // manifestFile: the path to the manifest file (to be read and included in the journal)
-func LogCompletedTransfer(id uuid.UUID, manifestFile string) error {
+func RecordTransfer(record Record) error {
+	switch record.Status {
+	case "succeeded", "failed", "canceled":
+	default:
+		return &NewRecordError{
+			Id:      record.Id,
+			Message: fmt.Sprintf("Invalid status: %s", record.Status),
+		}
+	}
+
 	if !IsOpen() {
 		return &NotOpenError{}
 	}
-	formattedStopTime := time.Now().Format(time.DateTime)
-	err := sqlitex.Execute(conn_, "UPDATE transfers SET stop_time = ?, status = 'succeeded' WHERE id = ?;",
+	startTime := record.StartTime.Format(time.DateTime)
+	stopTime := record.StopTime.Format(time.DateTime)
+	err := sqlitex.Execute(conn_, "INSERT INTO transfers (id, source, destination, orcid, start_time, stop_time, status, payload_size, num_files) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);",
 		&sqlitex.ExecOptions{
-			Args: []any{formattedStopTime, id.String()},
+			Args: []any{record.Id.String(), record.Source, record.Destination, record.Orcid, startTime, stopTime, record.Status, record.PayloadSize, record.NumFiles},
 		})
 	if err != nil {
-		return err
+		return &NewRecordError{
+			Id:      record.Id,
+			Message: err.Error(),
+		}
 	}
 
-	// store the manifest for the completed transfer
-	manifest, err := datapackage.Load(manifestFile, validator.InMemoryLoader())
-	if err != nil {
-		return err
+	// if the transfer succeeded, store its manifest
+	if record.Manifest != nil {
+		jsonManifest, err := json.Marshal(record.Manifest.Descriptor())
+		if err != nil {
+			return &NewRecordError{
+				Id:      record.Id,
+				Message: err.Error(),
+			}
+		}
+		return sqlitex.Execute(conn_, "INSERT INTO manifests (id, manifest) VALUES (?, JSON(?));",
+			&sqlitex.ExecOptions{
+				Args: []any{record.Id.String(), string(jsonManifest)},
+			})
 	}
-	jsonManifest, err := json.Marshal(manifest.Descriptor())
-	if err != nil {
-		return err
-	}
-	return sqlitex.Execute(conn_, "INSERT INTO manifests (id, manifest) VALUES (?, JSON(?));",
-		&sqlitex.ExecOptions{
-			Args: []any{id.String(), string(jsonManifest)},
-		})
-}
-
-// records the unsuccessful termination of an existing transfer
-// id: the unique identifier for the transfer
-func LogFailedTransfer(id uuid.UUID) error {
-	if !IsOpen() {
-		return &NotOpenError{}
-	}
-	return sqlitex.Execute(conn_, "UPDATE transfers SET stop_time = ?, status = 'failed' WHERE id = ?;",
-		&sqlitex.ExecOptions{
-			Args: []any{time.Now().String(), id.String()},
-		})
-}
-
-// records the cancellation of an existing transfer
-// id: the unique identifier for the transfer
-func LogCanceledTransfer(id uuid.UUID) error {
-	if !IsOpen() {
-		return &NotOpenError{}
-	}
-	return sqlitex.Execute(conn_, "UPDATE transfers SET stop_time = ?, status = 'canceled' WHERE id = ?;",
-		&sqlitex.ExecOptions{
-			Args: []any{time.Now().String(), id.String()},
-		})
-}
-
-// a record storing all information relevant to a transfer
-type Record struct {
-	// UUID associated with the transfer
-	Id uuid.UUID
-	// the source and destination associated with the transfer
-	Source, Destination string
-	// the ORCID associated with the transfer
-	Orcid string
-	// time at which the transfer was requested
-	StartTime time.Time
-	// time at which the transfer completed or was canceled (NULL if in progress)
-	StopTime time.Time
-	// status of the transfer (succeeded, failed, staging, transferring, canceled)
-	Status string
-	// size of the transfer's payload in bytes
-	PayloadSize int64
-	// number of files in the transfer's payload
-	NumFiles int
-	// manifest containing metadata for the transfer's payload
-	Manifest *datapackage.Package
+	return nil
 }
 
 // retrieves the transfer record for the given ID -- useful for testing
@@ -173,15 +150,18 @@ func TransferRecord(id uuid.UUID) (Record, error) {
 	err := sqlitex.Execute(conn_, "SELECT source, destination, orcid, start_time, stop_time, status, payload_size, num_files FROM transfers WHERE id = ?;",
 		&sqlitex.ExecOptions{
 			ResultFunc: func(stmt *sqlite.Stmt) error {
-				formattedStartTime, err := time.Parse(time.DateTime, stmt.ColumnText(3))
+				startTime, err := time.Parse(time.DateTime, stmt.ColumnText(3))
 				if err != nil {
-					return err
+					return &InvalidRecordError{
+						Id:      record.Id,
+						Message: "bad start time",
+					}
 				}
-				formattedStopTime := time.Time{}
-				if stmt.ColumnText(4) != "" {
-					formattedStopTime, err = time.Parse(time.DateTime, stmt.ColumnText(4))
-					if err != nil {
-						return err
+				stopTime, err := time.Parse(time.DateTime, stmt.ColumnText(4))
+				if err != nil {
+					return &InvalidRecordError{
+						Id:      record.Id,
+						Message: "bad stop time",
 					}
 				}
 				record = Record{
@@ -189,8 +169,8 @@ func TransferRecord(id uuid.UUID) (Record, error) {
 					Source:      stmt.ColumnText(0),
 					Destination: stmt.ColumnText(1),
 					Orcid:       stmt.ColumnText(2),
-					StartTime:   formattedStartTime,
-					StopTime:    formattedStopTime,
+					StartTime:   startTime,
+					StopTime:    stopTime,
 					Status:      stmt.ColumnText(5),
 					PayloadSize: stmt.ColumnInt64(6),
 					NumFiles:    stmt.ColumnInt(7),
@@ -207,7 +187,10 @@ func TransferRecord(id uuid.UUID) (Record, error) {
 				ResultFunc: func(stmt *sqlite.Stmt) error {
 					manifest, err := datapackage.FromString(stmt.ColumnText(0), "manifest.json", validator.InMemoryLoader())
 					if err != nil {
-						return err
+						return &InvalidRecordError{
+							Id:      record.Id,
+							Message: "unable to retrieve manifest for successful transfer",
+						}
 					}
 					record.Manifest = manifest
 					return nil

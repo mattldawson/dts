@@ -381,6 +381,7 @@ func processTasks() {
 		select {
 		case newTask := <-createTaskChan: // Create() called
 			newTask.Id = uuid.New()
+			newTask.StartTime = time.Now()
 			tasks[newTask.Id] = newTask
 			returnTaskIdChan <- newTask.Id
 			slog.Info(fmt.Sprintf("Created new transfer task %s (%d file(s) requested)",
@@ -436,7 +437,20 @@ func processTasks() {
 							slog.Info(fmt.Sprintf("Task %s: completed successfully", task.Id.String()))
 						case TransferStatusFailed:
 							slog.Info(fmt.Sprintf("Task %s: failed", task.Id.String()))
-							journal.LogFailedTransfer(task.Id)
+							err := journal.RecordTransfer(journal.Record{
+								Id:          task.Id,
+								Source:      task.Source,
+								Destination: task.Destination,
+								Orcid:       task.User.Orcid,
+								StartTime:   task.StartTime,
+								StopTime:    time.Now(),
+								Status:      "failed",
+								PayloadSize: int64(1024 * 1024 * 1024 * task.PayloadSize), // GB -> B
+								NumFiles:    len(task.FileIds),
+							})
+							if err != nil {
+								slog.Error(err.Error())
+							}
 						}
 					}
 				}

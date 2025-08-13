@@ -44,8 +44,8 @@ import (
 func TestRunner(t *testing.T) {
 	tester := SerialTests{Test: t}
 	tester.TestInitAndFinalize()
-	tester.TestLogNewTransfer()
-	tester.TestLogCompletedTransfer()
+	tester.TestRecordSuccessfulTransfer()
+	tester.TestRecordFailedTransfer()
 }
 
 // This runs setup, runs all tests, and does breakdown.
@@ -110,75 +110,77 @@ func (t *SerialTests) TestInitAndFinalize() {
 	assert.False(IsOpen())
 }
 
-func (t *SerialTests) TestLogNewTransfer() {
+func (t *SerialTests) TestRecordSuccessfulTransfer() {
 	assert := assert.New(t.Test)
 
 	err := Init()
 	assert.Nil(err)
 
-	xferId := uuid.New()
-	source := "source"
-	destination := "destination"
-	orcid := "1234-5678-9012-3456"
-	payloadSize := int64(12853294)
-	numFiles := 12
-	err = LogNewTransfer(xferId, source, destination, orcid, payloadSize, numFiles)
+	// generate a valid Frictionless data package for the manifest
+	manifestString := `{"contributors":[{"email":"tad@example.com","organization":"","path":"","role":"author","title":"Tad the Rad"}],"created":"2024-11-19T16:37:21Z","keywords":["dts","manifest"],"name":"manifest","profile":"data-package","resources":[{"bytes":10751355980,"credit":{"comment":"","content_url":"","contributors":[{"contributor_type":"Person","contributor_id":"","name":"Right On Dee Williams","given_name":"Right On","family_name":"Williams","affiliations":[{"organization_id":"","organization_name":"The Company Company"}],"contributor_roles":"PI"}],"credit_metadata_source":"","dates":[{"date":"2021-07-04T01:37:34","event":"Created"},{"date":"2021-07-04T08:33:40.249000","event":"Accepted"},{"date":"2024-11-15T00:45:20.175000","event":"Updated"}],"descriptions":null,"funding":null,"identifier":"JDP:60e1d4d4c399d4ad32fe3bb6","license":{"id":"","url":""},"meta":{"credit_metadata_schema_version":"","saved_by":"","timestamp":0},"publisher":{"organization_id":"ROR:04xm1d337","organization_name":"Joint Genome Institute"},"related_identifiers":[{"id":"10.25585/1488219","description":"Proposal DOI","relationship_type":"IsCitedBy"},{"id":"10.46936/fics.proj.2016.49495/60006008","description":"Awarded proposal DOI","relationship_type":"IsCitedBy"}],"resource_type":"dataset","titles":[{"language":"","title":"img/submissions/253630/Ga0456371_contigs.fna","title_type":""}],"url":"","version":"2021-07-04T01:37:34"},"format":"fasta","hash":"55c3afc0a2d3b256332425eeebc581ac","id":"JDP:60e1d4d4c399d4ad32fe3bb6","media_type":"text/plain","name":"ga0456371_contigs","path":"img/submissions/253630/Ga0456371_contigs.fna","sources":[{"email":"kwrighton@gmail.com","path":"https://doi.org/10.46936/fics.proj.2016.49495/60006008","title":"Wrighton, Kelly (Colorado State University, United States)"}],"Endpoint":"globus-jdp"},{"bytes":1323656783,"credit":{"comment":"","content_url":"","contributors":[{"contributor_type":"Person","contributor_id":"","name":"Wrighton, Kelly","given_name":"Kelly","family_name":"Wrighton","affiliations":[{"organization_id":"","organization_name":"Colorado State University"}],"contributor_roles":"PI"}],"credit_metadata_source":"","dates":[{"date":"2021-01-17T00:22:08","event":"Created"},{"date":"2021-01-17T02:22:33.965000","event":"Accepted"},{"date":"2024-11-15T03:38:03.281000","event":"Updated"}],"descriptions":null,"funding":null,"identifier":"JDP:60040fe9536e7b328301be52","license":{"id":"","url":""},"meta":{"credit_metadata_schema_version":"","saved_by":"","timestamp":0},"publisher":{"organization_id":"ROR:04xm1d337","organization_name":"Joint Genome Institute"},"related_identifiers":[{"id":"10.25585/1488219","description":"Proposal DOI","relationship_type":"IsCitedBy"},{"id":"10.46936/fics.proj.2016.49495/60006008","description":"Awarded proposal DOI","relationship_type":"IsCitedBy"}],"resource_type":"dataset","titles":[{"language":"","title":"img/submissions/246789/Ga0456363_contigs.fna","title_type":""}],"url":"","version":"2021-01-17T00:22:08"},"format":"fasta","hash":"609848a41e79d0f9ec8867c9c866b18c","id":"JDP:60040fe9536e7b328301be52","media_type":"text/plain","name":"ga0456363_contigs","path":"img/submissions/246789/Ga0456363_contigs.fna","sources":[{"email":"kwrighton@gmail.com","path":"https://doi.org/10.46936/fics.proj.2016.49495/60006008","title":"Wrighton, Kelly (Colorado State University, United States)"}],"Endpoint":"globus-jdp"}]}`
+	manifest, err := datapackage.FromString(manifestString, "manifest.json", validator.InMemoryLoader())
 	assert.Nil(err)
-	record, err := TransferRecord(xferId)
+
+	record := Record{
+		Id:          uuid.New(),
+		Source:      "source",
+		Destination: "destination",
+		Orcid:       "1234-5678-9012-3456",
+		Status:      "succeeded",
+		PayloadSize: int64(12853294),
+		NumFiles:    12,
+		Manifest:    manifest,
+	}
+	err = RecordTransfer(record)
 	assert.Nil(err)
-	assert.Equal(xferId, record.Id)
-	assert.Equal(source, record.Source)
-	assert.Equal(destination, record.Destination)
-	assert.Equal(orcid, record.Orcid)
-	assert.Equal(payloadSize, record.PayloadSize)
-	assert.Equal(numFiles, record.NumFiles)
-	assert.True(time.Now().After(record.StartTime))
-	assert.Equal(time.Time{}, record.StopTime)
+
+	record1, err := TransferRecord(record.Id)
+	assert.Nil(err)
+	assert.Equal(record.Id, record1.Id)
+	assert.Equal(record.Source, record1.Source)
+	assert.Equal(record.Destination, record1.Destination)
+	assert.Equal(record.Orcid, record1.Orcid)
+	assert.Equal(record.Status, record1.Status)
+	assert.Equal(record.PayloadSize, record1.PayloadSize)
+	assert.Equal(record.NumFiles, record1.NumFiles)
+	assert.Equal(record.StartTime, record1.StartTime)
+	assert.Equal(record.StopTime, record1.StopTime)
+
+	assert.Equal(manifest.ResourceNames(), record.Manifest.ResourceNames())
 
 	err = Finalize()
 	assert.Nil(err)
 }
 
-func (t *SerialTests) TestLogCompletedTransfer() {
+func (t *SerialTests) TestRecordFailedTransfer() {
 	assert := assert.New(t.Test)
 
 	err := Init()
 	assert.Nil(err)
 
-	xferId := uuid.New()
-	source := "source"
-	destination := "destination"
-	orcid := "1234-5678-9012-3456"
-	payloadSize := int64(12853294)
-	numFiles := 12
-	err = LogNewTransfer(xferId, source, destination, orcid, payloadSize, numFiles)
+	record := Record{
+		Id:          uuid.New(),
+		Source:      "source",
+		Destination: "destination",
+		Orcid:       "1234-5678-9012-3456",
+		Status:      "failed",
+		PayloadSize: int64(12853294),
+		NumFiles:    12,
+	}
+	err = RecordTransfer(record)
 	assert.Nil(err)
 
-	// generate a valid Frictionless data package for the manifest
-	manifestFile := "manifest.json"
-	manifestString := `{"contributors":[{"email":"tad@example.com","organization":"","path":"","role":"author","title":"Tad the Rad"}],"created":"2024-11-19T16:37:21Z","keywords":["dts","manifest"],"name":"manifest","profile":"data-package","resources":[{"bytes":10751355980,"credit":{"comment":"","content_url":"","contributors":[{"contributor_type":"Person","contributor_id":"","name":"Right On Dee Williams","given_name":"Right On","family_name":"Williams","affiliations":[{"organization_id":"","organization_name":"The Company Company"}],"contributor_roles":"PI"}],"credit_metadata_source":"","dates":[{"date":"2021-07-04T01:37:34","event":"Created"},{"date":"2021-07-04T08:33:40.249000","event":"Accepted"},{"date":"2024-11-15T00:45:20.175000","event":"Updated"}],"descriptions":null,"funding":null,"identifier":"JDP:60e1d4d4c399d4ad32fe3bb6","license":{"id":"","url":""},"meta":{"credit_metadata_schema_version":"","saved_by":"","timestamp":0},"publisher":{"organization_id":"ROR:04xm1d337","organization_name":"Joint Genome Institute"},"related_identifiers":[{"id":"10.25585/1488219","description":"Proposal DOI","relationship_type":"IsCitedBy"},{"id":"10.46936/fics.proj.2016.49495/60006008","description":"Awarded proposal DOI","relationship_type":"IsCitedBy"}],"resource_type":"dataset","titles":[{"language":"","title":"img/submissions/253630/Ga0456371_contigs.fna","title_type":""}],"url":"","version":"2021-07-04T01:37:34"},"format":"fasta","hash":"55c3afc0a2d3b256332425eeebc581ac","id":"JDP:60e1d4d4c399d4ad32fe3bb6","media_type":"text/plain","name":"ga0456371_contigs","path":"img/submissions/253630/Ga0456371_contigs.fna","sources":[{"email":"kwrighton@gmail.com","path":"https://doi.org/10.46936/fics.proj.2016.49495/60006008","title":"Wrighton, Kelly (Colorado State University, United States)"}],"Endpoint":"globus-jdp"},{"bytes":1323656783,"credit":{"comment":"","content_url":"","contributors":[{"contributor_type":"Person","contributor_id":"","name":"Wrighton, Kelly","given_name":"Kelly","family_name":"Wrighton","affiliations":[{"organization_id":"","organization_name":"Colorado State University"}],"contributor_roles":"PI"}],"credit_metadata_source":"","dates":[{"date":"2021-01-17T00:22:08","event":"Created"},{"date":"2021-01-17T02:22:33.965000","event":"Accepted"},{"date":"2024-11-15T03:38:03.281000","event":"Updated"}],"descriptions":null,"funding":null,"identifier":"JDP:60040fe9536e7b328301be52","license":{"id":"","url":""},"meta":{"credit_metadata_schema_version":"","saved_by":"","timestamp":0},"publisher":{"organization_id":"ROR:04xm1d337","organization_name":"Joint Genome Institute"},"related_identifiers":[{"id":"10.25585/1488219","description":"Proposal DOI","relationship_type":"IsCitedBy"},{"id":"10.46936/fics.proj.2016.49495/60006008","description":"Awarded proposal DOI","relationship_type":"IsCitedBy"}],"resource_type":"dataset","titles":[{"language":"","title":"img/submissions/246789/Ga0456363_contigs.fna","title_type":""}],"url":"","version":"2021-01-17T00:22:08"},"format":"fasta","hash":"609848a41e79d0f9ec8867c9c866b18c","id":"JDP:60040fe9536e7b328301be52","media_type":"text/plain","name":"ga0456363_contigs","path":"img/submissions/246789/Ga0456363_contigs.fna","sources":[{"email":"kwrighton@gmail.com","path":"https://doi.org/10.46936/fics.proj.2016.49495/60006008","title":"Wrighton, Kelly (Colorado State University, United States)"}],"Endpoint":"globus-jdp"}]}`
-	manifest, err := datapackage.FromString(manifestString, manifestFile, validator.InMemoryLoader())
+	record1, err := TransferRecord(record.Id)
 	assert.Nil(err)
-	err = os.WriteFile(manifestFile, []byte(manifestString), 0644)
-	assert.Nil(err)
-
-	// log the completed transfer
-	err = LogCompletedTransfer(xferId, manifestFile)
-	assert.Nil(err)
-
-	record, err := TransferRecord(xferId)
-	assert.Nil(err)
-	assert.Equal(xferId, record.Id)
-	assert.Equal(source, record.Source)
-	assert.Equal(destination, record.Destination)
-	assert.Equal(orcid, record.Orcid)
-	assert.Equal(payloadSize, record.PayloadSize)
-	assert.Equal(numFiles, record.NumFiles)
-	assert.Equal("succeeded", record.Status)
-	assert.True(time.Now().After(record.StartTime))
-	assert.True(time.Now().After(record.StopTime))
-
-	assert.Equal(manifest.ResourceNames(), record.Manifest.ResourceNames())
+	assert.Equal(record.Id, record1.Id)
+	assert.Equal(record.Source, record1.Source)
+	assert.Equal(record.Destination, record1.Destination)
+	assert.Equal(record.Orcid, record1.Orcid)
+	assert.Equal(record.Status, record1.Status)
+	assert.Equal(record.PayloadSize, record1.PayloadSize)
+	assert.Equal(record.NumFiles, record1.NumFiles)
+	assert.Equal(record.StartTime, record1.StartTime)
+	assert.Equal(record.StopTime, record1.StopTime)
 
 	err = Finalize()
 	assert.Nil(err)

@@ -39,108 +39,6 @@ import (
 // This is the DTS transfer journal, which logs all transfer activity. The journal is a table of
 // transfer records (one per transfer).
 
-// initialize the DTS transfer journal
-func Init() error {
-	if !IsOpen() {
-		var err error
-		dbPath := filepath.Join(config.Service.DataDirectory, fmt.Sprintf("%s-journal.db", config.Service.Name))
-		conn_, err = sqlite.OpenConn(dbPath)
-		if err != nil {
-			return err
-		}
-		return createSchema()
-	}
-	return nil
-}
-
-// saves and closes the DTS transfer journal (if it's been opened)
-func Finalize() error {
-	if conn_ != nil {
-		err := conn_.Close()
-		conn_ = nil
-		return err
-	}
-	return nil
-}
-
-// returns true if the journal is open for writing, false if not
-func IsOpen() bool {
-	return conn_ != nil
-}
-
-// records a newly requested transfer with the given information
-// id: the unique identifier for the transfer
-// source: the name of the database from which files are transfered
-// destination: the name of the database to which files are transfered
-// orcid: the ORCID for the user requesting the transfer
-// payloadSize: the size of the transfer's payload in bytes, excluding the manifest
-// numFiles: the number of files in the transfer's payload, excluding the manifest
-func LogNewTransfer(id uuid.UUID, source, destination, orcid string, payloadSize int64, numFiles int) error {
-	if !IsOpen() {
-		return &NotOpenError{}
-	}
-	formattedStartTime := time.Now().Format(time.DateTime)
-	return sqlitex.Execute(conn_, "INSERT INTO transfers (id, source, destination, orcid, start_time, payload_size, num_files) VALUES (?, ?, ?, ?, ?, ?, ?);",
-		&sqlitex.ExecOptions{
-			Args: []any{id.String(), source, destination, orcid, formattedStartTime, payloadSize, numFiles},
-		})
-}
-
-// records the successful completion of an existing transfer
-// id: the unique identifier for the transfer
-// manifestFile: the path to the manifest file (to be read and included in the journal)
-func LogCompletedTransfer(id uuid.UUID, manifestFile string) error {
-	if !IsOpen() {
-		return &NotOpenError{}
-	}
-	formattedStopTime := time.Now().Format(time.DateTime)
-	err := sqlitex.Execute(conn_, "UPDATE transfers SET stop_time = ?, status = 'succeeded' WHERE id = ?;",
-		&sqlitex.ExecOptions{
-			Args: []any{formattedStopTime, id.String()},
-		})
-	if err != nil {
-		return err
-	}
-
-	// store the manifest for the completed transfer
-	manifest, err := datapackage.Load(manifestFile, validator.InMemoryLoader())
-	if err != nil {
-		return err
-	}
-	jsonManifest, err := json.Marshal(manifest.Descriptor())
-	if err != nil {
-		return err
-	}
-	return sqlitex.Execute(conn_, "INSERT INTO manifests (id, manifest) VALUES (?, JSON(?));",
-		&sqlitex.ExecOptions{
-			Args: []any{id.String(), string(jsonManifest)},
-		})
-}
-
-// records the unsuccessful termination of an existing transfer
-// id: the unique identifier for the transfer
-func LogFailedTransfer(id uuid.UUID) error {
-	if !IsOpen() {
-		return &NotOpenError{}
-	}
-	return sqlitex.Execute(conn_, "UPDATE transfers SET stop_time = ?, status = 'failed' WHERE id = ?;",
-		&sqlitex.ExecOptions{
-			Args: []any{time.Now().String(), id.String()},
-		})
-}
-
-// records the cancellation of an existing transfer
-// id: the unique identifier for the transfer
-func LogCanceledTransfer(id uuid.UUID) error {
-	if !IsOpen() {
-		return &NotOpenError{}
-	}
-	return sqlitex.Execute(conn_, "UPDATE transfers SET stop_time = ?, status = 'canceled' WHERE id = ?;",
-		&sqlitex.ExecOptions{
-			Args: []any{time.Now().String(), id.String()},
-		})
-}
-
 // a record storing all information relevant to a transfer
 type Record struct {
 	// UUID associated with the transfer
@@ -149,11 +47,9 @@ type Record struct {
 	Source, Destination string
 	// the ORCID associated with the transfer
 	Orcid string
-	// time at which the transfer was requested
-	StartTime time.Time
-	// time at which the transfer completed or was canceled (NULL if in progress)
-	StopTime time.Time
-	// status of the transfer (succeeded, failed, staging, transferring, canceled)
+	// times at which the transfer was requested and at which it completed
+	StartTime, StopTime time.Time
+	// status of the transfer ("succeeded", "failed", or "canceled")
 	Status string
 	// size of the transfer's payload in bytes
 	PayloadSize int64
@@ -163,70 +59,177 @@ type Record struct {
 	Manifest *datapackage.Package
 }
 
+// initialize the DTS transfer journal
+func Init() error {
+	if !IsOpen() {
+		go transferJournalProcess()
+		time.Sleep(100 * time.Millisecond)
+	}
+	return nil
+}
+
+// saves and closes the DTS transfer journal (if it's been opened)
+func Finalize() error {
+	if IsOpen() {
+		channels_.Input.Shutdown <- struct{}{}
+		closeChannels()
+	}
+	return nil
+}
+
+// returns true if the journal is open for writing, false if not
+func IsOpen() bool {
+	if channels_.Open { // has Init() been called?
+		channels_.Input.CheckIfOpen <- struct{}{}
+		select {
+		case isOpen := <-channels_.Output.IsOpen:
+			return isOpen
+		case <-time.After(1 * time.Second): // after a second, we assume the goroutine has crashed
+			closeChannels()
+			return false
+		}
+	}
+	return false
+}
+
+// records a completed transfer
+// record: the record containing all transfer information
+// manifestFile: the path to the manifest file (to be read and included in the journal)
+func RecordTransfer(record Record) error {
+	switch record.Status {
+	case "succeeded", "failed", "canceled":
+	default:
+		return &NewRecordError{
+			Id:      record.Id,
+			Message: fmt.Sprintf("Invalid status: %s", record.Status),
+		}
+	}
+
+	if !IsOpen() {
+		return &NotOpenError{}
+	}
+
+	channels_.Input.CreateRecord <- record
+	return <-channels_.Output.Error
+}
+
 // retrieves the transfer record for the given ID -- useful for testing
 // id: the unique identifier for the transfer
 func TransferRecord(id uuid.UUID) (Record, error) {
 	if !IsOpen() {
 		return Record{}, &NotOpenError{}
 	}
+	channels_.Input.FetchRecord <- id
 	var record Record
-	err := sqlitex.Execute(conn_, "SELECT source, destination, orcid, start_time, stop_time, status, payload_size, num_files FROM transfers WHERE id = ?;",
-		&sqlitex.ExecOptions{
-			ResultFunc: func(stmt *sqlite.Stmt) error {
-				formattedStartTime, err := time.Parse(time.DateTime, stmt.ColumnText(3))
-				if err != nil {
-					return err
-				}
-				formattedStopTime := time.Time{}
-				if stmt.ColumnText(4) != "" {
-					formattedStopTime, err = time.Parse(time.DateTime, stmt.ColumnText(4))
-					if err != nil {
-						return err
-					}
-				}
-				record = Record{
-					Id:          id,
-					Source:      stmt.ColumnText(0),
-					Destination: stmt.ColumnText(1),
-					Orcid:       stmt.ColumnText(2),
-					StartTime:   formattedStartTime,
-					StopTime:    formattedStopTime,
-					Status:      stmt.ColumnText(5),
-					PayloadSize: stmt.ColumnInt64(6),
-					NumFiles:    stmt.ColumnInt(7),
-				}
-				return nil
-			},
-			Args: []any{id.String()},
-		})
-
-	// get the manifest if possible
-	if record.Status == "succeeded" {
-		err = sqlitex.Execute(conn_, "SELECT manifest FROM manifests WHERE id = ?;",
-			&sqlitex.ExecOptions{
-				ResultFunc: func(stmt *sqlite.Stmt) error {
-					manifest, err := datapackage.FromString(stmt.ColumnText(0), "manifest.json", validator.InMemoryLoader())
-					if err != nil {
-						return err
-					}
-					record.Manifest = manifest
-					return nil
-				},
-				Args: []any{id.String()},
-			})
+	var err error
+	select {
+	case record := <-channels_.Output.Record:
+		return record, err
+	case err := <-channels_.Output.Error:
+		return record, err
 	}
-	return record, err
 }
 
 //-----------
 // Internals
 //-----------
 
-// transfer journal database connection
-var conn_ *sqlite.Conn
+// The SQLite database gets its own goroutine so it doesn't bring down the entire service if it
+// crashes. Here we define "input" channels (main process -> goroutine) and "output" channels
+// (goroutine -> main process) for passing data back and forth
+
+var channels_ struct {
+	Open  bool // true if channels are open, false if not
+	Input struct {
+		CreateRecord chan Record    // for creating new records
+		CheckIfOpen  chan struct{}  // for checking to see whether the database is open
+		FetchRecord  chan uuid.UUID // for fetching records
+		Shutdown     chan struct{}  // for shutting down the database
+	}
+
+	Output struct {
+		Record chan Record // for returning records
+		Error  chan error  // for returning errors
+		IsOpen chan bool   // for answering queries about whether the database is open
+	}
+}
+
+func transferJournalProcess() {
+
+	openChannels()
+
+	// open the database, creating the schema if necessary
+	dbPath := filepath.Join(config.Service.DataDirectory, fmt.Sprintf("%s-journal.db", config.Service.Name))
+	conn, err := sqlite.OpenConn(dbPath)
+	if err != nil {
+		channels_.Output.Error <- &CantOpenError{
+			Message: err.Error(),
+		}
+	}
+	err = createSchema(conn)
+	if err != nil {
+		channels_.Output.Error <- &CantOpenError{
+			Message: err.Error(),
+		}
+	}
+
+	// handle requests
+	running := true
+	for running {
+		select {
+
+		case <-channels_.Input.CheckIfOpen:
+			channels_.Output.IsOpen <- true // always true if this goroutine is running!
+
+		case record := <-channels_.Input.CreateRecord:
+			err := createRecord(conn, record)
+			channels_.Output.Error <- err
+
+		case id := <-channels_.Input.FetchRecord:
+			record, err := fetchRecord(conn, id)
+			if err != nil {
+				channels_.Output.Error <- err
+			} else {
+				channels_.Output.Record <- record
+			}
+
+		case <-channels_.Input.Shutdown:
+			err := conn.Close()
+			conn = nil
+			if err != nil {
+				channels_.Output.Error <- &CantCloseError{
+					Message: err.Error(),
+				}
+			}
+			running = false
+		}
+	}
+}
+
+func openChannels() {
+	channels_.Open = true
+	channels_.Input.CreateRecord = make(chan Record)
+	channels_.Input.CheckIfOpen = make(chan struct{})
+	channels_.Input.FetchRecord = make(chan uuid.UUID)
+	channels_.Input.Shutdown = make(chan struct{})
+	channels_.Output.Record = make(chan Record)
+	channels_.Output.Error = make(chan error)
+	channels_.Output.IsOpen = make(chan bool)
+}
+
+func closeChannels() {
+	channels_.Open = false
+	close(channels_.Input.CreateRecord)
+	close(channels_.Input.CheckIfOpen)
+	close(channels_.Input.FetchRecord)
+	close(channels_.Input.Shutdown)
+	close(channels_.Output.Record)
+	close(channels_.Output.Error)
+	close(channels_.Output.IsOpen)
+}
 
 // creates the schema for the transfer journal when it's first created
-func createSchema() error {
+func createSchema(conn *sqlite.Conn) error {
 	script :=
 		`CREATE TABLE IF NOT EXISTS transfers (
 	id TEXT PRIMARY KEY,
@@ -245,5 +248,95 @@ CREATE TABLE IF NOT EXISTS manifests (
 	manifest TEXT NOT NULL
 );
 `
-	return sqlitex.ExecuteScript(conn_, script, nil)
+	return sqlitex.ExecuteScript(conn, script, nil)
+}
+
+func createRecord(conn *sqlite.Conn, record Record) error {
+	startTime := record.StartTime.Format(time.DateTime)
+	stopTime := record.StopTime.Format(time.DateTime)
+	err := sqlitex.Execute(conn, "INSERT INTO transfers (id, source, destination, orcid, start_time, stop_time, status, payload_size, num_files) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);",
+		&sqlitex.ExecOptions{
+			Args: []any{record.Id.String(), record.Source, record.Destination, record.Orcid, startTime, stopTime, record.Status, record.PayloadSize, record.NumFiles},
+		})
+	if err != nil {
+		return &NewRecordError{
+			Id:      record.Id,
+			Message: err.Error(),
+		}
+	}
+
+	// if the transfer succeeded, store its manifest
+	if record.Manifest != nil {
+		jsonManifest, err := json.Marshal(record.Manifest.Descriptor())
+		if err != nil {
+			return &NewRecordError{
+				Id:      record.Id,
+				Message: err.Error(),
+			}
+		}
+		return sqlitex.Execute(conn, "INSERT INTO manifests (id, manifest) VALUES (?, JSON(?));",
+			&sqlitex.ExecOptions{
+				Args: []any{record.Id.String(), string(jsonManifest)},
+			})
+	}
+	return nil
+}
+
+func fetchRecord(conn *sqlite.Conn, id uuid.UUID) (Record, error) {
+	var record Record
+	err := sqlitex.Execute(conn, "SELECT source, destination, orcid, start_time, stop_time, status, payload_size, num_files FROM transfers WHERE id = ?;",
+		&sqlitex.ExecOptions{
+			ResultFunc: func(stmt *sqlite.Stmt) error {
+				startTime, err := time.Parse(time.DateTime, stmt.ColumnText(3))
+				if err != nil {
+					return &InvalidRecordError{
+						Id:      id,
+						Message: fmt.Sprintf("bad start time: %s", err.Error()),
+					}
+				}
+				stopTime, err := time.Parse(time.DateTime, stmt.ColumnText(4))
+				if err != nil {
+					return &InvalidRecordError{
+						Id:      id,
+						Message: fmt.Sprintf("bad stop time: %s", err.Error()),
+					}
+				}
+				record = Record{
+					Id:          id,
+					Source:      stmt.ColumnText(0),
+					Destination: stmt.ColumnText(1),
+					Orcid:       stmt.ColumnText(2),
+					StartTime:   startTime,
+					StopTime:    stopTime,
+					Status:      stmt.ColumnText(5),
+					PayloadSize: stmt.ColumnInt64(6),
+					NumFiles:    stmt.ColumnInt(7),
+				}
+				return nil
+			},
+			Args: []any{id.String()},
+		})
+	if err != nil {
+		return record, err
+	}
+
+	// get the manifest if possible
+	if record.Status == "succeeded" {
+		err = sqlitex.Execute(conn, "SELECT manifest FROM manifests WHERE id = ?;",
+			&sqlitex.ExecOptions{
+				ResultFunc: func(stmt *sqlite.Stmt) error {
+					manifest, err := datapackage.FromString(stmt.ColumnText(0), "manifest.json", validator.InMemoryLoader())
+					if err != nil {
+						return &InvalidRecordError{
+							Id:      record.Id,
+							Message: "unable to retrieve manifest for successful transfer",
+						}
+					}
+					record.Manifest = manifest
+					return nil
+				},
+				Args: []any{id.String()},
+			})
+	}
+	return record, err
 }

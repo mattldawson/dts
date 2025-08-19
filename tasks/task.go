@@ -30,7 +30,7 @@ import (
 	"time"
 
 	"github.com/frictionlessdata/datapackage-go/datapackage"
-	"github.com/frictionlessdata/datapackage-go/validator"
+	//"github.com/frictionlessdata/datapackage-go/validator"
 	"github.com/google/uuid"
 
 	"github.com/kbase/dts/auth"
@@ -38,7 +38,7 @@ import (
 	"github.com/kbase/dts/databases"
 	"github.com/kbase/dts/endpoints"
 	"github.com/kbase/dts/endpoints/globus"
-	"github.com/kbase/dts/journal"
+	//"github.com/kbase/dts/journal"
 )
 
 // This type tracks the lifecycle of a file transfer task that copies files from
@@ -246,7 +246,7 @@ func (task *transferTask) Update() error {
 				task.Status.NumFiles += subtask.TransferStatus.NumFiles
 				if subtask.Staging.Valid {
 					subtaskStaging = true
-				} else if subtask.Transfer.Valid {
+				} else {
 					task.Status.NumFilesTransferred += subtask.TransferStatus.NumFilesTransferred
 					task.Status.NumFilesSkipped += subtask.TransferStatus.NumFilesSkipped
 				}
@@ -306,21 +306,24 @@ func (task *transferTask) Cancel() error {
 	task.Canceled = true
 
 	// cancel each subtask and record the canceled task
-	payloadSizeBytes := int64(1024 * 1024 * 1024 * task.PayloadSize)
 	numFiles := 0
 	for i := range task.Subtasks { // cancel subtasks
 		numFiles += task.Subtasks[i].TransferStatus.NumFiles
 		task.Subtasks[i].cancel()
 	}
-	return journal.RecordTransfer(journal.Record{
-		Id:          task.Id,
-		Source:      task.Source,
-		Destination: task.Destination,
-		Orcid:       task.User.Orcid,
-		Status:      "canceled",
-		PayloadSize: payloadSizeBytes,
-		NumFiles:    numFiles,
-	})
+	return nil
+	/*
+		payloadSizeBytes := int64(1024 * 1024 * 1024 * task.PayloadSize)
+		return journal.RecordTransfer(journal.Record{
+			Id:          task.Id,
+			Source:      task.Source,
+			Destination: task.Destination,
+			Orcid:       task.User.Orcid,
+			Status:      "canceled",
+			PayloadSize: payloadSizeBytes,
+			NumFiles:    numFiles,
+		})
+	*/
 }
 
 // returns the duration since the task completed (successfully or otherwise),
@@ -419,41 +422,43 @@ func (task *transferTask) checkManifest() error {
 		xferStatus.Code == TransferStatusFailed {
 		task.CompletionTime = time.Now()
 
-		var manifest *datapackage.Package
-		var statusString string
-		if xferStatus.Code == TransferStatusSucceeded {
-			manifest, _ = datapackage.Load(task.ManifestFile, validator.InMemoryLoader())
-			statusString = "succeeded"
+		/*
+			var manifest *datapackage.Package
+			var statusString string
+			if xferStatus.Code == TransferStatusSucceeded {
+				manifest, _ = datapackage.Load(task.ManifestFile, validator.InMemoryLoader())
+				statusString = "succeeded"
 
-			// finalize any non-custom transfers
-			if !strings.Contains(task.Destination, ":") {
-				destination, err := databases.NewDatabase(task.Destination)
-				if err != nil {
-					return err
+				// finalize any non-custom transfers
+				if !strings.Contains(task.Destination, ":") {
+					destination, err := databases.NewDatabase(task.Destination)
+					if err != nil {
+						return err
+					}
+					err = destination.Finalize(task.User.Orcid, task.Id)
+					if err != nil {
+						return err
+					}
 				}
-				err = destination.Finalize(task.User.Orcid, task.Id)
-				if err != nil {
-					return err
-				}
+			} else {
+				statusString = "failed"
 			}
-		} else {
-			statusString = "failed"
-		}
-		err := journal.RecordTransfer(journal.Record{
-			Id:          task.Id,
-			Source:      task.Source,
-			Destination: task.Destination,
-			Orcid:       task.User.Orcid,
-			StartTime:   task.StartTime,
-			StopTime:    task.CompletionTime,
-			Status:      statusString,
-			PayloadSize: int64(1024 * 1024 * 1024 * task.PayloadSize), // GB -> B
-			NumFiles:    len(task.FileIds),
-			Manifest:    manifest,
-		})
-		if err != nil {
-			slog.Error(err.Error())
-		}
+			err := journal.RecordTransfer(journal.Record{
+				Id:          task.Id,
+				Source:      task.Source,
+				Destination: task.Destination,
+				Orcid:       task.User.Orcid,
+				StartTime:   task.StartTime,
+				StopTime:    task.CompletionTime,
+				Status:      statusString,
+				PayloadSize: int64(1024 * 1024 * 1024 * task.PayloadSize), // GB -> B
+				NumFiles:    len(task.FileIds),
+				Manifest:    manifest,
+			})
+			if err != nil {
+				slog.Error(err.Error())
+			}
+		*/
 		task.Manifest = uuid.NullUUID{}
 		os.Remove(task.ManifestFile)
 

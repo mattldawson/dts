@@ -193,9 +193,11 @@ func (db *Database) Descriptors(orcid string, fileIds []string) ([]map[string]an
 				missingResources = append(missingResources, fileId)
 			}
 		}
-		return nil, databases.ResourcesNotFoundError{
-			Database:    "JDP",
-			ResourceIds: missingResources,
+		if len(missingResources) > 0 {
+			return nil, databases.ResourcesNotFoundError{
+				Database:    "JDP",
+				ResourceIds: missingResources,
+			}
 		}
 	}
 

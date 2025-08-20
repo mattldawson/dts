@@ -65,22 +65,23 @@ type TransferStatus struct {
 
 // This type represents an endpoint for transferring files.
 type Endpoint interface {
-	// returns a string indicating the service provider for the endpoint
+	// Returns a string indicating the service provider for the endpoint.
 	Provider() string
-	// returns the path on the file system that serves as the endpoint's root
+	// Returns the path on the file system that serves as the endpoint's root.
 	Root() string
-	// returns true if the files associated with the given Frictionless
-	// descriptors are staged at this endpoint AND are valid, false otherwise
+	// Returns true if the files associated with the given Frictionless
+	// descriptors are staged at this endpoint AND are valid, false otherwise.
 	FilesStaged(files []any) (bool, error)
-	// returns a list of UUIDs for all transfers associated with this endpoint
+	// Returns a list of UUIDs for all transfers associated with this endpoint.
 	Transfers() ([]uuid.UUID, error)
-	// begins a transfer task that moves the files identified by the FileTransfer
-	// structs, returning a UUID that can be used to refer to this task.
+	// Begins a transfer task that moves the files identified by the FileTransfer
+	// structs, returning a UUID that can be used to refer to this task. It is assumed that there
+	// no duplicates in the list of files to be transfered.
 	Transfer(dst Endpoint, files []FileTransfer) (uuid.UUID, error)
-	// retrieves the status for a transfer task identified by its UUID
+	// Retrieves the status for a transfer task identified by its UUID.
 	Status(id uuid.UUID) (TransferStatus, error)
-	// cancels the transfer task with the given UUID (must return immediately,
-	// even if an asynchronous cancellation has not been processed)
+	// Cancels the transfer task with the given UUID (must return immediately,
+	// even if an asynchronous cancellation has not been processed).
 	Cancel(id uuid.UUID) error
 }
 

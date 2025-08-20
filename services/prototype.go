@@ -133,7 +133,7 @@ func (service *prototype) Close() {
 // Version numbers
 var majorVersion = 0
 var minorVersion = 9
-var patchVersion = 2
+var patchVersion = 3
 
 // Version string
 var version = fmt.Sprintf("%d.%d.%d", majorVersion, minorVersion, patchVersion)
@@ -630,6 +630,21 @@ type TransferOutput struct {
 	Status int
 }
 
+// returns a string slice containing file IDs in the TransferRequest that have duplicates, or nil
+// if no duplicates are found
+func DuplicateFileIds(transferRequest TransferRequest) []string {
+	fileIdsEncountered := make(map[string]struct{})
+	var duplicates []string
+	for _, fileId := range transferRequest.FileIds {
+		if _, found := fileIdsEncountered[fileId]; found {
+			duplicates = append(duplicates, fileId)
+		} else {
+			fileIdsEncountered[fileId] = struct{}{}
+		}
+	}
+	return duplicates
+}
+
 // handler method for initiating a file transfer operation
 func (service *prototype) createTransfer(ctx context.Context,
 	input *struct {
@@ -659,7 +674,7 @@ func (service *prototype) createTransfer(ctx context.Context,
 		return nil, huma.Error401Unauthorized("No user ORCID was provided")
 	}
 	if !isUser {
-		// Override the client's ORCID
+		// override the client's ORCID
 		user.Orcid = input.Body.Orcid
 	} else {
 		// a user is requesting a transfer on behalf of another user
@@ -668,7 +683,14 @@ func (service *prototype) createTransfer(ctx context.Context,
 		user.Orcid = input.Body.Orcid
 	}
 
-	// Check whether the destination is a "custom transfer", available only to Special People.
+	// inspect the list of files, making sure there are no duplicates
+	duplicates := DuplicateFileIds(input.Body)
+	if duplicates != nil {
+		return nil, huma.Error400BadRequest(fmt.Sprintf("The following requested file IDs have duplicates, which are forbidden: %s",
+			strings.Join(duplicates, ", ")))
+	}
+
+	// check whether the destination is a "custom transfer", available only to Special People
 	if strings.Contains(input.Body.Destination, ":") {
 		_, err := endpoints.ParseCustomSpec(input.Body.Destination)
 		if err != nil {

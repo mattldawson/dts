@@ -343,7 +343,14 @@ func (task transferTask) Completed() bool {
 		task.Status.Code == TransferStatusFailed {
 		return true
 	} else {
-		return false
+		// check subtasks!
+		for _, subtask := range task.Subtasks {
+			if subtask.TransferStatus.Code != TransferStatusSucceeded &&
+				subtask.TransferStatus.Code != TransferStatusFailed {
+				return false
+			}
+		}
+		return true
 	}
 }
 

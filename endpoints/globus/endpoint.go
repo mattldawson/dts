@@ -412,6 +412,7 @@ func (ep *Endpoint) authenticate() error {
 	req.Header.Add("Content-Type", "application-x-www-form-urlencoded")
 
 	// send the request
+	ep.Client.CloseIdleConnections()
 	resp, err := ep.Client.Do(req)
 	if err != nil {
 		return err

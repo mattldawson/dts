@@ -359,6 +359,7 @@ func (task *transferTask) createManifest() (*datapackage.Package, error) {
 	}
 
 	taskUser := map[string]any{
+		"id":    task.Id.String(),
 		"title": task.User.Name,
 		"role":  "author",
 	}

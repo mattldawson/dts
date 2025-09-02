@@ -67,8 +67,6 @@ type Endpoint struct {
 	Id uuid.UUID
 	// root directory for endpoint
 	RootDir string
-	// HTTP client that caches queries
-	Client http.Client
 	// OAuth2 access token
 	AccessToken string
 	// access scopes
@@ -411,9 +409,9 @@ func (ep *Endpoint) authenticate() error {
 	req.SetBasicAuth(ep.ClientId.String(), ep.ClientSecret)
 	req.Header.Add("Content-Type", "application-x-www-form-urlencoded")
 
-	// send the request
-	ep.Client.CloseIdleConnections()
-	resp, err := ep.Client.Do(req)
+	// send the request using a fresh HTTP client
+	var client http.Client
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
@@ -474,8 +472,9 @@ func (ep *Endpoint) authenticate() error {
 // it returns a byte slice containing the body of the response or an
 // error indicating failure.
 func (ep *Endpoint) sendRequest(request *http.Request) ([]byte, error) {
-	// send the initial request and read its contents
-	resp, err := ep.Client.Do(request)
+	// send the initial request with a fresh HTTP client
+	var client http.Client
+	resp, err := client.Do(request)
 	if err != nil {
 		return nil, err
 	}
@@ -501,7 +500,7 @@ func (ep *Endpoint) sendRequest(request *http.Request) ([]byte, error) {
 				return nil, err
 			}
 			// try the request again
-			resp, err = ep.Client.Do(request)
+			resp, err = client.Do(request)
 			if err != nil {
 				return nil, err
 			}

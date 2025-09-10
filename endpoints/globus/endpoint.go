@@ -67,12 +67,8 @@ type Endpoint struct {
 	Id uuid.UUID
 	// root directory for endpoint
 	RootDir string
-	// HTTP client that caches queries
-	Client http.Client
 	// OAuth2 access token
 	AccessToken string
-	// access scopes
-	Scopes []string
 
 	// authentication stuff
 	ClientId     uuid.UUID
@@ -87,7 +83,6 @@ func NewEndpoint(name string, shareId uuid.UUID, rootPath string, clientId uuid.
 	ep := &Endpoint{
 		Name:         name,
 		Id:           shareId,
-		Scopes:       defaultScopes_,
 		ClientId:     clientId,
 		ClientSecret: clientSecret,
 	}
@@ -95,7 +90,7 @@ func NewEndpoint(name string, shareId uuid.UUID, rootPath string, clientId uuid.
 	// if needed, authenticate to obtain a Globus Transfer API access token
 	var zeroId uuid.UUID
 	if ep.ClientId != zeroId {
-		err := ep.authenticate()
+		err := ep.authenticate(defaultScopes_)
 		if err != nil {
 			return ep, err
 		}
@@ -399,10 +394,10 @@ func responseIsError(body []byte) bool {
 // (re)authenticates with Globus using its client ID and secret to obtain an
 // access token with consents for its relevant list of scopes
 // (https://docs.globus.org/api/auth/reference/#client_credentials_grant)
-func (ep *Endpoint) authenticate() error {
+func (ep *Endpoint) authenticate(scopes []string) error {
 	authUrl := "https://auth.globus.org/v2/oauth2/token"
 	data := url.Values{}
-	data.Set("scope", strings.Join(ep.Scopes, " "))
+	data.Set("scope", strings.Join(scopes, " "))
 	data.Set("grant_type", "client_credentials")
 	req, err := http.NewRequest(http.MethodPost, authUrl, strings.NewReader(data.Encode()))
 	if err != nil {
@@ -411,9 +406,9 @@ func (ep *Endpoint) authenticate() error {
 	req.SetBasicAuth(ep.ClientId.String(), ep.ClientSecret)
 	req.Header.Add("Content-Type", "application-x-www-form-urlencoded")
 
-	// send the request
-	ep.Client.CloseIdleConnections()
-	resp, err := ep.Client.Do(req)
+	// send the request using a fresh HTTP client
+	var client http.Client
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
@@ -438,9 +433,6 @@ func (ep *Endpoint) authenticate() error {
 		return fmt.Errorf("Couldn't authenticate via Globus Auth API: %s (%d)",
 			authError.Error, resp.StatusCode)
 	}
-
-	// reset to the default scopes
-	ep.Scopes = defaultScopes_
 
 	// read and unmarshal the response
 	body, err := io.ReadAll(resp.Body)
@@ -474,8 +466,9 @@ func (ep *Endpoint) authenticate() error {
 // it returns a byte slice containing the body of the response or an
 // error indicating failure.
 func (ep *Endpoint) sendRequest(request *http.Request) ([]byte, error) {
-	// send the initial request and read its contents
-	resp, err := ep.Client.Do(request)
+	// send the initial request with a fresh HTTP client
+	var client http.Client
+	resp, err := client.Do(request)
 	if err != nil {
 		return nil, err
 	}
@@ -495,13 +488,16 @@ func (ep *Endpoint) sendRequest(request *http.Request) ([]byte, error) {
 		if errResp.Code == "ConsentRequired" || errResp.Code == "AuthenticationFailed" {
 			// our token has expired or we're missing a required scope,
 			// so reauthenticate
-			ep.Scopes = errResp.RequiredScopes
-			err = ep.authenticate()
+			if len(errResp.RequiredScopes) > 0 {
+				err = ep.authenticate(errResp.RequiredScopes)
+			} else {
+				err = ep.authenticate(defaultScopes_)
+			}
 			if err != nil {
 				return nil, err
 			}
 			// try the request again
-			resp, err = ep.Client.Do(request)
+			resp, err = client.Do(request)
 			if err != nil {
 				return nil, err
 			}

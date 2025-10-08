@@ -165,7 +165,7 @@ var channels_ struct {
 func transferJournalProcess() {
 
 	// open the database, creating the schema if necessary
-	dbPath := filepath.Join(config.Service.DataDirectory, fmt.Sprintf("%s-journal.db", config.Service.Name))
+	dbPath := filepath.Join(config.Service.DataDirectory, "transfer_journal.db")
 	db, err := bolt.Open(dbPath, 0600, &bolt.Options{Timeout: 1 * time.Second})
 	if err != nil {
 		channels_.Output.Error <- &CantOpenError{

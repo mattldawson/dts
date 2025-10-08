@@ -23,11 +23,9 @@ package journal
 
 import (
 	"bytes"
-	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
-	"strconv"
 	"time"
 
 	"github.com/frictionlessdata/datapackage-go/datapackage"
@@ -44,21 +42,23 @@ import (
 // a record storing all information relevant to a transfer
 type Record struct {
 	// UUID associated with the transfer
-	Id uuid.UUID
+	Id uuid.UUID `json:"id"`
 	// the source and destination associated with the transfer
-	Source, Destination string
+	Source      string `json:"source"`
+	Destination string `json:"destination"`
 	// the ORCID associated with the transfer
-	Orcid string
+	Orcid string `json:"orcid"`
 	// times at which the transfer was requested and at which it completed
-	StartTime, StopTime time.Time
+	StartTime time.Time `json:"start_time"`
+	StopTime  time.Time `json:"stop_time"`
 	// status of the transfer ("succeeded", "failed", or "canceled")
-	Status string
+	Status string `json:"status"`
 	// size of the transfer's payload in bytes
-	PayloadSize int64
+	PayloadSize int64 `json:"payload_size"`
 	// number of files in the transfer's payload
-	NumFiles int
-	// manifest containing metadata for the transfer's payload
-	Manifest *datapackage.Package
+	NumFiles int `json:"num_files"`
+	// manifest containing metadata for the transfer's payload (stored separate from record)
+	Manifest *datapackage.Package `json:"-"`
 }
 
 // initialize the DTS transfer journal
@@ -99,6 +99,7 @@ func IsOpen() bool {
 func RecordTransfer(record Record) error {
 	switch record.Status {
 	case "succeeded", "failed", "canceled":
+		// pass-through (see below)
 	default:
 		return &NewRecordError{
 			Id:      record.Id,
@@ -137,7 +138,7 @@ func Records(start, stop time.Time) ([]Record, error) {
 // Internals
 //-----------
 
-// The SQLite database gets its own goroutine so it doesn't bring down the entire service if it
+// The transfer journal gets its own goroutine so it doesn't bring down the entire service if it
 // crashes. Here we define "input" channels (main process -> goroutine) and "output" channels
 // (goroutine -> main process) for passing data back and forth
 
@@ -240,7 +241,6 @@ func closeChannels() {
 
 func createRecord(db *bolt.DB, record Record) error {
 	startTime := record.StartTime.Format(time.RFC3339)
-	stopTime := record.StopTime.Format(time.RFC3339)
 
 	tx, err := db.Begin(true)
 	if err != nil {
@@ -251,13 +251,8 @@ func createRecord(db *bolt.DB, record Record) error {
 	// store the transfer record, indexing it by its start time
 	bucket := tx.Bucket([]byte("transfers"))
 
-	var buffer bytes.Buffer
-	w := csv.NewWriter(&buffer)
-	csvRecord := []string{record.Id.String(), record.Source, record.Destination, record.Orcid,
-		stopTime, record.Status, fmt.Sprintf("%d", record.PayloadSize), fmt.Sprintf("%d", record.NumFiles)}
-	w.Write(csvRecord)
-
-	err = bucket.Put([]byte(startTime), buffer.Bytes())
+	jsonBytes, err := json.Marshal(&record)
+	err = bucket.Put([]byte(startTime), jsonBytes)
 	if err != nil {
 		return err
 	}
@@ -287,28 +282,12 @@ func fetchRecords(db *bolt.DB, start, stop time.Time) ([]Record, error) {
 		stopTime := []byte(stop.Format(time.RFC3339))
 
 		for k, v := c.Seek(startTime); k != nil && bytes.Compare(k, stopTime) <= 0; k, v = c.Next() {
-			buffer := bytes.NewBuffer(v)
-			r := csv.NewReader(buffer)
-			csvRecord, err := r.Read()
+			var record Record
+			err := json.Unmarshal(v, &record)
 			if err != nil {
 				return err
 			}
-			id, _ := uuid.Parse(csvRecord[0])
-			payloadSize, _ := strconv.ParseInt(csvRecord[6], 10, 64)
-			numFiles, _ := strconv.Atoi(csvRecord[7])
-			t1, _ := time.Parse(time.RFC3339, string(k))
-			t2, _ := time.Parse(time.RFC3339, csvRecord[4])
-			records = append(records, Record{
-				Id:          id,
-				Source:      csvRecord[1],
-				Destination: csvRecord[2],
-				Orcid:       csvRecord[3],
-				StartTime:   t1,
-				StopTime:    t2,
-				Status:      csvRecord[5],
-				PayloadSize: payloadSize,
-				NumFiles:    numFiles,
-			})
+			records = append(records, record)
 		}
 
 		// get manifests for each successfully completed transfer (this can be slow)

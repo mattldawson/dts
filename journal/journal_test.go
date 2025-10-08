@@ -127,7 +127,7 @@ func (t *SerialTests) TestRecordSuccessfulTransfer() {
 		Destination: "destination",
 		Orcid:       "1234-5678-9012-3456",
 		Status:      "succeeded",
-		StartTime:   time.Now(),
+		StartTime:   time.Now().Add(-time.Hour),
 		StopTime:    time.Now(),
 		PayloadSize: int64(12853294),
 		NumFiles:    12,
@@ -147,8 +147,8 @@ func (t *SerialTests) TestRecordSuccessfulTransfer() {
 	assert.Equal(record.Status, records[0].Status)
 	assert.Equal(record.PayloadSize, records[0].PayloadSize)
 	assert.Equal(record.NumFiles, records[0].NumFiles)
-	assert.Equal(record.StartTime, records[0].StartTime)
-	assert.Equal(record.StopTime, records[0].StopTime)
+	assert.True(record.StartTime.Equal(records[0].StartTime))
+	assert.True(record.StopTime.Equal(records[0].StopTime))
 
 	assert.Equal(manifest.ResourceNames(), record.Manifest.ResourceNames())
 
@@ -187,8 +187,8 @@ func (t *SerialTests) TestRecordFailedTransfer() {
 	assert.Equal(record.Status, records[0].Status)
 	assert.Equal(record.PayloadSize, records[0].PayloadSize)
 	assert.Equal(record.NumFiles, records[0].NumFiles)
-	assert.Equal(record.StartTime, records[0].StartTime)
-	assert.Equal(record.StopTime, records[0].StopTime)
+	assert.True(record.StartTime.Equal(records[0].StartTime))
+	assert.True(record.StopTime.Equal(records[0].StopTime))
 
 	err = Finalize()
 	assert.Nil(err)

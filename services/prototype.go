@@ -229,11 +229,13 @@ func (service *prototype) getDatabases(ctx context.Context,
 		Body: make([]DatabaseResponse, 0),
 	}
 	for dbName, db := range config.Databases {
-		output.Body = append(output.Body, DatabaseResponse{
-			Id:           dbName,
-			Name:         db.Name,
-			Organization: db.Organization,
-		})
+		if databases.HaveDatabase(dbName) { // check to see whether we successfully registered it
+			output.Body = append(output.Body, DatabaseResponse{
+				Id:           dbName,
+				Name:         db.Name,
+				Organization: db.Organization,
+			})
+		}
 	}
 	slices.SortFunc(output.Body, func(db1, db2 DatabaseResponse) int { // sort by name
 		return cmp.Compare(db1.Name, db2.Name)
@@ -690,14 +692,19 @@ func (service *prototype) createTransfer(ctx context.Context,
 			strings.Join(duplicates, ", ")))
 	}
 
-	// check whether the destination is a "custom transfer", available only to Special People
-	if strings.Contains(input.Body.Destination, ":") {
-		_, err := endpoints.ParseCustomSpec(input.Body.Destination)
-		if err != nil {
-			return nil, huma.Error400BadRequest(fmt.Sprintf("Invalid destination: %s", input.Body.Destination))
-		}
-		if !user.IsSuper { // not allowed to do custom transfers
-			return nil, huma.Error400BadRequest(fmt.Sprintf("Invalid destination: %s", input.Body.Destination))
+	// validate the destination
+	if !databases.HaveDatabase(input.Body.Destination) {
+		// is this a "custom transfer", available only to Special People?
+		if strings.Contains(input.Body.Destination, ":") {
+			_, err := endpoints.ParseCustomSpec(input.Body.Destination)
+			if err != nil {
+				return nil, huma.Error400BadRequest(fmt.Sprintf("Invalid destination: %s", input.Body.Destination))
+			}
+			if !user.IsSuper { // not allowed to do custom transfers
+				return nil, huma.Error400BadRequest(fmt.Sprintf("Invalid destination: %s", input.Body.Destination))
+			}
+		} else { // nope, we just didn't find it
+			return nil, huma.Error404NotFound(fmt.Sprintf("Destination database not found: %s", input.Body.Destination))
 		}
 	}
 

@@ -155,6 +155,12 @@ func RegisterDatabase(dbName string, createDb func() (Database, error)) error {
 	}
 }
 
+// returns true if a database has been registered with the given name, false if not
+func HaveDatabase(dbName string) bool {
+	_, found := createDatabaseFuncs_[dbName]
+	return found
+}
+
 // creates a database proxy associated with the given ORCID, based on the
 // configured type, or returns an existing instance
 func NewDatabase(dbName string) (Database, error) {

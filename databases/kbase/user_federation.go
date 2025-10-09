@@ -183,15 +183,24 @@ func readUserTable() (map[string]string, error) {
 	// * exactly one of the entries is a well-formed ORCID (xxxx-xxxx-xxxx-xxxx)
 	// * the other entry is a non-empty string with no special characters
 	//
-	// Finally, the structure of all the lines in the file must agree. Every line
-	// that doesn't conform to these requirements is ignored. If there's at least
-	// one valid line, we clear the existing KBase user table and add each
-	// (ORCID, user) pair to the user table.
+	// Lines beginning with '#' are ignored. This allows us to handle "irregularities" manually.
+	//
+	// The structure of all the lines in the file must agree. Every line that doesn't conform to these
+	// requirements is ignored. If there's at least one valid line, we clear the existing KBase user
+	// table and add each (ORCID, user) pair to the user table.
+
+	// Finally, there must be a 1:1 correspondence between KBase users and ORCIDs. Otherwise we can't
+	// map between these items. We track (user, orcid) pairs that violate this constraint and report
+	// them after we read the entire table.
+	multipleUsersForOrcid := make(map[string][]string)
+	multipleOrcidsForUser := make(map[string][]string)
+
 	orcidColumn := -1
 	userColumn := -1
 	orcidsForUsers := make(map[string]string)
 	usersForOrcids := make(map[string]string)
 	reader := csv.NewReader(file)
+	reader.Comment = '#'
 	records, err := reader.ReadAll()
 	if err != nil {
 		return nil, &InvalidKBaseUserSpreadsheetError{
@@ -208,7 +217,7 @@ func readUserTable() (map[string]string, error) {
 		}
 
 		if orcidColumn == -1 { // find the column with an ORCID
-			for i := 0; i < 2; i++ {
+			for i := range 2 {
 				if isOrcid(record[i]) {
 					orcidColumn = i
 					userColumn = (i + 1) % 2 // user column's the other one
@@ -234,10 +243,12 @@ func readUserTable() (map[string]string, error) {
 			// have we seen this ORCID or username before? It's okay, as long as everything
 			// is consistent
 			if existingUser, found := usersForOrcids[orcid]; found {
-				if existingUser != orcid {
-					return nil, &InvalidKBaseUserSpreadsheetError{
-						File:    kbaseUserTableFile,
-						Message: fmt.Sprintf("ORCID %s is associated with multiple users", orcid),
+				if existingUser != username {
+					users, found := multipleUsersForOrcid[orcid]
+					if found {
+						users = append(users, username)
+					} else {
+						multipleUsersForOrcid[orcid] = []string{existingUser, username}
 					}
 				}
 			} else {
@@ -245,14 +256,31 @@ func readUserTable() (map[string]string, error) {
 			}
 			if existingOrcid, found := orcidsForUsers[username]; found {
 				if existingOrcid != orcid {
-					return nil, &InvalidKBaseUserSpreadsheetError{
-						File:    kbaseUserTableFile,
-						Message: fmt.Sprintf("User %s has multiple ORCIDs", username),
+					orcids, found := multipleOrcidsForUser[username]
+					if found {
+						orcids = append(orcids, orcid)
+					} else {
+						multipleOrcidsForUser[username] = []string{existingOrcid, orcid}
 					}
 				}
 			} else {
 				orcidsForUsers[username] = orcid
 			}
+		}
+	}
+
+	// report any violations of the 1:1 user <-> orcid correspondence
+	if len(multipleUsersForOrcid) > 0 || len(multipleOrcidsForUser) > 0 {
+		var b strings.Builder
+		for orcid, users := range multipleUsersForOrcid {
+			fmt.Fprintf(&b, "ORCID %s is associated with multiple KBase users: %s\n", orcid, strings.Join(users, ", "))
+		}
+		for user, orcids := range multipleOrcidsForUser {
+			fmt.Fprintf(&b, "KBase user %s is associated with multiple ORCIDS: %s\n", user, strings.Join(orcids, ", "))
+		}
+		return nil, &InvalidKBaseUserSpreadsheetError{
+			File:    kbaseUserTableFile,
+			Message: fmt.Sprintf("No 1:1 correspondence exists between users and ORCIDS:\n %s", b.String()),
 		}
 	}
 

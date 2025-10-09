@@ -359,13 +359,7 @@ type channelsType struct {
 // the main thread
 func processTasks() {
 	// create or recreate a persistent table of transfer-related tasks
-	var dataStore string
-	if config.Service.Name != "" {
-		dataStore = filepath.Join(config.Service.DataDirectory,
-			fmt.Sprintf("dts-%s.gob", config.Service.Name))
-	} else {
-		dataStore = filepath.Join(config.Service.DataDirectory, "dts.gob")
-	}
+	dataStore := filepath.Join(config.Service.DataDirectory, "dts.gob")
 	tasks := createOrLoadTasks(dataStore)
 
 	// parse the task channels into directional types as needed

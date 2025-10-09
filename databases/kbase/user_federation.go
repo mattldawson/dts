@@ -160,6 +160,10 @@ func kbaseUserFederation(started chan struct{}) {
 	}
 }
 
+type UserOrcidRecord struct {
+	User, Orcid string
+}
+
 // reads the user table file within the DTS data directory, returning a map
 // with ORCID keys associated with username values
 func readUserTable() (map[string]string, error) {

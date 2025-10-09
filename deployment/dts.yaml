@@ -3,7 +3,6 @@
 # environment variables:
 #
 # AUTH_SECRET: a secret that decrypts the DTS-specific authorization file
-# CONFIG_NAME: a name for the DTS instance (e.g. `dev` or `prod`)
 # DATA_DIRECTORY: an absolute path to the directory used by DTS to manage its
 #                 own data
 # DEBUG: true to enable debug-level logging, false to disable
@@ -27,7 +26,6 @@
 #                 (seconds)
 
 service:
-  name: ${CONFIG_NAME}
   secret: ${AUTH_SECRET}
   port: ${PORT}
   max_connections: ${MAX_CONNECTIONS}

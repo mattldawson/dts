@@ -127,6 +127,8 @@ func (t *SerialTests) TestRecordSuccessfulTransfer() {
 		Destination: "destination",
 		Orcid:       "1234-5678-9012-3456",
 		Status:      "succeeded",
+		StartTime:   time.Now().Add(-time.Hour),
+		StopTime:    time.Now(),
 		PayloadSize: int64(12853294),
 		NumFiles:    12,
 		Manifest:    manifest,
@@ -134,17 +136,19 @@ func (t *SerialTests) TestRecordSuccessfulTransfer() {
 	err = RecordTransfer(record)
 	assert.Nil(err)
 
-	record1, err := TransferRecord(record.Id)
+	records, err := Records(record.StartTime, record.StopTime)
 	assert.Nil(err)
-	assert.Equal(record.Id, record1.Id)
-	assert.Equal(record.Source, record1.Source)
-	assert.Equal(record.Destination, record1.Destination)
-	assert.Equal(record.Orcid, record1.Orcid)
-	assert.Equal(record.Status, record1.Status)
-	assert.Equal(record.PayloadSize, record1.PayloadSize)
-	assert.Equal(record.NumFiles, record1.NumFiles)
-	assert.Equal(record.StartTime, record1.StartTime)
-	assert.Equal(record.StopTime, record1.StopTime)
+	assert.NotNil(records)
+	assert.Equal(1, len(records))
+	assert.Equal(record.Id, records[0].Id)
+	assert.Equal(record.Source, records[0].Source)
+	assert.Equal(record.Destination, records[0].Destination)
+	assert.Equal(record.Orcid, records[0].Orcid)
+	assert.Equal(record.Status, records[0].Status)
+	assert.Equal(record.PayloadSize, records[0].PayloadSize)
+	assert.Equal(record.NumFiles, records[0].NumFiles)
+	assert.True(record.StartTime.Equal(records[0].StartTime))
+	assert.True(record.StopTime.Equal(records[0].StopTime))
 
 	assert.Equal(manifest.ResourceNames(), record.Manifest.ResourceNames())
 
@@ -164,23 +168,27 @@ func (t *SerialTests) TestRecordFailedTransfer() {
 		Destination: "destination",
 		Orcid:       "1234-5678-9012-3456",
 		Status:      "failed",
+		StartTime:   time.Now(),
+		StopTime:    time.Now(),
 		PayloadSize: int64(12853294),
 		NumFiles:    12,
 	}
 	err = RecordTransfer(record)
 	assert.Nil(err)
 
-	record1, err := TransferRecord(record.Id)
+	records, err := Records(record.StartTime, record.StopTime)
 	assert.Nil(err)
-	assert.Equal(record.Id, record1.Id)
-	assert.Equal(record.Source, record1.Source)
-	assert.Equal(record.Destination, record1.Destination)
-	assert.Equal(record.Orcid, record1.Orcid)
-	assert.Equal(record.Status, record1.Status)
-	assert.Equal(record.PayloadSize, record1.PayloadSize)
-	assert.Equal(record.NumFiles, record1.NumFiles)
-	assert.Equal(record.StartTime, record1.StartTime)
-	assert.Equal(record.StopTime, record1.StopTime)
+	assert.NotNil(records)
+	assert.Equal(1, len(records))
+	assert.Equal(record.Id, records[0].Id)
+	assert.Equal(record.Source, records[0].Source)
+	assert.Equal(record.Destination, records[0].Destination)
+	assert.Equal(record.Orcid, records[0].Orcid)
+	assert.Equal(record.Status, records[0].Status)
+	assert.Equal(record.PayloadSize, records[0].PayloadSize)
+	assert.Equal(record.NumFiles, records[0].NumFiles)
+	assert.True(record.StartTime.Equal(records[0].StartTime))
+	assert.True(record.StopTime.Equal(records[0].StopTime))
 
 	err = Finalize()
 	assert.Nil(err)

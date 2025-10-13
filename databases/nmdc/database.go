@@ -238,11 +238,9 @@ func (db *Database) Load(state databases.DatabaseSaveState) error {
 //====================
 
 const (
-	// NOTE: for now, we use the dev environment (-dev), not prod (which has bugs!)
-	// NOTE: note also that NMDC is backed by two databases: one MongoDB and one PostGres,
-	// NOTE: which are synced daily-esque. They will sort this out in the coming year,
-	// NOTE: and it looks like PostGres is probably going to prevail.
-	// NOTE: (See https://github.com/microbiomedata/NMDC_documentation/blob/main/docs/howto_guides/portal_guide.md)
+	// NOTE: NMDC is backed by two databases: one MongoDB and one PostGres, which are synced
+	// NOTE: daily-esque. They will sort this out in the coming year, and it looks like PostGres is
+	// NOTE: probably going to prevail. (See https://github.com/microbiomedata/NMDC_documentation/blob/main/docs/howto_guides/portal_guide.md)
 	baseApiURL  = "https://api.microbiomedata.org/"           // mongoDB
 	baseDataURL = "https://data-dev.microbiomedata.org/data/" // postgres (use in future)
 )
@@ -267,10 +265,12 @@ type credential struct {
 }
 
 // fetches an access token / type from NMDC using a credential
+// FIXME: This is currently returning an internal server error after a long period! NOTE that this
+// FIXME: call conforms to the API documentation here:
+// FIXME: https://api.microbiomedata.org/docs#/User%20accounts/login_for_access_token_token_post
 func (db *Database) getAccessToken(credential credential) (authorization, error) {
 	var auth authorization
-	// NOTE: no slash at the end of the resource, or there's an
-	// NOTE: HTTPS -> HTTP redirect (?!??!!)
+	// NOTE: no slash at the end of the resource, or there's an HTTPS -> HTTP redirect (?!??!!)
 	resource := baseApiURL + "token"
 
 	// the token request must be URL-encoded

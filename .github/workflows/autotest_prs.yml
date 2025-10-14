@@ -2,7 +2,7 @@ name: autotest_prs
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, develop-format-action ]
   pull_request:
     branches: [ main ]
 
@@ -38,6 +38,11 @@ jobs:
 
     - name: Vetting DTS
       run: go vet -v ./...
+
+    - name: Static Analysis
+      run: |
+        go install honnef.co/go/tools/cmd/staticcheck@latest
+        staticcheck ./...
 
     - name: Building DTS
       run: go build -v ./...

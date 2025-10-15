@@ -275,9 +275,9 @@ func Cancel(taskId uuid.UUID) error {
 //-----------
 
 // global variables for managing tasks
-var firstCall = true            // indicates first call to Start()
-var running bool                // true if tasks are processing, false if not
-var taskChannels channelsType   // channels used for processing tasks
+var firstCall = true          // indicates first call to Start()
+var running bool              // true if tasks are processing, false if not
+var taskChannels channelsType // channels used for processing tasks
 
 // loads a map of task IDs to tasks from a previously saved file if available,
 // or creates an empty map if no such file is available or valid

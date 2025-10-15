@@ -230,7 +230,7 @@ func (server KBaseAuthServer) kbaseUser() (kbaseUser, error) {
 
 	// make sure we have at least one ORCID for this user
 	if len(user.Idents) < 1 {
-		return user, fmt.Errorf("KBase Auth2: No providers associated with this user!")
+		return user, fmt.Errorf("KBase Auth2: No providers associated with this user")
 	}
 	foundOrcid := false
 	for _, pid := range user.Idents {
@@ -240,7 +240,7 @@ func (server KBaseAuthServer) kbaseUser() (kbaseUser, error) {
 		}
 	}
 	if !foundOrcid {
-		return user, fmt.Errorf("KBase Auth2: No ORCIDs associated with this user!")
+		return user, fmt.Errorf("KBase Auth2: No ORCIDs associated with this user")
 	}
 	return user, err
 }

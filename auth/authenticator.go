@@ -79,7 +79,7 @@ func (a *Authenticator) GetUser(accessToken string) (User, error) {
 		return user, nil
 	}
 
-	return User{}, errors.New("Invalid access token!")
+	return User{}, errors.New("invalid access token")
 }
 
 func (a *Authenticator) readAccessTokenFile() error {
@@ -97,7 +97,7 @@ func (a *Authenticator) readAccessTokenFile() error {
 	ttl := time.Hour * 24 * 365 // accept secrets signed <= 1 year ago
 	plaintext := fernet.VerifyAndDecrypt(cipherText, ttl, []*fernet.Key{key})
 	if plaintext == nil {
-		return errors.New("Authentication failed: invalid secret")
+		return errors.New("authentication failed: invalid secret")
 	}
 
 	// the plaintext content is a tab-delimited file with records like so:

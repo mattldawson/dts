@@ -59,6 +59,8 @@ type Config struct {
 	Scopes       []string  `json:"scopes"`
 }
 
+// Creates a new Globus endpoint from the provided config.
+// Authenticates the client and retrieves the endpoint settings.
 func NewEndpoint(config Config) (Endpoint, error) {
 	if config.EndpointID == uuid.Nil {
 		return Endpoint{}, fmt.Errorf("endpoint ID not set in config")
@@ -78,6 +80,22 @@ func NewEndpoint(config Config) (Endpoint, error) {
 	}
 	endpoint.Settings = settings
 	return endpoint, nil
+}
+
+// Handles GET requests by forwarding them to the Globus API.
+func (endpoint *Endpoint) HandleGetRequest(path string) ([]byte, error) {
+	resource := fmt.Sprintf("operation/endpoint/%s/ls", endpoint.EndpointID.String())
+	values := url.Values{}
+	values.Set("path", "/"+path)
+	values.Set("orderby", "name ASC")
+	data, err := endpoint.get(resource, values)
+	if err != nil {
+		return nil, err
+	}
+	if responseIsError(data) {
+		return nil, fmt.Errorf("error response from Globus API: %s", string(data))
+	}
+	return data, nil
 }
 
 

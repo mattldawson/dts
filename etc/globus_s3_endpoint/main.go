@@ -22,6 +22,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -36,18 +37,26 @@ const (
 	defaultPort = "8080"
 )
 
-var globusEndpoint globus_s3_api.Endpoint
+var globusEndpointIds = []uuid.UUID{
+	uuid.MustParse("8409a10b-de09-4670-a886-2c0b33f0fe25"), // ESnet Sunnyvale DTN (read-only test endpoint)
+}
+
+var globusEndpoints map[uuid.UUID]globus_s3_api.Endpoint
 
 func main() {
-	// set up Globus endpoint
-	config, err := getGlobusConfig()
-	if err != nil {
-		log.Fatalf("Could not get Globus config: %s\n", err.Error())
-	}
-
-	globusEndpoint, err = globus_s3_api.NewEndpoint(config)
-	if err != nil {
-		log.Fatalf("Could not create Globus endpoint: %s\n", err.Error())
+	// set up Globus endpoints
+	globusEndpoints = make(map[uuid.UUID]globus_s3_api.Endpoint)
+	for _, endpointId := range globusEndpointIds {
+		config, err := getGlobusConfig(endpointId)
+		if err != nil {
+			log.Fatalf("Error getting Globus config for endpoint %s: %s\n", endpointId.String(), err.Error())
+		}
+		endpoint, err := globus_s3_api.NewEndpoint(config)
+		if err != nil {
+			log.Fatalf("Error creating Globus endpoint %s: %s\n", endpointId.String(), err.Error())
+		}
+		globusEndpoints[endpointId] = endpoint
+		log.Printf("Successfully set up Globus endpoint %s\n", endpointId.String())
 	}
 
 	// set up HTTP server with Gorilla Mux router
@@ -55,7 +64,12 @@ func main() {
 
 	// handle root requests
 	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "Hello, Globus S3 Endpoint!\n\nDisable Verify? %v\nForce Verify? %v\n", globusEndpoint.Settings.DisableVerify, globusEndpoint.Settings.ForceVerify)
+		fmt.Fprintf(w, "Hello, Globus S3 Endpoint!\n")
+		fmt.Fprintf(w, "Use /{bucket}/{path} to access buckets and objects.\n")
+		fmt.Fprintf(w, "Configured Globus Endpoints:\n")
+		for id := range globusEndpoints {
+			fmt.Fprintf(w, "- %s\n", id.String())
+		}
 	})
 
 	// handle bucket and object requests
@@ -68,10 +82,9 @@ func main() {
 	}
 }
 
-func getGlobusConfig() (globus_s3_api.Config, error) {
-	endpointId, err := uuid.Parse("8409a10b-de09-4670-a886-2c0b33f0fe25")
-	if err != nil {
-		return globus_s3_api.Config{}, fmt.Errorf("invalid DTS_GLOBUS_ENDPOINT_ID: %s", err.Error())
+func getGlobusConfig(endpointId uuid.UUID) (globus_s3_api.Config, error) {
+	if endpointId == uuid.Nil {
+		return globus_s3_api.Config{}, fmt.Errorf("invalid DTS_GLOBUS_ENDPOINT_ID: %s", endpointId.String())
 	}
     clientId, err := uuid.Parse(os.Getenv("DTS_GLOBUS_CLIENT_ID"))
 	if err != nil {
@@ -101,5 +114,33 @@ func handleBucketObjectRequest(w http.ResponseWriter, r *http.Request) {
 	path := vars["path"]
 
 	// handle request
-	fmt.Fprintf(w, "Bucket: %s\nPath: %s\n", bucket, path)
+	fmt.Fprintf(w, "Trying to retrieve Bucket: %s\nPath: /%s\n", bucket, path)
+	if endpoint, ok := globusEndpoints[globusEndpointIds[0]]; ok {
+		data, err := endpoint.HandleGetRequest(path)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Error retrieving data from Globus endpoint: %s", err.Error()), http.StatusInternalServerError)
+			return
+		}
+		// extract file names from json response
+        // Try to parse as directory listing
+        var response struct {
+        	DATA []struct {
+                Name         string `json:"name"`
+                Type         string `json:"type"`
+                Size         int64  `json:"size"`
+                LastModified string `json:"last_modified"`
+            } `json:"DATA"`
+        	DataType string `json:"DATA_TYPE"`
+    	}
+		err = json.Unmarshal(data, &response)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Error parsing JSON response: %s", err.Error()), http.StatusInternalServerError)
+			return
+		}
+		for _, values := range response.DATA {
+			fmt.Fprintf(w, " — %s\n", values.Name)
+		}
+	} else {
+		http.Error(w, "Globus endpoint not found", http.StatusInternalServerError)
+	}
 }

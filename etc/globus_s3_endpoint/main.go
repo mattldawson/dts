@@ -28,7 +28,12 @@ import (
 	"os"
 
 	"github.com/google/uuid"
+	"github.com/gorilla/mux"
 	"github.com/kbase/dts/etc/globus_s3_endpoint/globus_s3_api"
+)
+
+const (
+	defaultPort = "8080"
 )
 
 var globusEndpoint globus_s3_api.Endpoint
@@ -45,14 +50,20 @@ func main() {
 		log.Fatalf("Could not create Globus endpoint: %s\n", err.Error())
 	}
 
-	// set up HTTP server
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	// set up HTTP server with Gorilla Mux router
+	r := mux.NewRouter()
+
+	// handle root requests
+	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "Hello, Globus S3 Endpoint!\n\nDisable Verify? %v\nForce Verify? %v\n", globusEndpoint.Settings.DisableVerify, globusEndpoint.Settings.ForceVerify)
 	})
 
-	port := ":8080"
+	// handle bucket and object requests
+	r.HandleFunc("/{bucket}/{path:.*}", handleBucketObjectRequest)
+
+	port := ":" + defaultPort
 	log.Println("Starting server on", port)
-	if err := http.ListenAndServe(port, nil); err != nil {
+	if err := http.ListenAndServe(port, r); err != nil {
 		log.Fatalf("Could not start server: %s\n", err.Error())
 	}
 }
@@ -78,6 +89,17 @@ func getGlobusConfig() (globus_s3_api.Config, error) {
 	return config, nil
 }
 
+// handleBucketObjectRequest handles requests for buckets and objects
+//
+// Example requests:
+//   GET /my-bucket
+//   GET /my-bucket/path/to/object.txt
+func handleBucketObjectRequest(w http.ResponseWriter, r *http.Request) {
+	// parse bucket and object from URL
+	vars := mux.Vars(r)
+	bucket := vars["bucket"]
+	path := vars["path"]
 
-    
-	
+	// handle request
+	fmt.Fprintf(w, "Bucket: %s\nPath: %s\n", bucket, path)
+}

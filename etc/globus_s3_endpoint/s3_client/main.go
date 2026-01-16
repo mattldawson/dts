@@ -89,6 +89,11 @@ func transferFiles() error {
 		log.Printf(" - %s (size: %d)\n", aws.ToString(obj.Key), aws.ToInt64(obj.Size))
 	}
 
+	log.Printf("Directories in Globus S3 Bucket %s:\n", globusBucketId)
+	for _, dir := range globusObjects.CommonPrefixes {
+		log.Printf(" - %s\n", aws.ToString(dir.Prefix))
+	}
+
 	// Placeholder for file transfer logic
 
 	return nil

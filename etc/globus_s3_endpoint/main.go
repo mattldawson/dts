@@ -183,6 +183,32 @@ func handleBucketObjectRequest(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, fmt.Sprintf("Error parsing JSON response: %s", err.Error()), http.StatusInternalServerError)
 			return
 		}
+
+		// Separate files and directories
+		var files []struct {
+			Name         string
+			Size         int64
+			LastModified string
+		}
+		var directories []string
+		
+		for _, item := range response.DATA {
+			if item.Type == "dir" {
+				directories = append(directories, item.Name)
+			} else {
+				files = append(files, struct {
+					Name         string
+					Size         int64
+					LastModified string
+				}{
+					Name:         item.Name,
+					Size:         item.Size,
+					LastModified: item.LastModified,
+				})
+			}
+		}
+
+		log.Printf("Found %d files and %d directories\n", len(files), len(directories))
 		
 		// Return XML response for S3 ListObjectsV2
 		w.Header().Set("Content-Type", "application/xml")
@@ -196,6 +222,7 @@ func handleBucketObjectRequest(w http.ResponseWriter, r *http.Request) {
 	<MaxKeys>1000</MaxKeys>
 	<IsTruncated>false</IsTruncated>
 `, bucket, path, len(response.DATA))
+        // Write object entries
 		for _, item := range response.DATA {
 			if item.Type == "dir" {
 				// skip directories for now
@@ -214,6 +241,13 @@ func handleBucketObjectRequest(w http.ResponseWriter, r *http.Request) {
 		<StorageClass>STANDARD</StorageClass>
 	</Contents>
 `, item.Name, isoLastModified, "dummy-etag", item.Size)
+		}
+        // Write directory entries as CommonPrefixes
+		for _, dir := range directories {
+			fmt.Fprintf(w, `    <CommonPrefixes>
+		<Prefix>%s/</Prefix>
+	</CommonPrefixes>
+`, dir)
 		}
 		fmt.Fprintln(w, `</ListBucketResult>`)
 	} else {

@@ -73,7 +73,7 @@ func main() {
 	r.HandleFunc("/{bucket}", handleBucketRequest).Methods(http.MethodGet)
 
 	// handle bucket and object requests
-	r.HandleFunc("/{bucket}/{path:.*}", handleBucketObjectRequest)
+	r.HandleFunc("/{bucket}/{path:.*}", handlePathRequest).Methods(http.MethodGet)
 
 	port := ":" + defaultPort
 	log.Println("Starting server on", port)
@@ -130,6 +130,97 @@ func handleRootRequest(w http.ResponseWriter, r *http.Request) {
 </ListAllMyBucketsResult>`)
 }
 
+// handlePathRequest handles requests for specific paths within a bucket
+//
+// Determines if the request is for listing contents of a bucket or retrieving a specific object
+func handlePathRequest(w http.ResponseWriter, r *http.Request) {
+	// parse bucket and path from URL
+	vars := mux.Vars(r)
+	bucket := vars["bucket"]
+	path := vars["path"]
+
+	log.Printf("handlePathRequest: Bucket: %s, Path: /%s\n", bucket, path)
+
+	if bucket == "" {
+		log.Printf("No bucket specified, handling as root request\n")
+		handleRootRequest(w, r)
+		return
+	}
+	bucketUuid, err := uuid.Parse(bucket)
+	if err != nil {
+		log.Printf("Invalid bucket ID: %s\n", err.Error())
+		http.Error(w, fmt.Sprintf("Invalid bucket ID: %s", err.Error()), http.StatusBadRequest)
+		return
+	}
+	if _, ok := globusEndpoints[bucketUuid]; !ok {
+		log.Printf("Globus endpoint not found for specified bucket: %s\n", bucket)
+		http.Error(w, "Globus endpoint not found for specified bucket", http.StatusNotFound)
+		return
+	}
+
+	if path == "" {
+		log.Printf("No path specified, handling as bucket request\n")
+		handleBucketRequest(w, r)
+		return
+	}
+
+	// Normalize the path for Globus - remove leading slash if present
+	if len(path) > 0 && path[0] == '/' {
+		path = path[1:]
+	}
+
+	log.Printf("Retrieving object from Bucket: %s, Path: /%s\n", bucket, path)
+
+    // See if the path can be treated as a directory listing
+	endpoint, ok := globusEndpoints[bucketUuid]
+	if !ok {
+		log.Printf("Globus endpoint not found for specified bucket: %s\n", bucket)
+		http.Error(w, "Globus endpoint not found", http.StatusInternalServerError)
+		return
+	}
+	data, err := endpoint.HandleGetRequest(path)
+	if err != nil {
+		log.Printf("Error retrieving data from Globus endpoint: %s\n", err.Error())
+		log.Printf("Full error: %+v\n", err)
+		http.Error(w, fmt.Sprintf("Error retrieving data from Globus endpoint: %s", err.Error()), http.StatusInternalServerError)
+		return
+	}
+
+    log.Printf("Received data from Globus endpoint for path /%s: %d bytes\n", path, len(data))
+
+	// Try to parse as directory listing
+	var response struct {
+		DATA []struct{
+			Name         string `json:"name"`
+			Type         string `json:"type"`
+			Size         int64  `json:"size"`
+			LastModified string `json:"last_modified"`
+		} `json:"DATA"`
+		DataType string `json:"DATA_TYPE"`
+	}
+	err = json.Unmarshal(data, &response)
+
+	if err != nil {
+		log.Printf("Error parsing JSON response, treating as file download: %s\n", err.Error())
+		// Treat as directory listing
+		fileName := getFileName(path)
+		writeGetObjectResponse(w, r, data, fileName)
+		return
+	}
+
+	if response.DataType != "file_list" {
+		log.Printf("DATA_TYPE is not directory_listing (%s), treating as file download\n", response.DataType)
+		// Treat as directory listing
+		fileName := getFileName(path)
+		writeGetObjectResponse(w, r, data, fileName)
+		return
+	}
+
+	// Treat as directory listing
+    log.Printf("Path %s is a directory listing, handling as ListObjectsV2\n", path)
+	handleListObjectsV2Request(w, r)
+}
+
 // handleBucketRequest handles bucket-level requests (lists objects in the bucket)
 func handleBucketRequest(w http.ResponseWriter, r *http.Request) {
 	// parse bucket from URL
@@ -139,7 +230,7 @@ func handleBucketRequest(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Listing objects in Bucket: %s\n", bucket)
 
 	// This is equivalent to listing the root path of the bucket
-	handleBucketObjectRequest(w, r)
+	handleListObjectsV2Request(w, r)
 }
 
 // handleBucketObjectRequest handles requests for buckets and objects
@@ -147,11 +238,25 @@ func handleBucketRequest(w http.ResponseWriter, r *http.Request) {
 // Example requests:
 //   GET /my-bucket
 //   GET /my-bucket/path/to/object.txt
-func handleBucketObjectRequest(w http.ResponseWriter, r *http.Request) {
+func handleListObjectsV2Request(w http.ResponseWriter, r *http.Request) {
 	// parse bucket and object from URL
 	vars := mux.Vars(r)
 	bucket := vars["bucket"]
 	path := vars["path"]
+
+    if bucket == "" {
+		http.Error(w, "Bucket not specified", http.StatusBadRequest)
+		return
+	}
+	bucketUuid, err := uuid.Parse(bucket)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid bucket ID: %s", err.Error()), http.StatusBadRequest)
+		return
+	}
+	if _, ok := globusEndpoints[bucketUuid]; !ok {
+		http.Error(w, "Globus endpoint not found for specified bucket", http.StatusNotFound)
+		return
+	}
 
 	if path == "" {
 		path = "/"
@@ -160,8 +265,7 @@ func handleBucketObjectRequest(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Retrieving object from Bucket: %s, Path: /%s\n", bucket, path)
 
 	// handle request
-	fmt.Fprintf(w, "Trying to retrieve Bucket: %s\nPath: /%s\n", bucket, path)
-	if endpoint, ok := globusEndpoints[globusEndpointIds[0]]; ok {
+	if endpoint, ok := globusEndpoints[bucketUuid]; ok {
 		data, err := endpoint.HandleGetRequest(path)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Error retrieving data from Globus endpoint: %s", err.Error()), http.StatusInternalServerError)
@@ -255,6 +359,83 @@ func handleBucketObjectRequest(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// writeGetObjectResponse writes the response for a GetObject request
+func writeGetObjectResponse(w http.ResponseWriter, r *http.Request, data []byte, fileName string) {
+
+	// Check if this is a range request
+	rangeHeader := r.Header.Get("Range")
+	log.Printf("Range request: %s\n", rangeHeader)
+	if rangeHeader != "" {
+		log.Printf("Handling range request: %s\n", rangeHeader)
+		// Handle partial content (range) request
+		handleRangeRequest(w, data, fileName, rangeHeader)
+		return
+	}
+
+	log.Printf("Handling full content request for file: %s (size: %d bytes)\n", fileName, len(data))
+
+	// write headers
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fileName))
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(data)))
+	w.Header().Set("ETag", fmt.Sprintf("\"%d\"", time.Now().UnixNano()))
+	w.Header().Set("Last-Modified", time.Now().UTC().Format(http.TimeFormat))
+	w.Header().Set("Accept-Ranges", "bytes")
+
+	// write status code
+	w.WriteHeader(http.StatusOK)
+
+	// write data to response
+	w.Write(data)
+}
+
+// handleRangeRequest handles HTTP Range requests for partial content
+func handleRangeRequest(w http.ResponseWriter, data []byte, fileName string, rangeHeader string) {
+	var start, end int64
+	totalSize := len(data)
+	start, end, err := parseRange(rangeHeader, totalSize)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid Range header: %s", err.Error()), http.StatusRequestedRangeNotSatisfiable)
+		return
+	}
+	
+	// write headers for partial content
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fileName))
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", end-start+1))
+	w.Header().Set("ETag", fmt.Sprintf("\"%d\"", time.Now().UnixNano()))
+	w.Header().Set("Last-Modified", time.Now().UTC().Format(http.TimeFormat))
+	w.Header().Set("Accept-Ranges", "bytes")
+	w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, totalSize))
+
+	// write status code for partial content
+	w.WriteHeader(http.StatusPartialContent)
+	
+	// write partial data to response
+	w.Write(data[start : end+1])
+}
+
+// parseRange parses the Range header and returns the start and end byte positions
+func parseRange(rangeHeader string, totalSize int) (int64, int64, error) {
+	var start, end int64
+	_, err := fmt.Sscanf(rangeHeader, "bytes=%d-%d", &start, &end)
+	if err != nil {
+		if _, err = fmt.Sscanf(rangeHeader, "bytes=%d-", &start); err == nil {
+			end = int64(totalSize) - 1
+			return start, end, nil
+		}
+		return 0, 0, fmt.Errorf("invalid Range header format")
+	}
+	if end >= int64(totalSize) || end == 0 {
+		end = int64(totalSize) - 1
+	}
+	if start < 0 || start > end {
+		return 0, 0, fmt.Errorf("invalid byte range")
+	}
+	return start, end, nil
+}
+
+// loggingMiddleware logs incoming requests and outgoing responses
 func loggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		log.Printf("→ [%s] %s %s from %s\n", r.Method, r.URL.Path, r.Proto, r.RemoteAddr)
@@ -277,4 +458,19 @@ func convertToISO8601(timestamp string) string {
     
     // Format to ISO8601/RFC3339 format
     return t.UTC().Format("2006-01-02T15:04:05.000Z")
+}
+
+// getFileName extracts the file name from a given path
+func getFileName(path string) string {
+	lastSlash := -1
+	for i := len(path) - 1; i >= 0; i-- {
+		if path[i] == '/' {
+			lastSlash = i
+			break
+		}
+	}
+	if lastSlash == -1 {
+		return path
+	}
+	return path[lastSlash+1:]
 }

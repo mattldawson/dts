@@ -24,7 +24,9 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
+	"os"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -94,7 +96,33 @@ func transferFiles() error {
 		log.Printf(" - %s\n", aws.ToString(dir.Prefix))
 	}
 
-	// Placeholder for file transfer logic
+	// Create a local directory to hold downloaded files
+	err = createLocalDir("downloaded_files")
+	if err != nil {
+		return err
+	}
+	// dowload the /1M.dat file to the local directory
+	getObjOutput, err := globusClient.GetObject(context.TODO(), &s3.GetObjectInput{
+		Bucket: aws.String(globusBucketId),
+		Key:    aws.String("1M.dat"),
+	})
+	if err != nil {
+		return err
+	}
+	defer getObjOutput.Body.Close()
+
+	localFilePath := "downloaded_files/1M.dat"
+	localFile, err := createLocalFile(localFilePath)
+	if err != nil {
+		return err
+	}
+	defer localFile.Close()
+
+	_, err = io.Copy(localFile, getObjOutput.Body)
+	if err != nil {
+		return err
+	}
+	log.Printf("Downloaded '1M.dat' to '%s'\n", localFilePath)
 
 	return nil
 }
@@ -147,5 +175,21 @@ func main() {
 		log.Fatalf("File transfer failed: %s", err.Error())
 	}
 	log.Println("File transfer completed successfully.")
+}
+
+func createLocalDir(dirName string) error {
+	err := os.MkdirAll(dirName, 0755)
+	if err != nil {
+		return fmt.Errorf("unable to create local directory '%s': %v", dirName, err)
+	}
+	return nil
+}
+
+func createLocalFile(filePath string) (*os.File, error) {
+	file, err := os.Create(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create local file '%s': %v", filePath, err)
+	}
+	return file, nil
 }
 

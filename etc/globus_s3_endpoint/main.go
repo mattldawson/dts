@@ -27,6 +27,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
@@ -62,15 +63,14 @@ func main() {
 	// set up HTTP server with Gorilla Mux router
 	r := mux.NewRouter()
 
-	// handle root requests
-	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "Hello, Globus S3 Endpoint!\n")
-		fmt.Fprintf(w, "Use /{bucket}/{path} to access buckets and objects.\n")
-		fmt.Fprintf(w, "Configured Globus Endpoints:\n")
-		for id := range globusEndpoints {
-			fmt.Fprintf(w, "- %s\n", id.String())
-		}
-	})
+	// add logging middleware
+	r.Use(loggingMiddleware)
+
+	// handle root requests (list buckets)
+	r.HandleFunc("/", handleRootRequest).Methods(http.MethodGet)
+
+    // handle bucket requests (list objects)
+	r.HandleFunc("/{bucket}", handleBucketRequest).Methods(http.MethodGet)
 
 	// handle bucket and object requests
 	r.HandleFunc("/{bucket}/{path:.*}", handleBucketObjectRequest)
@@ -102,6 +102,46 @@ func getGlobusConfig(endpointId uuid.UUID) (globus_s3_api.Config, error) {
 	return config, nil
 }
 
+// handleRootRequest handles requests to the root URL (ListBuckets in S3 API)
+func handleRootRequest(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintln(w, "Listing available Globus endpoints:")
+
+	// Return XML response for S3 ListBuckets
+	w.Header().Set("Content-Type", "application/xml")
+
+	// Simple S3 ListBuckets XML response
+	fmt.Fprintln(w, `<?xml version="1.0" encoding="UTF-8"?>
+<ListAllMyBucketsResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+    <Owner>
+	    <ID>globus-owner</ID>
+		<DisplayName>Globus S3</DisplayName>
+	</Owner>
+    <Buckets>
+`)
+    for id := range globusEndpoints {
+		fmt.Fprintf(w, `        <Bucket>
+	    <Name>%s</Name>
+		<CreationDate>2024-01-01T00:00:00.000Z</CreationDate>
+	</Bucket>
+`, id.String())
+	}
+
+	fmt.Fprintln(w, `    </Buckets>
+</ListAllMyBucketsResult>`)
+}
+
+// handleBucketRequest handles bucket-level requests (lists objects in the bucket)
+func handleBucketRequest(w http.ResponseWriter, r *http.Request) {
+	// parse bucket from URL
+	vars := mux.Vars(r)
+	bucket := vars["bucket"]
+
+	log.Printf("Listing objects in Bucket: %s\n", bucket)
+
+	// This is equivalent to listing the root path of the bucket
+	handleBucketObjectRequest(w, r)
+}
+
 // handleBucketObjectRequest handles requests for buckets and objects
 //
 // Example requests:
@@ -112,6 +152,12 @@ func handleBucketObjectRequest(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	bucket := vars["bucket"]
 	path := vars["path"]
+
+	if path == "" {
+		path = "/"
+	}
+
+	log.Printf("Retrieving object from Bucket: %s, Path: /%s\n", bucket, path)
 
 	// handle request
 	fmt.Fprintf(w, "Trying to retrieve Bucket: %s\nPath: /%s\n", bucket, path)
@@ -137,10 +183,64 @@ func handleBucketObjectRequest(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, fmt.Sprintf("Error parsing JSON response: %s", err.Error()), http.StatusInternalServerError)
 			return
 		}
-		for _, values := range response.DATA {
-			fmt.Fprintf(w, " — %s\n", values.Name)
+		
+		// Return XML response for S3 ListObjectsV2
+		w.Header().Set("Content-Type", "application/xml")
+
+		// Simple S3 ListObjectsV2 XML response
+		fmt.Fprintf(w, `<?xml version="1.0" encoding="UTF-8"?>
+<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+	<Name>%s</Name>
+	<Prefix>%s</Prefix>
+	<KeyCount>%d</KeyCount>
+	<MaxKeys>1000</MaxKeys>
+	<IsTruncated>false</IsTruncated>
+`, bucket, path, len(response.DATA))
+		for _, item := range response.DATA {
+			if item.Type == "dir" {
+				// skip directories for now
+				continue
+			}
+
+			// Convert LastModified to ISO8601 format
+			isoLastModified := convertToISO8601(item.LastModified)
+
+			// Write object entry
+			fmt.Fprintf(w, `    <Contents>
+		<Key>%s</Key>
+		<LastModified>%s</LastModified>
+		<ETag>"%s"</ETag>
+		<Size>%d</Size>
+		<StorageClass>STANDARD</StorageClass>
+	</Contents>
+`, item.Name, isoLastModified, "dummy-etag", item.Size)
 		}
+		fmt.Fprintln(w, `</ListBucketResult>`)
 	} else {
 		http.Error(w, "Globus endpoint not found", http.StatusInternalServerError)
 	}
+}
+
+func loggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("→ [%s] %s %s from %s\n", r.Method, r.URL.Path, r.Proto, r.RemoteAddr)
+		next.ServeHTTP(w, r)
+		log.Printf("← [%s] %s - %d\n", r.Method, r.RequestURI, http.StatusOK)
+	})
+}
+
+// convertToISO8601 converts Globus timestamp format to ISO8601/RFC3339 format
+// Input: "2022-11-16 01:34:57+00:00"
+// Output: "2022-11-16T01:34:57.000Z"
+func convertToISO8601(timestamp string) string {
+    // Parse the Globus timestamp format
+    t, err := time.Parse("2006-01-02 15:04:05-07:00", timestamp)
+    if err != nil {
+        log.Printf("Error parsing timestamp %s: %s", timestamp, err.Error())
+        // Return a default timestamp if parsing fails
+        return time.Now().UTC().Format(time.RFC3339)
+    }
+    
+    // Format to ISO8601/RFC3339 format
+    return t.UTC().Format("2006-01-02T15:04:05.000Z")
 }

@@ -23,7 +23,7 @@ go build -o bin/globus_s3_server .
 The example runs using AWS and a Minio instance, which must be running locally. To start the Minio instance in detached mode, run:
 
 ```bash
-docker run -p 9000:9000 -p 9001:9001 -e "MINIO_ROOT_USER=minioadmin" -e "MINIO_ROOT_PASSWORD=minioadmin" -d minio/minio server /data --console-address ":9001"
+docker run -p 9000:9000 -p 9001:9001 -e "MINIO_ROOT_USER=minioadmin" -e "MINIO_ROOT_PASSWORD=minioadmin" -d docker.io/minio/minio server /data --console-address ":9001"
 ```
 
 Note the container id output after it starts up. You can stop the container when you're done using MinIO with:

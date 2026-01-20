@@ -24,7 +24,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"io"
 	"log"
 	"os"
 
@@ -37,8 +36,20 @@ import (
 const (
 	minioEndpoint  = "http://localhost:9000"
 	globusS3Endpoint = "http://localhost:8080"
-	globusBucketId   = "8409a10b-de09-4670-a886-2c0b33f0fe25"
+	globusTestDirectory = "AmRNmKXYQjLBxrnB"
 )
+
+var (
+	globusBucketId   = getGlobusBucketId()
+)
+
+func getGlobusBucketId() string {
+	bucketId := os.Getenv("DTS_GLOBUS_TEST_ENDPOINT")
+	if bucketId == "" {
+		log.Fatal("DTS_GLOBUS_TEST_ENDPOINT environment variable is not set")
+	}
+	return bucketId
+}
 
 func transferFiles() error {
 	// Get MinIO S3 client
@@ -79,6 +90,7 @@ func transferFiles() error {
 	}
 
 	// List the contents of the Globus S3 bucket
+	log.Printf("Getting objects from Globus S3 Bucket: %s\n", globusBucketId)
 	globusObjects, err := globusClient.ListObjectsV2(context.TODO(), &s3.ListObjectsV2Input{
 		Bucket: aws.String(globusBucketId),
 	})
@@ -96,33 +108,54 @@ func transferFiles() error {
 		log.Printf(" - %s\n", aws.ToString(dir.Prefix))
 	}
 
-	// Create a local directory to hold downloaded files
-	err = createLocalDir("downloaded_files")
-	if err != nil {
-		return err
-	}
-	// dowload the /1M.dat file to the local directory
-	getObjOutput, err := globusClient.GetObject(context.TODO(), &s3.GetObjectInput{
-		Bucket: aws.String(globusBucketId),
-		Key:    aws.String("1M.dat"),
+	log.Printf("Getting objects in Globus S3 Bucket %s/%s:\n", globusBucketId, globusTestDirectory)
+	globusObjectsInDir, err := globusClient.ListObjectsV2(context.TODO(), &s3.ListObjectsV2Input{
+		Bucket:    aws.String(globusBucketId),
+		Prefix:    aws.String(globusTestDirectory + "/"),
+		Delimiter: aws.String("/"),
 	})
 	if err != nil {
 		return err
 	}
-	defer getObjOutput.Body.Close()
 
-	localFilePath := "downloaded_files/1M.dat"
-	localFile, err := createLocalFile(localFilePath)
-	if err != nil {
-		return err
+	log.Printf("Objects in Globus S3 Bucket %s/%s:\n", globusBucketId, globusTestDirectory)
+	for _, obj := range globusObjectsInDir.Contents {
+		log.Printf(" - %s (size: %d)\n", aws.ToString(obj.Key), aws.ToInt64(obj.Size))
 	}
-	defer localFile.Close()
 
-	_, err = io.Copy(localFile, getObjOutput.Body)
-	if err != nil {
-		return err
+	log.Printf("Directories in Globus S3 Bucket %s/%s:\n", globusBucketId, globusTestDirectory)
+	for _, dir := range globusObjectsInDir.CommonPrefixes {
+		log.Printf(" - %s\n", aws.ToString(dir.Prefix))
 	}
-	log.Printf("Downloaded '1M.dat' to '%s'\n", localFilePath)
+
+	// // Create a local directory to hold downloaded files
+	// err = createLocalDir("downloaded_files")
+	// if err != nil {
+	// 	return err
+	// }
+
+	// // dowload the /1M.dat file to the local directory
+	// getObjOutput, err := globusClient.GetObject(context.TODO(), &s3.GetObjectInput{
+	// 	Bucket: aws.String(globusBucketId),
+	// 	Key:    aws.String("1M.dat"),
+	// })
+	// if err != nil {
+	// 	return err
+	// }
+	// defer getObjOutput.Body.Close()
+
+	// localFilePath := "downloaded_files/1M.dat"
+	// localFile, err := createLocalFile(localFilePath)
+	// if err != nil {
+	// 	return err
+	// }
+	// defer localFile.Close()
+
+	// _, err = io.Copy(localFile, getObjOutput.Body)
+	// if err != nil {
+	// 	return err
+	// }
+	// log.Printf("Downloaded '1M.dat' to '%s'\n", localFilePath)
 
 	return nil
 }

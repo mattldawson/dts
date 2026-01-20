@@ -40,9 +40,18 @@ const (
 
 var globusEndpointIds = []uuid.UUID{
 	uuid.MustParse("8409a10b-de09-4670-a886-2c0b33f0fe25"), // ESnet Sunnyvale DTN (read-only test endpoint)
+	uuid.MustParse(getGlobusTestEndpointId()),              // User-specified test endpoint
 }
 
 var globusEndpoints map[uuid.UUID]globus_s3_api.Endpoint
+
+func getGlobusTestEndpointId() string {
+	endpointId := os.Getenv("DTS_GLOBUS_TEST_ENDPOINT")
+	if endpointId == "" {
+		log.Fatal("DTS_GLOBUS_TEST_ENDPOINT environment variable not set")
+	}
+	return endpointId
+}
 
 func main() {
 	// set up Globus endpoints
@@ -69,11 +78,8 @@ func main() {
 	// handle root requests (list buckets)
 	r.HandleFunc("/", handleRootRequest).Methods(http.MethodGet)
 
-    // handle bucket requests (list objects)
+    // handle bucket-specific requests
 	r.HandleFunc("/{bucket}", handleBucketRequest).Methods(http.MethodGet)
-
-	// handle bucket and object requests
-	r.HandleFunc("/{bucket}/{path:.*}", handlePathRequest).Methods(http.MethodGet)
 
 	port := ":" + defaultPort
 	log.Println("Starting server on", port)
@@ -130,20 +136,43 @@ func handleRootRequest(w http.ResponseWriter, r *http.Request) {
 </ListAllMyBucketsResult>`)
 }
 
+// handleBucketRequest handles bucket-level requests (lists objects in the bucket)
+func handleListBucketObjectsRequest(w http.ResponseWriter, r *http.Request) {
+	// parse bucket from URL
+	vars := mux.Vars(r)
+	bucket := vars["bucket"]
+
+	log.Printf("Listing objects in Bucket: %s\n", bucket)
+
+	// This is equivalent to listing the root path of the bucket
+	bucketUuid, err := uuid.Parse(bucket)
+	if err != nil {
+		log.Printf("Invalid bucket ID: %s\n", err.Error())
+		http.Error(w, fmt.Sprintf("Invalid bucket ID: %s", err.Error()), http.StatusBadRequest)
+		return
+	}
+	endpoint, ok := globusEndpoints[bucketUuid]
+	if !ok {
+		log.Printf("Globus endpoint not found for specified bucket: %s\n", bucket)
+		http.Error(w, "Globus endpoint not found for specified bucket", http.StatusNotFound)
+		return
+	}
+	handleListObjectsV2Request(w, r, endpoint, bucket, "/")
+}
+
 // handlePathRequest handles requests for specific paths within a bucket
 //
 // Determines if the request is for listing contents of a bucket or retrieving a specific object
-func handlePathRequest(w http.ResponseWriter, r *http.Request) {
+func handleBucketRequest(w http.ResponseWriter, r *http.Request) {
 	// parse bucket and path from URL
 	vars := mux.Vars(r)
 	bucket := vars["bucket"]
-	path := vars["path"]
 
-	log.Printf("handlePathRequest: Bucket: %s, Path: /%s\n", bucket, path)
+	log.Printf("handleBucketRequest: Bucket: %s\n", bucket)
 
 	if bucket == "" {
-		log.Printf("No bucket specified, handling as root request\n")
-		handleRootRequest(w, r)
+		log.Printf("Bucket not specified in path request\n")
+		http.Error(w, "Bucket not specified", http.StatusBadRequest)
 		return
 	}
 	bucketUuid, err := uuid.Parse(bucket)
@@ -157,9 +186,6 @@ func handlePathRequest(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Globus endpoint not found for specified bucket", http.StatusNotFound)
 		return
 	}
-	if path == "" {
-		path = "/"
-	}
 
 	// get the Globus endpoint for the specified bucket
 	endpoint, ok := globusEndpoints[bucketUuid]
@@ -168,6 +194,17 @@ func handlePathRequest(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Globus endpoint not found for specified bucket", http.StatusNotFound)
 		return
 	}
+
+	// Get a prefix if one is specified
+	path := r.URL.Query().Get("prefix")
+	delimiter := r.URL.Query().Get("delimiter")
+	if delimiter == "" {
+		delimiter = "/"
+	}
+	if path != "" {
+		path = path + delimiter
+	}
+	log.Printf("handleBucketRequest: Path: /%s\n", path)
 
 	// Check the x-id query parameter to determine the operation
 	xId := r.URL.Query().Get("x-id")
@@ -191,6 +228,7 @@ func handleGetObjectRequest(w http.ResponseWriter, r *http.Request, endpoint glo
 
 	// Try to get HTTPS URL for the object
 	if endpoint.SupportsHttps() {
+		log.Printf("Endpoint supports HTTPS access, attempting direct file access\n")
 		handleDirectFileAccess(w, r, endpoint, path)
 		return
 	}
@@ -207,30 +245,6 @@ func handleGetObjectRequest(w http.ResponseWriter, r *http.Request, endpoint glo
 	writeGetObjectResponse(w, r, data, fileName)
 }
 
-// handleBucketRequest handles bucket-level requests (lists objects in the bucket)
-func handleBucketRequest(w http.ResponseWriter, r *http.Request) {
-	// parse bucket from URL
-	vars := mux.Vars(r)
-	bucket := vars["bucket"]
-
-	log.Printf("Listing objects in Bucket: %s\n", bucket)
-
-	// This is equivalent to listing the root path of the bucket
-	bucketUuid, err := uuid.Parse(bucket)
-	if err != nil {
-		log.Printf("Invalid bucket ID: %s\n", err.Error())
-		http.Error(w, fmt.Sprintf("Invalid bucket ID: %s", err.Error()), http.StatusBadRequest)
-		return
-	}
-	endpoint, ok := globusEndpoints[bucketUuid]
-	if !ok {
-		log.Printf("Globus endpoint not found for specified bucket: %s\n", bucket)
-		http.Error(w, "Globus endpoint not found for specified bucket", http.StatusNotFound)
-		return
-	}
-	handleListObjectsV2Request(w, r, endpoint, bucket, "/")
-}
-
 // handleDirectFileAccess handles direct file access via HTTPS URL from Globus
 func handleDirectFileAccess(w http.ResponseWriter, r *http.Request, endpoint globus_s3_api.Endpoint, path string) {
 	httpsUrl, err := endpoint.GetHttpsUrl(path)
@@ -241,6 +255,7 @@ func handleDirectFileAccess(w http.ResponseWriter, r *http.Request, endpoint glo
 	}
 
 	// For S3 API compatability, we need to proxy the content through our server
+	log.Printf("Proxying HTTPS content for path: /%s\n", path)
 	endpoint.ProxyHttpsContent(w, r, httpsUrl, path)
 }
 
@@ -250,9 +265,6 @@ func handleDirectFileAccess(w http.ResponseWriter, r *http.Request, endpoint glo
 //   GET /my-bucket
 //   GET /my-bucket/path/to/object.txt
 func handleListObjectsV2Request(w http.ResponseWriter, r *http.Request, endpoint globus_s3_api.Endpoint, bucket string, path string) {
-	if path == "" {
-		path = "/"
-	}
 
 	// handle request
 	data, err := endpoint.HandleGetRequest(path)

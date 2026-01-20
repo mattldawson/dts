@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -98,6 +99,88 @@ func (endpoint *Endpoint) HandleGetRequest(path string) ([]byte, error) {
 	return data, nil
 }
 
+// Returns a direct HTTPS URL for accessing a file on the Globus endpoint.
+func (endpoint *Endpoint) GetHttpsUrl(path string) (string, error) {
+	if endpoint.Settings.HttpsServer == "" {
+		return "", fmt.Errorf("HTTPS server not available for this endpoint")
+	}
+	escapedPath := url.PathEscape(path)
+	httpsUrl := fmt.Sprintf("%s/%s", strings.TrimRight(endpoint.Settings.HttpsServer, "/"), strings.TrimLeft(escapedPath, "/"))
+	return httpsUrl, nil
+}
+
+// Returns whether the Globus endpoint supports HTTPS access.
+func (endpoint *Endpoint) SupportsHttps() bool {
+	return endpoint.Settings.HttpsServer != ""
+}
+
+// Proxies content from the given HTTPS URL to the client
+func (endpoint *Endpoint) ProxyHttpsContent(w http.ResponseWriter, r *http.Request, httpsUrl string, path string) {
+	log.Printf("Proxying content from HTTPS URL: %s\n", httpsUrl)
+
+    // Create request to HTTPS URL
+	req, err := http.NewRequest(r.Method, httpsUrl, nil)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to create request to HTTPS URL: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Copy headers from original request
+	for name, values := range r.Header {
+		for _, value := range values {
+			req.Header.Add(name, value)
+		}
+	}
+
+	// Add Globus authentication
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", endpoint.Session.AccessToken))
+
+	// Set long timeout for large file transfers
+	client := &http.Client{
+		Timeout: 30 * time.Minute,
+	}
+
+	// Send request to HTTPS URL
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("Error retrieving content from HTTPS URL: %v\n", err)
+		http.Error(w, fmt.Sprintf("Failed to retrieve content from HTTPS URL: %v", err), http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	log.Printf("Received response from HTTPS URL with status code: %d %s\n", resp.StatusCode, resp.Status)
+
+	// check for errors
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(resp.Body)
+		log.Printf("Error response body: %s\n", string(body))
+		http.Error(w, fmt.Sprintf("Error response from HTTPS URL: %s", string(body)), resp.StatusCode)
+		return
+	}
+
+	// Copy response headers to client
+	for name, value := range resp.Header {
+		w.Header()[name] = value
+	}
+
+	// Override/Add Headers for S3 compatibility
+	w.Header().Set("Accept-Ranges", "bytes")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", url.PathEscape(path)))
+
+	// Generate a simple ETag
+	etag := fmt.Sprintf("\"%x-%x\"", time.Now().Unix(), resp.ContentLength)
+	w.Header().Set("ETag", etag)
+
+	// Write status code to client
+	w.WriteHeader(resp.StatusCode)
+
+	// Stream content to client
+	_, err = io.Copy(w, resp.Body)
+	if err != nil {
+		log.Printf("Error streaming content to client: %v\n", err)
+	}
+}
 
 //-----------
 // Internals
@@ -111,8 +194,9 @@ type Session struct {
 
 // Endpoint settings
 type Settings struct {
-	DisableVerify bool `json:"disable_verify"` // true if checksums are not available
-	ForceVerify   bool `json:"force_verify"`   // true to force checksum verification
+	DisableVerify bool   `json:"disable_verify"` // true if checksums are not available
+	ForceVerify   bool   `json:"force_verify"`   // true to force checksum verification
+	HttpsServer   string `json:"https_server"`   // HTTPS server URL
 }
 
 // returns true if a Globus response body matches an error

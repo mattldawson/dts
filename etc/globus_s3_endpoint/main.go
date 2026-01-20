@@ -157,68 +157,54 @@ func handlePathRequest(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Globus endpoint not found for specified bucket", http.StatusNotFound)
 		return
 	}
-
 	if path == "" {
-		log.Printf("No path specified, handling as bucket request\n")
-		handleBucketRequest(w, r)
-		return
+		path = "/"
 	}
 
-	// Normalize the path for Globus - remove leading slash if present
-	if len(path) > 0 && path[0] == '/' {
-		path = path[1:]
-	}
-
-	log.Printf("Retrieving object from Bucket: %s, Path: /%s\n", bucket, path)
-
-    // See if the path can be treated as a directory listing
+	// get the Globus endpoint for the specified bucket
 	endpoint, ok := globusEndpoints[bucketUuid]
 	if !ok {
 		log.Printf("Globus endpoint not found for specified bucket: %s\n", bucket)
-		http.Error(w, "Globus endpoint not found", http.StatusInternalServerError)
+		http.Error(w, "Globus endpoint not found for specified bucket", http.StatusNotFound)
 		return
 	}
+
+	// Check the x-id query parameter to determine the operation
+	xId := r.URL.Query().Get("x-id")
+	log.Printf("Request x-id: %s\n", xId)
+
+	switch xId {
+	case "GetObject":
+		log.Printf("Handling as GetObject request for path: /%s\n", path)
+		handleGetObjectRequest(w, r, endpoint, path)
+	case "ListObjectsV2", "":
+		log.Printf("Handling as ListObjectsV2 request for path: /%s\n", path)
+		handleListObjectsV2Request(w, r, endpoint, bucket, path)
+	default:
+		log.Printf("Unknown x-id (%s), defaulting to ListObjectsV2 for path: /%s\n", xId, path)
+		http.Error(w, fmt.Sprintf("Unknown x-id: %s", xId), http.StatusBadRequest)
+	}
+}
+
+// handleGetObjectRequest handles requests to get a specific object from a bucket
+func handleGetObjectRequest(w http.ResponseWriter, r *http.Request, endpoint globus_s3_api.Endpoint, path string) {
+
+	// Try to get HTTPS URL for the object
+	if endpoint.SupportsHttps() {
+		handleDirectFileAccess(w, r, endpoint, path)
+		return
+	}
+
+	log.Printf("Endpoint does not support HTTPS access, attempting HTTP get request\n")
 	data, err := endpoint.HandleGetRequest(path)
 	if err != nil {
 		log.Printf("Error retrieving data from Globus endpoint: %s\n", err.Error())
-		log.Printf("Full error: %+v\n", err)
 		http.Error(w, fmt.Sprintf("Error retrieving data from Globus endpoint: %s", err.Error()), http.StatusInternalServerError)
 		return
 	}
 
-    log.Printf("Received data from Globus endpoint for path /%s: %d bytes\n", path, len(data))
-
-	// Try to parse as directory listing
-	var response struct {
-		DATA []struct{
-			Name         string `json:"name"`
-			Type         string `json:"type"`
-			Size         int64  `json:"size"`
-			LastModified string `json:"last_modified"`
-		} `json:"DATA"`
-		DataType string `json:"DATA_TYPE"`
-	}
-	err = json.Unmarshal(data, &response)
-
-	if err != nil {
-		log.Printf("Error parsing JSON response, treating as file download: %s\n", err.Error())
-		// Treat as directory listing
-		fileName := getFileName(path)
-		writeGetObjectResponse(w, r, data, fileName)
-		return
-	}
-
-	if response.DataType != "file_list" {
-		log.Printf("DATA_TYPE is not directory_listing (%s), treating as file download\n", response.DataType)
-		// Treat as directory listing
-		fileName := getFileName(path)
-		writeGetObjectResponse(w, r, data, fileName)
-		return
-	}
-
-	// Treat as directory listing
-    log.Printf("Path %s is a directory listing, handling as ListObjectsV2\n", path)
-	handleListObjectsV2Request(w, r)
+	fileName := getFileName(path)
+	writeGetObjectResponse(w, r, data, fileName)
 }
 
 // handleBucketRequest handles bucket-level requests (lists objects in the bucket)
@@ -230,7 +216,32 @@ func handleBucketRequest(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Listing objects in Bucket: %s\n", bucket)
 
 	// This is equivalent to listing the root path of the bucket
-	handleListObjectsV2Request(w, r)
+	bucketUuid, err := uuid.Parse(bucket)
+	if err != nil {
+		log.Printf("Invalid bucket ID: %s\n", err.Error())
+		http.Error(w, fmt.Sprintf("Invalid bucket ID: %s", err.Error()), http.StatusBadRequest)
+		return
+	}
+	endpoint, ok := globusEndpoints[bucketUuid]
+	if !ok {
+		log.Printf("Globus endpoint not found for specified bucket: %s\n", bucket)
+		http.Error(w, "Globus endpoint not found for specified bucket", http.StatusNotFound)
+		return
+	}
+	handleListObjectsV2Request(w, r, endpoint, bucket, "/")
+}
+
+// handleDirectFileAccess handles direct file access via HTTPS URL from Globus
+func handleDirectFileAccess(w http.ResponseWriter, r *http.Request, endpoint globus_s3_api.Endpoint, path string) {
+	httpsUrl, err := endpoint.GetHttpsUrl(path)
+	if err != nil {
+		log.Printf("Error getting HTTPS URL from Globus endpoint: %s\n", err.Error())
+		http.Error(w, fmt.Sprintf("Error getting HTTPS URL from Globus endpoint: %s", err.Error()), http.StatusInternalServerError)
+		return
+	}
+
+	// For S3 API compatability, we need to proxy the content through our server
+	endpoint.ProxyHttpsContent(w, r, httpsUrl, path)
 }
 
 // handleBucketObjectRequest handles requests for buckets and objects
@@ -238,87 +249,65 @@ func handleBucketRequest(w http.ResponseWriter, r *http.Request) {
 // Example requests:
 //   GET /my-bucket
 //   GET /my-bucket/path/to/object.txt
-func handleListObjectsV2Request(w http.ResponseWriter, r *http.Request) {
-	// parse bucket and object from URL
-	vars := mux.Vars(r)
-	bucket := vars["bucket"]
-	path := vars["path"]
-
-    if bucket == "" {
-		http.Error(w, "Bucket not specified", http.StatusBadRequest)
-		return
-	}
-	bucketUuid, err := uuid.Parse(bucket)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Invalid bucket ID: %s", err.Error()), http.StatusBadRequest)
-		return
-	}
-	if _, ok := globusEndpoints[bucketUuid]; !ok {
-		http.Error(w, "Globus endpoint not found for specified bucket", http.StatusNotFound)
-		return
-	}
-
+func handleListObjectsV2Request(w http.ResponseWriter, r *http.Request, endpoint globus_s3_api.Endpoint, bucket string, path string) {
 	if path == "" {
 		path = "/"
 	}
 
-	log.Printf("Retrieving object from Bucket: %s, Path: /%s\n", bucket, path)
-
 	// handle request
-	if endpoint, ok := globusEndpoints[bucketUuid]; ok {
-		data, err := endpoint.HandleGetRequest(path)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("Error retrieving data from Globus endpoint: %s", err.Error()), http.StatusInternalServerError)
-			return
-		}
-		// extract file names from json response
-        // Try to parse as directory listing
-        var response struct {
-        	DATA []struct {
-                Name         string `json:"name"`
-                Type         string `json:"type"`
-                Size         int64  `json:"size"`
-                LastModified string `json:"last_modified"`
-            } `json:"DATA"`
-        	DataType string `json:"DATA_TYPE"`
-    	}
-		err = json.Unmarshal(data, &response)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("Error parsing JSON response: %s", err.Error()), http.StatusInternalServerError)
-			return
-		}
+	data, err := endpoint.HandleGetRequest(path)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error retrieving data from Globus endpoint: %s", err.Error()), http.StatusInternalServerError)
+		return
+	}
+	// extract file names from json response
+	// Try to parse as directory listing
+	var response struct {
+		DATA []struct {
+			Name         string `json:"name"`
+			Type         string `json:"type"`
+			Size         int64  `json:"size"`
+			LastModified string `json:"last_modified"`
+		} `json:"DATA"`
+		DataType string `json:"DATA_TYPE"`
+	}
+	err = json.Unmarshal(data, &response)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error parsing JSON response: %s", err.Error()), http.StatusInternalServerError)
+		return
+	}
 
-		// Separate files and directories
-		var files []struct {
-			Name         string
-			Size         int64
-			LastModified string
+	// Separate files and directories
+	var files []struct {
+		Name         string
+		Size         int64
+		LastModified string
+	}
+	var directories []string
+	
+	for _, item := range response.DATA {
+		if item.Type == "dir" {
+			directories = append(directories, item.Name)
+		} else {
+			files = append(files, struct {
+				Name         string
+				Size         int64
+				LastModified string
+			}{
+				Name:         item.Name,
+				Size:         item.Size,
+				LastModified: item.LastModified,
+			})
 		}
-		var directories []string
-		
-		for _, item := range response.DATA {
-			if item.Type == "dir" {
-				directories = append(directories, item.Name)
-			} else {
-				files = append(files, struct {
-					Name         string
-					Size         int64
-					LastModified string
-				}{
-					Name:         item.Name,
-					Size:         item.Size,
-					LastModified: item.LastModified,
-				})
-			}
-		}
+	}
 
-		log.Printf("Found %d files and %d directories\n", len(files), len(directories))
-		
-		// Return XML response for S3 ListObjectsV2
-		w.Header().Set("Content-Type", "application/xml")
+	log.Printf("Found %d files and %d directories\n", len(files), len(directories))
+	
+	// Return XML response for S3 ListObjectsV2
+	w.Header().Set("Content-Type", "application/xml")
 
-		// Simple S3 ListObjectsV2 XML response
-		fmt.Fprintf(w, `<?xml version="1.0" encoding="UTF-8"?>
+	// Simple S3 ListObjectsV2 XML response
+	fmt.Fprintf(w, `<?xml version="1.0" encoding="UTF-8"?>
 <ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
 	<Name>%s</Name>
 	<Prefix>%s</Prefix>
@@ -326,18 +315,18 @@ func handleListObjectsV2Request(w http.ResponseWriter, r *http.Request) {
 	<MaxKeys>1000</MaxKeys>
 	<IsTruncated>false</IsTruncated>
 `, bucket, path, len(response.DATA))
-        // Write object entries
-		for _, item := range response.DATA {
-			if item.Type == "dir" {
-				// skip directories for now
-				continue
-			}
+	// Write object entries
+	for _, item := range response.DATA {
+		if item.Type == "dir" {
+			// skip directories for now
+			continue
+		}
 
-			// Convert LastModified to ISO8601 format
-			isoLastModified := convertToISO8601(item.LastModified)
+		// Convert LastModified to ISO8601 format
+		isoLastModified := convertToISO8601(item.LastModified)
 
-			// Write object entry
-			fmt.Fprintf(w, `    <Contents>
+		// Write object entry
+		fmt.Fprintf(w, `    <Contents>
 		<Key>%s</Key>
 		<LastModified>%s</LastModified>
 		<ETag>"%s"</ETag>
@@ -345,18 +334,15 @@ func handleListObjectsV2Request(w http.ResponseWriter, r *http.Request) {
 		<StorageClass>STANDARD</StorageClass>
 	</Contents>
 `, item.Name, isoLastModified, "dummy-etag", item.Size)
-		}
-        // Write directory entries as CommonPrefixes
-		for _, dir := range directories {
-			fmt.Fprintf(w, `    <CommonPrefixes>
+	}
+	// Write directory entries as CommonPrefixes
+	for _, dir := range directories {
+		fmt.Fprintf(w, `    <CommonPrefixes>
 		<Prefix>%s/</Prefix>
 	</CommonPrefixes>
 `, dir)
-		}
-		fmt.Fprintln(w, `</ListBucketResult>`)
-	} else {
-		http.Error(w, "Globus endpoint not found", http.StatusInternalServerError)
 	}
+	fmt.Fprintln(w, `</ListBucketResult>`)
 }
 
 // writeGetObjectResponse writes the response for a GetObject request

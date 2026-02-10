@@ -35,11 +35,14 @@ import (
 )
 
 const (
+	defaultDomain = "localhost"
 	defaultPort = "8080"
 )
 
+var defaultOauthRedirectUri = fmt.Sprintf("http://%s:%s/oauth/callback", defaultDomain, defaultPort)
+
 var globusEndpointIds = []uuid.UUID{
-	uuid.MustParse("8409a10b-de09-4670-a886-2c0b33f0fe25"), // ESnet Sunnyvale DTN (read-only test endpoint)
+//	uuid.MustParse("8409a10b-de09-4670-a886-2c0b33f0fe25"), // ESnet Sunnyvale DTN (read-only test endpoint)
 	uuid.MustParse(getGlobusTestEndpointId()),              // User-specified test endpoint
 }
 
@@ -75,11 +78,20 @@ func main() {
 	// add logging middleware
 	r.Use(loggingMiddleware)
 
+	// OAuth callback handler
+	r.HandleFunc("/{bucket}/oauth/callback", handleOAuthCallback).Methods(http.MethodGet)
+
+    // Authorization URL helpder endpoint
+	r.HandleFunc("/{bucket}/oauth/authorize", handleGetAuthorizationUrl).Methods(http.MethodGet)
+
 	// handle root requests (list buckets)
 	r.HandleFunc("/", handleRootRequest).Methods(http.MethodGet)
 
-    // handle bucket-specific requests
+    // handle list bucket objects requests
 	r.HandleFunc("/{bucket}", handleBucketRequest).Methods(http.MethodGet)
+
+	// handle GetObject requests
+	r.HandleFunc("/{bucket}/{path:.*}", handleGetObjectRequest).Methods(http.MethodGet)
 
 	port := ":" + defaultPort
 	log.Println("Starting server on", port)
@@ -104,9 +116,118 @@ func getGlobusConfig(endpointId uuid.UUID) (globus_s3_api.Config, error) {
 		EndpointID:   endpointId,
 		ClientId:     clientId,
 		ClientSecret: clientSecret,
+		RedirectUri: fmt.Sprintf("http://%s:%s/%s/oauth/callback", defaultDomain, defaultPort, endpointId.String()),
 	}
 	return config, nil
 }
+
+// handleGetAuthorizationUrl handles requests to get the OAuth authorization URL for a bucket
+func handleGetAuthorizationUrl(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	bucket := vars["bucket"]
+	log.Printf("Getting authorization URL for bucket: %s\n", bucket)
+
+	if bucket == "" {
+		http.Error(w, "Bucket not specified in authorization URL request", http.StatusBadRequest)
+		return
+	}
+	bucketUuid, err := uuid.Parse(bucket)
+	if err != nil {
+		log.Printf("Invalid bucket ID: %s\n", err.Error())
+		http.Error(w, fmt.Sprintf("Invalid bucket ID: %s", err.Error()), http.StatusBadRequest)
+		return
+	}
+	endpoint, ok := globusEndpoints[bucketUuid]
+	if !ok {
+		log.Printf("Globus endpoint not found for specified bucket: %s\n", bucket)
+		http.Error(w, "Globus endpoint not found for specified bucket", http.StatusNotFound)
+		return
+	}
+
+	authUrl := endpoint.GetAuthorizationUrl()
+	log.Printf("Authorization URL for bucket %s: %s\n", bucket, authUrl)
+
+	// return authorization URL as HTML
+	w.Header().Set("Content-Type", "text/html")
+	fmt.Fprintf(w, `
+		<html>
+		<head><title>Globus Authorization URL</title></head>
+		<body>
+			<h1>Globus Authorization URL for Bucket %s</h1>
+			<p>Please visit the following URL to authorize access:</p>
+			<p><a href="%s" target="_blank">Authorize Access</a></p>
+            <p>Or copy and paste this URL into your browser:</p>
+			<p>%s</p>
+		</body>
+		</html>
+	`, bucket, authUrl, authUrl)
+}
+
+// handleOAuthCallback handles the OAuth callback from Globus
+func handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	bucket := vars["bucket"]
+	log.Printf("OAuth callback for bucket: %s\n", bucket)
+
+	if bucket == "" {
+		http.Error(w, "Bucket not specified in OAuth callback", http.StatusBadRequest)
+		return
+	}
+	bucketUuid, err := uuid.Parse(bucket)
+	if err != nil {
+		log.Printf("Invalid bucket ID: %s\n", err.Error())
+		http.Error(w, fmt.Sprintf("Invalid bucket ID: %s", err.Error()), http.StatusBadRequest)
+		return
+	}
+	endpoint, ok := globusEndpoints[bucketUuid]
+	if !ok {
+		log.Printf("Globus endpoint not found for specified bucket: %s\n", bucket)
+		http.Error(w, "Globus endpoint not found for specified bucket", http.StatusNotFound)
+		return
+	}
+
+	// parse code from query parameters
+	code := r.URL.Query().Get("code")
+	if code == "" {
+		http.Error(w, "Missing code parameter", http.StatusBadRequest)
+		return
+	}
+
+	// check for errors
+	if errMsg := r.URL.Query().Get("error"); errMsg != "" {
+		http.Error(w, fmt.Sprintf("OAuth error: %s", errMsg), http.StatusBadRequest)
+		return
+	}
+
+    session, err := endpoint.ExchangeAuthorizationCode(code)
+	if err != nil {
+		log.Printf("Error exchanging authorization code: %s\n", err.Error())
+		http.Error(w, fmt.Sprintf("Error exchanging authorization code: %s", err.Error()), http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("Successfully obtained access token for bucket: %s\n", bucket)
+	log.Printf("Access Token: %s\n", session.AccessToken)
+	log.Printf("Refresh Token: %s\n", session.RefreshToken)
+
+	// Replace existing endpoints with enpoints created with user tokens
+	globusEndpoints[bucketUuid] = endpoint.WithSession(session)
+
+	// return success message
+	w.Header().Set("Content-Type", "text/html")
+	fmt.Fprintf(w, `
+        <html>
+		<head><title>Authorization Successful</title></head>
+		<body>
+			<h1>Authorization Successful</h1>
+			<p>You have successfully authorized access to the Globus endpoint for bucket %s.</p>
+			<p>Access Token Expires: %s</p>
+			<p>You can now close this window and return to your application.</p>
+		</body>
+		</html>
+	`, bucket, session.Expires.Format(time.RFC1123))
+}
+
 
 // handleRootRequest handles requests to the root URL (ListBuckets in S3 API)
 func handleRootRequest(w http.ResponseWriter, r *http.Request) {
@@ -197,34 +318,50 @@ func handleBucketRequest(w http.ResponseWriter, r *http.Request) {
 
 	// Get a prefix if one is specified
 	path := r.URL.Query().Get("prefix")
-	delimiter := r.URL.Query().Get("delimiter")
-	if delimiter == "" {
-		delimiter = "/"
-	}
-	if path != "" {
-		path = path + delimiter
-	}
 	log.Printf("handleBucketRequest: Path: /%s\n", path)
 
 	// Check the x-id query parameter to determine the operation
-	xId := r.URL.Query().Get("x-id")
-	log.Printf("Request x-id: %s\n", xId)
+	listType := r.URL.Query().Get("list-type")
+	log.Printf("Request list-type: %s\n", listType)
 
-	switch xId {
-	case "GetObject":
-		log.Printf("Handling as GetObject request for path: /%s\n", path)
-		handleGetObjectRequest(w, r, endpoint, path)
-	case "ListObjectsV2", "":
-		log.Printf("Handling as ListObjectsV2 request for path: /%s\n", path)
+	switch listType {
+	case "2":
+		log.Printf("Handling as ListObjectsV2 request for bucket: %s path: /%s\n", bucket, path)
 		handleListObjectsV2Request(w, r, endpoint, bucket, path)
 	default:
-		log.Printf("Unknown x-id (%s), defaulting to ListObjectsV2 for path: /%s\n", xId, path)
-		http.Error(w, fmt.Sprintf("Unknown x-id: %s", xId), http.StatusBadRequest)
+		log.Printf("Unknown list-type (%s), for bucket: %s path: /%s\n", listType, bucket, path)
+		log.Printf("Full header contents for unknown request:\n%s", r.Header)
+		http.Error(w, fmt.Sprintf("Unknown list-type: %s", listType), http.StatusBadRequest)
 	}
 }
 
 // handleGetObjectRequest handles requests to get a specific object from a bucket
-func handleGetObjectRequest(w http.ResponseWriter, r *http.Request, endpoint globus_s3_api.Endpoint, path string) {
+func handleGetObjectRequest(w http.ResponseWriter, r *http.Request) {
+
+	// parse bucket and path from URL
+	vars := mux.Vars(r)
+	bucket := vars["bucket"]
+	path := vars["path"]
+
+	log.Printf("handleGetObjectRequest: Bucket: %s Path: /%s\n", bucket, path)
+
+	if bucket == "" {
+		log.Printf("Bucket not specified in GetObject request\n")
+		http.Error(w, "Bucket not specified", http.StatusBadRequest)
+		return
+	}
+	bucketUuid, err := uuid.Parse(bucket)
+	if err != nil {
+		log.Printf("Invalid bucket ID: %s\n", err.Error())
+		http.Error(w, fmt.Sprintf("Invalid bucket ID: %s", err.Error()), http.StatusBadRequest)
+		return
+	}
+	endpoint, ok := globusEndpoints[bucketUuid]
+	if !ok {
+		log.Printf("Globus endpoint not found for specified bucket: %s\n", bucket)
+		http.Error(w, "Globus endpoint not found for specified bucket", http.StatusNotFound)
+		return
+	}
 
 	// Try to get HTTPS URL for the object
 	if endpoint.SupportsHttps() {

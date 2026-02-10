@@ -24,6 +24,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"os"
 
@@ -128,34 +129,41 @@ func transferFiles() error {
 		log.Printf(" - %s\n", aws.ToString(dir.Prefix))
 	}
 
-	// // Create a local directory to hold downloaded files
-	// err = createLocalDir("downloaded_files")
-	// if err != nil {
-	// 	return err
-	// }
+	// Create a local directory to hold downloaded files
+	err = createLocalDir("downloaded_files")
+	if err != nil {
+		return err
+	}
 
-	// // dowload the /1M.dat file to the local directory
-	// getObjOutput, err := globusClient.GetObject(context.TODO(), &s3.GetObjectInput{
-	// 	Bucket: aws.String(globusBucketId),
-	// 	Key:    aws.String("1M.dat"),
-	// })
-	// if err != nil {
-	// 	return err
-	// }
-	// defer getObjOutput.Body.Close()
+	// dowload the /1M.dat file to the local directory
+	getObjOutput, err := globusClient.GetObject(context.TODO(), &s3.GetObjectInput{
+		Bucket: aws.String(globusBucketId),
+		Key:    aws.String(globusTestDirectory + "/c-c-1KB.dat"),
+	})
+	if err != nil {
+		return err
+	}
+	defer getObjOutput.Body.Close()
 
-	// localFilePath := "downloaded_files/1M.dat"
-	// localFile, err := createLocalFile(localFilePath)
-	// if err != nil {
-	// 	return err
-	// }
-	// defer localFile.Close()
+	localFilePath := "downloaded_files/c-c-1KB.dat"
+	localFile, err := createLocalFile(localFilePath)
+	if err != nil {
+		return err
+	}
+	defer localFile.Close()
 
-	// _, err = io.Copy(localFile, getObjOutput.Body)
-	// if err != nil {
-	// 	return err
-	// }
-	// log.Printf("Downloaded '1M.dat' to '%s'\n", localFilePath)
+	_, err = io.Copy(localFile, getObjOutput.Body)
+	if err != nil {
+		return err
+	}
+	log.Printf("Downloaded 'c-c-1KB.dat' to '%s'\n", localFilePath)
+
+	// check the size of the downloaded file
+	fileInfo, err := os.Stat(localFilePath)
+	if err != nil {
+		return err
+	}
+	log.Printf("Size of downloaded file '%s': %d bytes\n", localFilePath, fileInfo.Size())
 
 	return nil
 }
